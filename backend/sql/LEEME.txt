@@ -1,6 +1,8 @@
 =============================================================================
 SCRIPTS SQL DE AMATISTA (Oracle Autonomous Database ATP 26ai · 20 GB)
 Fuente de verdad de tablas y columnas: backend/database/modelos.py
+Guía completa para la base real, paso a paso:
+  docs/despliegue/2026-10-02_oracle_paso_a_paso.md
 =============================================================================
 
 1. QUÉ HAY AQUÍ

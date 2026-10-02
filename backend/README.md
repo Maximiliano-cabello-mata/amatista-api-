@@ -9,13 +9,21 @@ cuando el servidor responde.
 
 ## Rutas
 
-| Método | Ruta | Para qué |
+Detalle de cada contrato en `docs/arquitectura/2026-10-02_contrato_tecnico_plataforma.md`.
+Los errores siempre responden `{"detail": "mensaje en español"}`.
+
+| Grupo | Rutas | Para qué |
 |---|---|---|
-| GET | `/` | Saber si el backend está vivo |
-| GET | `/api/salud` | Comprobar que la base de datos responde (503 si no) |
-| POST | `/api/iniciar-sesion` | Registrar una sesión `{email o usuario_id, dispositivo}` |
-| POST | `/api/progreso` | Guardar progreso `{usuario_id, eventos: [...]}` |
-| GET | `/api/progreso/{usuario_id}` | Leer el progreso de un alumno |
+| Salud | `GET /` · `GET /api/salud` | Backend vivo · base de datos responde (503 si no) |
+| Cuentas (`api/auth.py`) | `POST /api/auth/registro`, `iniciar-sesion`, `cerrar-sesion`, `cerrar-todas` · `GET/PATCH /api/auth/yo` · `POST confirmar-correo`, `reenviar-codigo`, `recuperar`, `restablecer`, `cambiar-password` | Registro, sesión con token, confirmación por correo y recuperación |
+| Sesiones heredadas | `POST /api/iniciar-sesion` | Compatibilidad con la PWA anterior (alumnos anónimos) |
+| Progreso | `POST /api/progreso` · `GET /api/progreso` · `GET /api/progreso/{usuario_id}` | Guardar y leer progreso; con token, la identidad sale de la sesión |
+| Eventos | `POST /api/eventos` | Eventos de aprendizaje deduplicados por id (métricas) |
+| Contenido (`api/contenido.py`) | `GET /api/contenido/catalogo` (público, ETag) · `admin/arbol`, `plantillas`, `validar`, CRUD de cursos, módulos y lecciones, `publicar`, `archivar`, `mover`, `exportar` | Contenido administrable borrador → publicado |
+| Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas del lanzamiento y gestión de usuarios (profesor lee, admin modifica) |
+
+Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
+Contenido desde la terminal: `python herramientas/contenido.py validar | importar | exportar | nuevo-modulo`.
 
 La documentación interactiva queda en `http://<servidor>:8000/docs`.
 
@@ -67,26 +75,9 @@ estos pasos se hacen ahí.
 
 ### Dejarlo como servicio (evita el error del puerto ocupado, Errno 98)
 
-`/etc/systemd/system/amatista-backend.service`:
-
-```ini
-[Unit]
-Description=Amatista API
-After=network-online.target
-
-[Service]
-User=opc
-WorkingDirectory=/home/opc/amatista/backend
-ExecStart=/home/opc/amatista/backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Cambia `opc` por tu usuario del servidor (en Ubuntu suele ser `ubuntu`). Luego:
-`sudo systemctl daemon-reload && sudo systemctl enable --now amatista-backend`.
-Para ver los errores: `journalctl -u amatista-backend -f`.
+Los archivos listos están en [`despliegue/`](../despliegue/): `amatista-api.service` (systemd),
+`Caddyfile` (HTTPS) y `actualizar.sh`. Cada uno explica en su encabezado cómo instalarlo.
+Para ver los errores del servicio: `journalctl -u amatista-api -f`.
 
 ## Errores de Oracle frecuentes
 
