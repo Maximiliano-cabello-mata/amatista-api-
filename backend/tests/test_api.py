@@ -1,21 +1,10 @@
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from database import conexion
 from database.modelos import Sesion, Usuario
-
-
-@pytest.fixture()
-def cliente(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'prueba.db'}")
-    conexion.motor.cache_clear()
-    from main import app
-
-    with TestClient(app) as c:
-        yield c
-    conexion.motor.cache_clear()
+from seguridad import hash_token
 
 
 def contar(modelo):
@@ -33,20 +22,49 @@ def test_salud(cliente):
     assert respuesta.json() == {"estado": "ok", "motor": "sqlite"}
 
 
+# --- /api/iniciar-sesion heredado (Laboratorio y versiones viejas de la PWA) ---
+
+
 def test_iniciar_sesion_crea_usuario_una_vez(cliente):
     datos = {"email": "alumno_prueba@amatista.local", "dispositivo": "Mozilla/5.0"}
     primera = cliente.post("/api/iniciar-sesion", json=datos).json()
     segunda = cliente.post("/api/iniciar-sesion", json=datos).json()
 
+    assert primera["mensaje"] == "Sesión registrada en la base de datos"
     assert primera["usuario_id"] == "alumno_prueba@amatista.local"
     assert primera["sesion_id"] != segunda["sesion_id"]
     assert len(primera["sesion_id"]) == 36
     assert contar(Usuario) == 1
     assert contar(Sesion) == 2
+    with Session(conexion.motor()) as db:
+        assert db.get(Sesion, hash_token(primera["sesion_id"])).activa == 0  # solo informativa
+
+
+def test_iniciar_sesion_heredado_no_sirve_como_token(cliente):
+    sesion_id = cliente.post("/api/iniciar-sesion", json={"usuario_id": "alumno-viejo-1"}).json()["sesion_id"]
+    for cabeceras in ({"Authorization": f"Bearer {sesion_id}"}, {"X-Sesion-Id": sesion_id}):
+        assert cliente.get("/api/auth/yo", headers=cabeceras).status_code == 401
+
+
+def test_iniciar_sesion_heredado_rechaza_cuentas_registradas(cliente, crear_cuenta):
+    usuario_id, _ = crear_cuenta(email="ana@amatista.local")
+    for cuerpo in (
+        {"usuario_id": usuario_id},
+        {"email": "ANA@amatista.local"},
+        {"usuario_id": "ana@amatista.local"},
+        {"usuario_id": "alumno-cualquiera", "email": "ana@amatista.local"},
+    ):
+        respuesta = cliente.post("/api/iniciar-sesion", json=cuerpo)
+        assert respuesta.status_code == 409, cuerpo
+        assert respuesta.json()["detail"] == "Esta cuenta usa correo y contraseña: entra desde «Entrar»."
+    assert contar(Usuario) == 1
 
 
 def test_iniciar_sesion_sin_usuario(cliente):
     assert cliente.post("/api/iniciar-sesion", json={}).status_code == 422
+
+
+# --- Progreso de alumnos anónimos ---
 
 
 def test_progreso_nunca_retrocede(cliente):
@@ -75,9 +93,10 @@ def test_progreso_combina_eventos_repetidos(cliente):
         {"curso_id": "aframe", "leccion_id": "les_af_002", "completada": True},
     ]
     respuesta = cliente.post("/api/progreso", json={"usuario_id": "alumno-1", "eventos": eventos})
-    assert respuesta.json() == {"guardados": 2}
+    assert respuesta.status_code == 200
+    assert respuesta.json()["guardados"] == 2
     lecciones = cliente.get("/api/progreso/alumno-1").json()["lecciones"]
-    assert {(l["leccion_id"], l["completada"]) for l in lecciones} == {("les_af_001", True), ("les_af_002", True)}
+    assert {(f["leccion_id"], f["completada"]) for f in lecciones} == {("les_af_001", True), ("les_af_002", True)}
 
 
 def test_progreso_valida_datos(cliente):
