@@ -101,7 +101,7 @@ def enviar_codigo(email: str, codigo: str, proposito: str) -> bool:
             if usuario:
                 smtp.login(usuario, password)
             smtp.send_message(mensaje)
-    except (smtplib.SMTPException, OSError, ValueError) as error:
+    except Exception as error:  # cualquier fallo de envío se registra; nunca tumba la petición
         # Sin el código ni la contraseña de SMTP: solo el tipo de error.
         log.error(
             "No se pudo enviar el código de %s a %s por SMTP (%s: %s).",
