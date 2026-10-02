@@ -1,13 +1,24 @@
 -- =============================================================================
--- AMATISTA · ESQUEMA DE BASE DE DATOS (Oracle Autonomous Database)
+-- AMATISTA · 001 · INSTALACIÓN INICIAL (Oracle Autonomous Database)
+--
+-- SOLO PARA UNA BASE NUEVA O UN PROTOTIPO SIN ALUMNOS REALES.
+-- Este script es DESTRUCTIVO: borra las tablas de la app con todos sus datos
+-- (USUARIOS, SESIONES, SESIONES_WEB, PROGRESO_LECCIONES y, si ya se había
+-- aplicado 002, LOGROS, EVENTOS_APRENDIZAJE, CURSOS, MODULOS y LECCIONES)
+-- y crea limpias las tres tablas base. NUNCA se ejecuta en producción con
+-- alumnos: ahí solo se aplican los scripts incrementales.
+--
+-- Orden completo (ver sql/LEEME.txt):
+--   Base nueva ............... 001 -> 002 -> 003 -> 004 (opcional)
+--   Base con datos reales .... 002 -> 003 -> 004 (opcional). NUNCA 001.
+-- Después de 001 el backend todavía NO funciona: 002 agrega autenticación,
+-- logros, eventos y contenido (y amplía SESIONES.ID para el hash del token).
 --
 -- Cómo ejecutarlo:
 --   1. Entra a Database Actions > SQL como ADMIN.
 --   2. Pega este archivo completo.
 --   3. Pulsa "Ejecutar script" (F5), NO "Ejecutar sentencia" (Ctrl+Enter).
---
--- ATENCIÓN: borra las tablas de la app (USUARIOS, SESIONES, SESIONES_WEB y
--- PROGRESO_LECCIONES) con sus datos de prueba, y las vuelve a crear limpias.
+--   4. Sigue con 002_autenticacion_contenido_eventos.sql.
 --
 -- Reglas del esquema:
 --   - Los identificadores de usuario son texto (VARCHAR2) en TODAS las tablas.
@@ -18,11 +29,14 @@
 -- =============================================================================
 
 -- 1. Borrar las tablas anteriores, también las creadas con comillas o en minúsculas.
+--    Incluye las de 002: si quedaran, sus filas apuntarían a usuarios borrados
+--    y 002 no podría volver a crear sus llaves foráneas (ORA-02298).
 BEGIN
   FOR t IN (
     SELECT table_name
       FROM user_tables
-     WHERE UPPER(table_name) IN ('PROGRESO_LECCIONES', 'SESIONES_WEB', 'SESIONES', 'USUARIOS')
+     WHERE UPPER(table_name) IN ('PROGRESO_LECCIONES', 'SESIONES_WEB', 'SESIONES', 'USUARIOS',
+                                 'LOGROS', 'EVENTOS_APRENDIZAJE', 'LECCIONES', 'MODULOS', 'CURSOS')
   ) LOOP
     EXECUTE IMMEDIATE 'DROP TABLE "' || t.table_name || '" CASCADE CONSTRAINTS PURGE';
   END LOOP;

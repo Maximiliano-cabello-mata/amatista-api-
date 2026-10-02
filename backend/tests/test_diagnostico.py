@@ -1,14 +1,60 @@
-from diagnostico_oracle import ESPERADO, comparar, obsoletas
+import diagnostico_oracle
+from diagnostico_oracle import (
+    ESPERADO,
+    comparar,
+    obsoletas,
+    resumir_espacio,
+    revisar_email_unico,
+    revisar_longitudes,
+    solucion,
+)
 
 
 def esquema_correcto():
     return {tabla: dict(columnas) for tabla, columnas in ESPERADO.items()}
 
 
+def esquema_001():
+    """Lo que deja 001 sin 002: solo las tres tablas base, con sus columnas de entonces."""
+    return {
+        "USUARIOS": {"ID": "VARCHAR2", "NOMBRE": "VARCHAR2", "CREADO_EN": "TIMESTAMP(6)"},
+        "SESIONES": {
+            "ID": "VARCHAR2",
+            "USUARIO_ID": "VARCHAR2",
+            "DISPOSITIVO": "VARCHAR2",
+            "ACTIVA": "NUMBER",
+            "ULTIMO_ACCESO": "TIMESTAMP(6)",
+        },
+        "PROGRESO_LECCIONES": {
+            "USUARIO_ID": "VARCHAR2",
+            "CURSO_ID": "VARCHAR2",
+            "LECCION_ID": "VARCHAR2",
+            "COMPLETADA": "NUMBER",
+            "PUNTAJE": "NUMBER",
+            "INTENTOS": "NUMBER",
+            "ACTUALIZADO_EN": "TIMESTAMP(6)",
+        },
+    }
+
+
 def test_esquema_correcto_no_tiene_problemas():
     real = esquema_correcto()
     real["USUARIOS"]["CREADO_EN"] = "TIMESTAMP(6)"
     assert comparar(real) == []
+
+
+def test_esperado_incluye_las_ocho_tablas():
+    assert set(ESPERADO) == {
+        "USUARIOS",
+        "SESIONES",
+        "PROGRESO_LECCIONES",
+        "LOGROS",
+        "EVENTOS_APRENDIZAJE",
+        "CURSOS",
+        "MODULOS",
+        "LECCIONES",
+    }
+    assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
 
 
 def test_detecta_tabla_faltante_y_tipo_numerico():
@@ -20,7 +66,71 @@ def test_detecta_tabla_faltante_y_tipo_numerico():
     assert any("SESIONES.USUARIO_ID es NUMBER" in p and "ORA-01722" in p for p in problemas)
 
 
+def test_base_de_001_pide_columnas_y_tablas_de_002():
+    problemas = comparar(esquema_001())
+    assert "Falta la columna USUARIOS.EMAIL." in problemas
+    assert "Falta la columna SESIONES.EXPIRA_EN." in problemas
+    assert "Falta la tabla EVENTOS_APRENDIZAJE." in problemas
+    recomendacion = " ".join(solucion(esquema_001()))
+    assert "002_autenticacion_contenido_eventos.sql" in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+
+
+def test_base_vacia_recomienda_001_y_luego_002():
+    recomendacion = " ".join(solucion({"DBTOOLS$EXECUTION_HISTORY": {"ID": "NUMBER"}}))
+    assert "001_esquema_amatista.sql" in recomendacion
+    assert "002_autenticacion_contenido_eventos.sql" in recomendacion
+
+
+def test_tablas_en_otro_esquema_piden_db_esquema_y_no_001():
+    recomendacion = " ".join(solucion({}, otros_esquemas=("ADMIN",)))
+    assert "DB_ESQUEMA=ADMIN" in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+
+
+def test_ids_numericos_del_diseno_anterior():
+    real = esquema_001()
+    real["USUARIOS"]["ID"] = "NUMBER"
+    recomendacion = " ".join(solucion(real))
+    assert "USUARIOS.ID" in recomendacion
+    assert "diseño anterior" in recomendacion
+
+
+def test_sesiones_id_de_36_no_alcanza_para_el_hash():
+    problemas = revisar_longitudes({("SESIONES", "ID"): 36, ("USUARIOS", "ID"): 100})
+    assert len(problemas) == 1
+    assert "SESIONES.ID admite 36" in problemas[0] and "64" in problemas[0]
+    assert revisar_longitudes({("SESIONES", "ID"): 64}) == []
+    # NUMBER, TIMESTAMP y CLOB tienen CHAR_LENGTH 0: no se comparan.
+    assert revisar_longitudes({("SESIONES", "ID"): 0}) == []
+
+
+def test_falta_unique_de_email():
+    real = esquema_correcto()
+    assert revisar_email_unico(real, email_unico=True) == []
+    problemas = revisar_email_unico(real, email_unico=False)
+    assert len(problemas) == 1 and "uq_usuarios_email" in problemas[0]
+    # Sin la columna aún, lo reporta comparar() como columna faltante.
+    assert revisar_email_unico(esquema_001(), email_unico=False) == []
+
+
+def test_resumen_de_espacio_contra_20_gb():
+    mb = 1048576
+    espacio = resumir_espacio(
+        [("USUARIOS", 2 * mb), ("EVENTOS_APRENDIZAJE", 1024 * mb), ("EVENTOS_APRENDIZAJE", 1024 * mb), ("X", None)]
+    )
+    assert espacio["total_mb"] == 2050
+    assert espacio["porcentaje"] == round(2050 * 100 / (20 * 1024), 3)
+    assert espacio["mayores"][0] == ("EVENTOS_APRENDIZAJE", 2048)
+
+
 def test_senala_tablas_obsoletas():
     real = esquema_correcto()
     real["SESIONES_WEB"] = {"ID": "VARCHAR2"}
     assert obsoletas(real) == ["SESIONES_WEB"]
+
+
+def test_con_sqlite_avisa_que_es_para_oracle(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'diagnostico.db'}")
+    assert diagnostico_oracle.main() == 1
+    assert "es para Oracle" in capsys.readouterr().out

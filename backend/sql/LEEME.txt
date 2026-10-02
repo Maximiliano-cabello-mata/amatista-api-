@@ -1,0 +1,129 @@
+=============================================================================
+SCRIPTS SQL DE AMATISTA (Oracle Autonomous Database ATP 26ai · 20 GB)
+Fuente de verdad de tablas y columnas: backend/database/modelos.py
+=============================================================================
+
+1. QUÉ HAY AQUÍ
+-----------------------------------------------------------------------------
+  001_esquema_amatista.sql ............ Instalación inicial. DESTRUCTIVO:
+                                        borra y recrea las tablas base.
+                                        Solo base nueva o prototipo sin
+                                        alumnos reales.
+  002_autenticacion_contenido_eventos.sql
+                                        Incremental: correo, contraseña,
+                                        roles, sesiones con hash, logros,
+                                        eventos (particionados por mes) y
+                                        contenido (cursos, módulos,
+                                        lecciones). No borra datos.
+  003_mantenimiento.sql ............... Purga diaria (sesiones y eventos
+                                        viejos), vista de espacio
+                                        V_AMATISTA_ESPACIO y conteo de filas.
+  004_usuario_aplicacion.sql .......... Opcional (T-004): usuario
+                                        AMATISTA_APP con permisos mínimos
+                                        para que el backend no use ADMIN.
+
+  002, 003 y 004 son idempotentes: se pueden ejecutar varias veces sin
+  error y sin duplicar nada.
+
+2. ORDEN DE EJECUCIÓN
+-----------------------------------------------------------------------------
+  Base NUEVA (sin tablas, o prototipo que se puede borrar):
+      001 -> 002 -> 003 -> 004 (opcional)
+
+  Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
+  conservar):
+      002 -> 003 -> 004 (opcional)
+      NUNCA 001: borraría usuarios, sesiones y progreso.
+
+  ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
+  te dice qué script falta.
+
+3. CÓMO SE EJECUTA CADA SCRIPT
+-----------------------------------------------------------------------------
+  1. OCI > Autonomous Database > Database Actions > SQL, con ADMIN (el dueño
+     de las tablas).
+  2. Pega el archivo completo.
+  3. Pulsa "Ejecutar script" (F5), NO "Ejecutar sentencia" (Ctrl+Enter):
+     los bloques PL/SQL terminan con una línea "/" y solo el modo script
+     los entiende.
+  4. Lee la pestaña "Salida de script": cada cambio aparece como "OK: ...".
+     Un error ORA-20001..20003 es un mensaje del propio script que explica
+     qué falta (por ejemplo, ejecutar antes otro script).
+  5. 004: antes de ejecutarlo escribe la contraseña en v_password, solo en la
+     hoja de Database Actions (no la guardes en el repositorio).
+
+4. VERIFICAR DESDE EL SERVIDOR
+-----------------------------------------------------------------------------
+  La base solo acepta la IP del servidor ARM (ACL), así que se hace ahí:
+
+      cd ~/amatista/backend
+      source venv/bin/activate
+      python diagnostico_oracle.py
+
+  - Muestra usuario y esquema, compara cada tabla y columna con modelos.py,
+    revisa que SESIONES.ID admita 64 caracteres y que exista la restricción
+    UNIQUE del correo, cuenta filas por tabla y muestra el espacio usado
+    contra los 20 GB.
+  - "✓ Las tablas coinciden con lo que espera el backend" = listo.
+  - Si faltan columnas o tablas nuevas, recomienda 002 (nunca 001 cuando ya
+    hay tablas).
+  - Con AMATISTA_APP (004) define DB_ESQUEMA=ADMIN en backend/.env: el
+    diagnóstico y el backend leen las tablas del dueño.
+  - No modifica nada: se puede ejecutar cuantas veces se quiera.
+
+  En Database Actions también sirven:
+      SELECT * FROM v_amatista_espacio ORDER BY mb DESC;
+      SELECT job_name, state, next_run_date FROM user_scheduler_jobs;
+
+5. BASE DEL DISEÑO ANTERIOR (IDS NUMÉRICOS)
+-----------------------------------------------------------------------------
+  Si 002 se detiene con "USUARIOS.ID es NUMBER (diseño anterior...)", la
+  base viene del diseño del 27/09, con ids numéricos (causa de ORA-01722 y
+  ORA-02267). 002 no lo corrige porque tendría que borrar datos.
+  - Prototipo sin alumnos reales: 001 -> 002 -> 003.
+  - Con alumnos reales: primero respalda (Database Actions > Data Pump, o
+    exporta las tablas a CSV), crea las tablas nuevas con 001 -> 002 en un
+    esquema limpio y copia los datos convirtiendo los ids a texto. No
+    ejecutes 001 sobre la base con los datos originales.
+
+6. REGLAS PARA LOS SCRIPTS FUTUROS (005, 006, ...)
+-----------------------------------------------------------------------------
+  1. Numerados y en orden: 005_<qué_hace>.sql. Nunca se edita un script que
+     ya se ejecutó en producción; el cambio va en el siguiente número.
+  2. Solo agregan: ALTER TABLE ... ADD (columnas, restricciones), CREATE
+     TABLE, CREATE INDEX. Prohibido DROP TABLE, TRUNCATE o DELETE de datos
+     de alumnos.
+  3. Idempotentes: cada DDL dentro de un bloque PL/SQL que consulta antes
+     USER_TABLES / USER_TAB_COLUMNS / USER_CONSTRAINTS / USER_INDEXES (copia
+     los procedimientos agregar_columna, agregar_restriccion, crear_tabla y
+     crear_indice de 002). EXECUTE IMMEDIATE sin ";" al final del texto y con
+     las comillas simples duplicadas ('' dentro de un literal).
+  4. Columnas nuevas con valor por defecto o anulables: las filas existentes
+     y las PWA viejas siguen funcionando (contratos tolerantes).
+  5. Cambiar un CHECK (por ejemplo, un tipo de evento nuevo en TIPOS_EVENTO)
+     no pierde datos: ALTER TABLE ... DROP CONSTRAINT ck_x y luego ADD
+     CONSTRAINT ck_x con la lista nueva, en el mismo script.
+  6. Mismo cambio en tres lugares, en el mismo commit:
+       - backend/database/modelos.py (fuente de verdad),
+       - el script nuevo,
+       - ESPERADO en backend/diagnostico_oracle.py.
+     tests/test_esquema.py falla si alguno queda desalineado.
+  7. Una tabla nueva también se agrega a la lista de 004 y se vuelve a
+     ejecutar 004 (si se usa AMATISTA_APP), y a la consulta de filas de 003.
+  8. Nada de binarios en la base (imágenes, videos, .glb): solo texto plano
+     y JSON compacto. Índices nuevos solo si una consulta real los necesita,
+     nunca sobre columnas que ya son PRIMARY KEY o UNIQUE.
+
+7. ESPACIO Y RETENCIÓN
+-----------------------------------------------------------------------------
+  - Lo permanente por alumno (cuenta, progreso de ~50 lecciones, insignias)
+    ocupa ~12 KB (~25 KB en el peor caso): 5 GB alcanzan para ~200,000.
+  - Lo que crece es EVENTOS_APRENDIZAJE (~29 KB por alumno activo al mes).
+    El job AMATISTA_PURGA_DIARIA conserva 400 días por defecto. Si
+    V_AMATISTA_ESPACIO pasa del 70 % de los 20 GB, baja la retención:
+        BEGIN amatista_purgar(p_dias_sesiones => 90, p_dias_eventos => 180); END;
+        /
+    y, para que el job la use todos los días, cambia su job_action en 003
+    (BEGIN amatista_purgar(90, 180); END;) y vuelve a ejecutar 003.
+  - Detalle del cálculo: encabezado de 002_autenticacion_contenido_eventos.sql.
+=============================================================================
