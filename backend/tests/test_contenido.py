@@ -482,3 +482,14 @@ def test_cli_importar_rechaza_archivos_con_errores(cliente, tmp_path):
     roto.write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")
     assert cli.main(["importar", str(roto)]) == 1
     assert cliente.get(CATALOGO).json()["cursos"] == []
+
+
+def test_texto_json_lee_igual_el_dict_de_oracle_y_el_texto_de_sqlite():
+    # python-oracledb entrega como dict las columnas con CHECK (... IS JSON).
+    from database.modelos import TextoJSON
+
+    tipo = TextoJSON()
+    assert tipo.process_result_value({"id": "les_001", "title": "Ñandú"}, None) == '{"id":"les_001","title":"Ñandú"}'
+    assert tipo.process_result_value([1, 2], None) == "[1,2]"
+    assert tipo.process_result_value('{"a":1}', None) == '{"a":1}'
+    assert tipo.process_result_value(None, None) is None

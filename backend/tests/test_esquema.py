@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import TIMESTAMP, Integer, String, Text
+from sqlalchemy.types import TypeDecorator
 
 from database import conexion
 from database.modelos import ESTADOS_CONTENIDO, ROLES, TIPOS_EVENTO, Base
@@ -130,14 +131,16 @@ def columnas_de(definicion: str):
 
 
 def tipo_oracle(columna) -> str:
+    # Los tipos propios (TextoJSON) se guardan como su tipo base.
+    tipo = columna.type.impl if isinstance(columna.type, TypeDecorator) else columna.type
     # Text hereda de String: se revisa primero.
-    if isinstance(columna.type, Text):
+    if isinstance(tipo, Text):
         return "CLOB"
-    if isinstance(columna.type, String):
+    if isinstance(tipo, String):
         return "VARCHAR2"
-    if isinstance(columna.type, Integer):
+    if isinstance(tipo, Integer):
         return "NUMBER"
-    if isinstance(columna.type, TIMESTAMP):
+    if isinstance(tipo, TIMESTAMP):
         return "TIMESTAMP"
     raise AssertionError(f"Tipo sin equivalente en Oracle: {columna.type!r}")
 

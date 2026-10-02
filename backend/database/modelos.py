@@ -9,10 +9,12 @@ Presupuesto de espacio (ver el encabezado de sql/002 y sql/LEEME.txt):
 una fila por alumno y lección, eventos con retención limitada y contenido
 de lecciones como texto JSON (nunca binarios).
 """
+import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import TIMESTAMP, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 ROLES = ("alumno", "profesor", "admin")
@@ -29,6 +31,28 @@ TIPOS_EVENTO = (
 def ahora() -> datetime:
     """Hora actual en UTC, sin zona (como la guarda TIMESTAMP)."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class TextoJSON(TypeDecorator):
+    """Texto con JSON que siempre se lee como texto.
+
+    python-oracledb entrega ya convertidas (dict o list) las columnas con
+    CHECK (... IS JSON); SQLite entrega el texto. Así el resto del código ve
+    siempre lo mismo: el texto JSON compacto.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_result_value(self, valor: Any, dialect) -> Optional[str]:
+        if valor is None or isinstance(valor, str):
+            return valor
+        return json.dumps(valor, ensure_ascii=False, separators=(",", ":"))
+
+
+class TextoJSONCorto(TextoJSON):
+    impl = String
+    cache_ok = True
 
 
 class Base(DeclarativeBase):
@@ -108,7 +132,7 @@ class ProgresoLeccion(Base):
     puntaje: Mapped[Optional[int]] = mapped_column(Integer)  # se conserva el máximo
     intentos: Mapped[int] = mapped_column(Integer, default=0)
     # JSON plano compacto con llaves cortas, por ejemplo {"a":3,"p":2,"t":240}.
-    datos_ligeros: Mapped[Optional[str]] = mapped_column(String(250))
+    datos_ligeros: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(250))
     completada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
 
@@ -209,7 +233,7 @@ class Leccion(Base):
     tipo: Mapped[str] = mapped_column(String(30))
     duracion_segundos: Mapped[Optional[int]] = mapped_column(Integer)
     bloqueada: Mapped[int] = mapped_column(Integer, default=1)
-    contenido: Mapped[str] = mapped_column(Text)  # CLOB con JSON (IS JSON en Oracle)
+    contenido: Mapped[str] = mapped_column(TextoJSON())  # CLOB con JSON (IS JSON en Oracle)
     reemplaza: Mapped[Optional[str]] = mapped_column(String(250))  # ids viejos separados por comas
     estado: Mapped[str] = mapped_column(String(12), default="borrador")
     version: Mapped[int] = mapped_column(Integer, default=1)

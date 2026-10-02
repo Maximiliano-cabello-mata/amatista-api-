@@ -147,7 +147,8 @@ DECLARE
   -- Solo agranda: nunca acorta una columna con datos.
   PROCEDURE ampliar_columna(p_tabla IN VARCHAR2, p_columna IN VARCHAR2, p_tipo IN VARCHAR2) IS
     v_largo  NUMBER;
-    v_nuevo  NUMBER := TO_NUMBER(REGEXP_SUBSTR(p_tipo, '[0-9]+'));
+    -- El largo entre paréntesis: en 'VARCHAR2(64)' el primer número es el 2 del tipo.
+    v_nuevo  NUMBER := TO_NUMBER(REGEXP_SUBSTR(p_tipo, '\(([0-9]+)', 1, 1, NULL, 1));
   BEGIN
     SELECT MAX(NULLIF(char_length, 0)) INTO v_largo
       FROM user_tab_columns
