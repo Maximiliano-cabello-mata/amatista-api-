@@ -20,6 +20,20 @@ def asegurar_usuario(db: Session, usuario_id: str, nombre: Optional[str] = None)
         usuario.nombre = nombre
 
 
+def usuario_publico(usuario: Usuario) -> dict:
+    """Datos de una cuenta que se pueden mandar al navegador (sin hashes ni códigos)."""
+    return {
+        "id": usuario.id,
+        "nombre": usuario.nombre,
+        "email": usuario.email,
+        "telefono": usuario.telefono,
+        "rol": usuario.rol or "alumno",
+        "correo_confirmado": bool(usuario.correo_confirmado),
+        "es_prueba": bool(usuario.es_prueba),
+        "creado_en": usuario.creado_en.isoformat() if usuario.creado_en else None,
+    }
+
+
 def error_bd(error: SQLAlchemyError, ruta: str, estado: int = 500) -> HTTPException:
     """Registra el error completo en la terminal y devuelve un mensaje corto.
 
