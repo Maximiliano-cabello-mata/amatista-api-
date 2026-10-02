@@ -5,7 +5,7 @@ amplía sin borrar datos). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
-Presupuesto de espacio (ver docs/arquitectura/2026-10-02_base_de_datos_optimizada.txt):
+Presupuesto de espacio (ver el encabezado de sql/002 y sql/LEEME.txt):
 una fila por alumno y lección, eventos con retención limitada y contenido
 de lecciones como texto JSON (nunca binarios).
 """

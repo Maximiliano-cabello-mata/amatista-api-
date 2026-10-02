@@ -54,9 +54,12 @@ estos pasos se hacen ahí.
    arma la conexión cifrada (`tcps`) con ellos. Si no existe, créalo con
    `cp .env.example .env`. Si falla, pega en `DB_DSN` la cadena **TLS** de la
    consola de OCI (Autonomous Database → Conexión a la base de datos).
-4. **Recrear las tablas:** abre Database Actions → SQL, pega
-   `sql/001_esquema_amatista.sql` y pulsa **Ejecutar script (F5)**. Esto
-   borra los datos de prueba.
+4. **Actualizar las tablas:** abre Database Actions → SQL y ejecuta con
+   **Ejecutar script (F5)**, en orden, los scripts de `sql/` (detalle en
+   [`sql/LEEME.txt`](sql/LEEME.txt)):
+   - Base que ya tiene datos de alumnos: `002` → `003` → (opcional) `004`.
+     **Nunca `001`**: borra las tablas.
+   - Base vacía: `001` → `002` → `003` → (opcional) `004`.
 5. **Verificar:** `python diagnostico_oracle.py`. Debe terminar con
    «✓ Las tablas coinciden con lo que espera el backend».
 6. **Arrancar:** `uvicorn main:app --host 0.0.0.0 --port 8000` y abre

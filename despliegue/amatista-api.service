@@ -1,0 +1,56 @@
+# Servicio systemd de la API de Amatista (T-003).
+# Instalación y explicación: docs/despliegue/2026-10-02_despliegue_oci.txt
+#
+#   sudo cp despliegue/amatista-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now amatista-api
+#   journalctl -u amatista-api -f        # registros (nunca muestran contraseñas ni tokens)
+#
+# Supone el repositorio en /opt/amatista, el venv en /opt/amatista/backend/venv
+# y el usuario de sistema "amatista" (sin shell ni privilegios). Si usas otras
+# rutas, cámbialas aquí y en despliegue/actualizar.sh.
+
+[Unit]
+Description=Amatista API (FastAPI + uvicorn)
+Documentation=https://github.com/Maximiliano-cabello-mata/amatista/blob/main/docs/despliegue/2026-10-02_despliegue_oci.txt
+After=network-online.target
+Wants=network-online.target
+# Evita un bucle de reinicios si la configuración está rota (revisa journalctl).
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=amatista
+Group=amatista
+WorkingDirectory=/opt/amatista/backend
+# Variables de backend/.env.example (Oracle, AMATISTA_*, SMTP_*, CORS_ORIGINS).
+# El archivo es root:root 600: systemd lo lee antes de bajar a "amatista".
+EnvironmentFile=/etc/amatista/amatista-api.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Solo escucha en 127.0.0.1: el único acceso público es Caddy (HTTPS).
+# --proxy-headers con 127.0.0.1: confía en X-Forwarded-* solo si vienen de Caddy.
+# Un solo proceso: los límites por IP (api/limites.py) viven en memoria y
+# las conexiones a Oracle por proceso son DB_POOL + DB_POOL_EXTRA.
+ExecStart=/opt/amatista/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# --- Endurecimiento: el proceso no puede escribir en el sistema ni escalar ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

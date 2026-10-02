@@ -1,0 +1,60 @@
+# Caddy delante de la API de Amatista (T-005): HTTPS automático con
+# Let's Encrypt y proxy hacia uvicorn en 127.0.0.1:8000.
+# Instalación y explicación: docs/despliegue/2026-10-02_despliegue_oci.txt
+#
+#   sudo cp despliegue/Caddyfile /etc/caddy/Caddyfile
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Antes: cambia api.ejemplo.com por el nombre DNS que apunta a la IP pública
+# de la VM (sin dominio propio sirve <ip-con-guiones>.sslip.io) y abre los
+# puertos 80 y 443 en OCI. El 80 solo se usa para emitir el certificado y
+# redirigir a https.
+
+{
+	# Correo para avisos de Let's Encrypt (vencimientos). Opcional.
+	# email tu-correo@ejemplo.com
+}
+
+api.ejemplo.com {
+	encode zstd gzip
+
+	header {
+		# HTTPS obligatorio durante un año (también en el navegador del alumno).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# La API solo responde JSON: no carga scripts, estilos ni marcos.
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Cross-Origin-Resource-Policy "cross-origin"
+		-Server
+	}
+
+	# La documentación interactiva no se publica (plan, prueba P09). Para
+	# verla, usa un túnel SSH: ssh -L 8000:127.0.0.1:8000 <vm> y abre
+	# http://localhost:8000/docs en tu computadora.
+	@depuracion path /docs /docs/* /redoc /redoc/* /openapi.json
+	respond @depuracion 404
+
+	# Peticiones de la PWA: lotes de progreso y eventos (unos KB). 1 MB sobra.
+	request_body {
+		max_size 1MB
+	}
+
+	# Caddy agrega la IP del alumno al final de X-Forwarded-For; el backend
+	# la usa para los límites por IP con AMATISTA_PROXY_CONFIABLE=1.
+	reverse_proxy 127.0.0.1:8000 {
+		health_uri /
+		health_interval 30s
+	}
+
+	log {
+		output file /var/log/caddy/amatista-api.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+}
