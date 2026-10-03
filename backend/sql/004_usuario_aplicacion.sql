@@ -3,19 +3,21 @@
 -- (Oracle Autonomous Database ATP 26ai)
 --
 -- Crea AMATISTA_APP para que el backend NO se conecte como ADMIN. Si alguien
--- obtiene backend/.env, solo puede leer y escribir filas de las 8 tablas de
+-- obtiene backend/.env, solo puede leer y escribir filas de las 14 tablas de
 -- Amatista: no puede borrar tablas, crear usuarios ni tocar otros esquemas.
 --
 -- Permisos mínimos:
 --   - CREATE SESSION (conectarse).
 --   - SELECT, INSERT, UPDATE, DELETE sobre USUARIOS, SESIONES,
---     PROGRESO_LECCIONES, LOGROS, EVENTOS_APRENDIZAJE, CURSOS, MODULOS y
---     LECCIONES del esquema dueño (el usuario que ejecuta este script).
+--     PROGRESO_LECCIONES, LOGROS, EVENTOS_APRENDIZAJE, CURSOS, MODULOS,
+--     LECCIONES y las 6 tablas de 005 (NIVELES, HABILIDADES,
+--     HABILIDADES_ALUMNO, EVALUACIONES_RUBRICA, VERSIONES_BLENDER,
+--     VERIFICACIONES_BLENDER) del esquema dueño (quien ejecuta este script).
 --   Las tablas siguen siendo del dueño (ADMIN). La purga con particiones
 --   (job de 003) corre como dueño; la API solo necesita DELETE.
 --
 -- Cómo ejecutarlo:
---   1. Database Actions > SQL como ADMIN (dueño de las tablas). Requiere 002.
+--   1. Database Actions > SQL como ADMIN (dueño de las tablas). Requiere 002 y 005.
 --   2. Pega el archivo y escribe la contraseña en v_password (abajo).
 --      NO guardes este archivo con la contraseña ni lo subas al repositorio:
 --      cámbiala solo en la hoja de Database Actions.
@@ -55,14 +57,17 @@ DECLARE
   v_cuenta    PLS_INTEGER;
   v_tablas    SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
                 'USUARIOS', 'SESIONES', 'PROGRESO_LECCIONES', 'LOGROS',
-                'EVENTOS_APRENDIZAJE', 'CURSOS', 'MODULOS', 'LECCIONES');
+                'EVENTOS_APRENDIZAJE', 'CURSOS', 'MODULOS', 'LECCIONES',
+                -- 005 (reestructuración por niveles)
+                'NIVELES', 'HABILIDADES', 'HABILIDADES_ALUMNO', 'EVALUACIONES_RUBRICA',
+                'VERSIONES_BLENDER', 'VERIFICACIONES_BLENDER');
 BEGIN
-  -- Las 8 tablas deben existir en este esquema (002 aplicado).
+  -- Las 14 tablas deben existir en este esquema (002 y 005 aplicados).
   FOR i IN 1 .. v_tablas.COUNT LOOP
     SELECT COUNT(*) INTO v_cuenta FROM user_tables WHERE table_name = v_tablas(i);
     IF v_cuenta = 0 THEN
       RAISE_APPLICATION_ERROR(-20001, 'Falta la tabla ' || v_tablas(i)
-        || ' en este esquema: ejecuta 004 con el dueño de las tablas y después de 002.');
+        || ' en este esquema: ejecuta 004 con el dueño de las tablas y después de 002 y 005.');
     END IF;
   END LOOP;
 
@@ -89,7 +94,7 @@ BEGIN
 END;
 /
 
--- Verificar: CREATE SESSION y 4 permisos por cada una de las 8 tablas (32 filas).
+-- Verificar: CREATE SESSION y 4 permisos por cada una de las 14 tablas (56 filas).
 SELECT privilege
   FROM dba_sys_privs
  WHERE grantee = 'AMATISTA_APP';

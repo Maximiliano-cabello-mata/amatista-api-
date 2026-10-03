@@ -19,7 +19,8 @@ from sqlalchemy import text
 from database.conexion import crear_motor
 
 # Tablas, columnas y tipos que espera el backend: database/modelos.py.
-# sql/001 crea las tres primeras y sql/002 agrega el resto.
+# sql/001 crea las tres primeras, sql/002 las cinco siguientes y sql/005 las de
+# la reestructuración por niveles (más MODULOS.NIVEL_ID).
 # tests/test_esquema.py comprueba que esta lista no se desalinee.
 ESPERADO = {
     "USUARIOS": {
@@ -105,6 +106,7 @@ ESPERADO = {
         "VERSION": "NUMBER",
         "ACTUALIZADO_EN": "TIMESTAMP",
         "PUBLICADO_EN": "TIMESTAMP",
+        "NIVEL_ID": "VARCHAR2",
     },
     "LECCIONES": {
         "CURSO_ID": "VARCHAR2",
@@ -122,10 +124,77 @@ ESPERADO = {
         "ACTUALIZADO_EN": "TIMESTAMP",
         "PUBLICADO_EN": "TIMESTAMP",
     },
+    # --- 005: reestructuración por niveles (v3.0.0) ---
+    "NIVELES": {
+        "ID": "VARCHAR2",
+        "CURSO_ID": "VARCHAR2",
+        "NUMERO": "NUMBER",
+        "RAMA": "VARCHAR2",
+        "TITULO": "VARCHAR2",
+        "PERFIL": "VARCHAR2",
+        "PROYECTO": "VARCHAR2",
+        "CRITERIO_SALIDA": "VARCHAR2",
+        "ESTADO": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
+    "HABILIDADES": {
+        "ID": "VARCHAR2",
+        "CURSO_ID": "VARCHAR2",
+        "NIVEL_ID": "VARCHAR2",
+        "NOMBRE": "VARCHAR2",
+        "DESCRIPCION": "VARCHAR2",
+        "ORDEN": "NUMBER",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
+    "HABILIDADES_ALUMNO": {
+        "USUARIO_ID": "VARCHAR2",
+        "HABILIDAD_ID": "VARCHAR2",
+        "ESTADO": "VARCHAR2",
+        "EVIDENCIA": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
+    "EVALUACIONES_RUBRICA": {
+        "USUARIO_ID": "VARCHAR2",
+        "NIVEL_ID": "VARCHAR2",
+        "CRITERIO": "VARCHAR2",
+        "LOGRO": "VARCHAR2",
+        "EVIDENCIA": "VARCHAR2",
+        "COMENTARIO": "VARCHAR2",
+        "REVISADO_POR": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
+    "VERSIONES_BLENDER": {
+        "VERSION": "VARCHAR2",
+        "CATEGORIA": "VARCHAR2",
+        "ES_LTS": "NUMBER",
+        "SOPORTE_HASTA": "TIMESTAMP",
+        "NOTAS": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
+    "VERIFICACIONES_BLENDER": {
+        "ID": "VARCHAR2",
+        "CURSO_ID": "VARCHAR2",
+        "LECCION_ID": "VARCHAR2",
+        "VERSION_BLENDER": "VARCHAR2",
+        "SISTEMA": "VARCHAR2",
+        "VERSION_LECCION": "NUMBER",
+        "VERSION_ADDON": "VARCHAR2",
+        "RESULTADO": "VARCHAR2",
+        "DIFERENCIAS": "VARCHAR2",
+        "EVIDENCIA": "VARCHAR2",
+        "RESPONSABLE": "VARCHAR2",
+        "VERIFICADO_EN": "TIMESTAMP",
+    },
 }
 
-# Las tablas que crea 001; las demás llegan con 002.
+# Las tablas que crea 001; las demás llegan con 002 y 005.
 TABLAS_BASE = ("USUARIOS", "SESIONES", "PROGRESO_LECCIONES")
+# Lo que agrega 005 (reestructuración por niveles): tablas y columnas.
+TABLAS_005 = (
+    "NIVELES", "HABILIDADES", "HABILIDADES_ALUMNO", "EVALUACIONES_RUBRICA", "VERSIONES_BLENDER",
+    "VERIFICACIONES_BLENDER",
+)
+COLUMNAS_005 = {("MODULOS", "NIVEL_ID")}
 
 # Largos mínimos (en caracteres) que causarían ORA-12899 si fueran menores.
 # SESIONES.ID guarda el hash SHA-256 del token: 64 caracteres (001 lo creó con 36).
@@ -147,6 +216,8 @@ AVISO_ESPACIO = 70  # % a partir del cual conviene bajar la retención de evento
 SCRIPT_001 = "sql/001_esquema_amatista.sql"
 SCRIPT_002 = "sql/002_autenticacion_contenido_eventos.sql"
 SCRIPT_003 = "sql/003_mantenimiento.sql"
+SCRIPT_005 = "sql/005_niveles_habilidades_versiones.sql"
+SCRIPT_006 = "sql/006_herramientas_autor.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -249,6 +320,19 @@ def ids_numericos(real):
     ]
 
 
+def solo_falta_005(real):
+    """True si lo de 002 está completo y lo único que falta es de 005."""
+    for tabla, columnas in ESPERADO.items():
+        if tabla in TABLAS_005:
+            continue
+        if tabla not in real:
+            return False
+        for columna in columnas:
+            if (tabla, columna) not in COLUMNAS_005 and columna not in real[tabla]:
+                return False
+    return True
+
+
 def solucion(real, otros_esquemas=()):
     """Qué hacer según lo que falta. Nunca recomienda 001 si ya hay tablas con datos."""
     if not any(tabla in real for tabla in TABLAS_BASE):
@@ -261,7 +345,7 @@ def solucion(real, otros_esquemas=()):
             ]
         return [
             "Base vacía: en Database Actions > SQL ejecuta con «Ejecutar script» (F5), en orden,",
-            f"{SCRIPT_001}, {SCRIPT_002} y {SCRIPT_003} (ver sql/LEEME.txt).",
+            f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005} y {SCRIPT_006} (ver sql/LEEME.txt).",
         ]
     numericos = ids_numericos(real)
     if numericos:
@@ -269,6 +353,12 @@ def solucion(real, otros_esquemas=()):
             f"{', '.join(numericos)} es NUMBER: son tablas del diseño anterior (ids numéricos).",
             "Sin alumnos reales: ejecuta 001 y luego 002 y 003. Con alumnos reales: respalda antes",
             "y sigue sql/LEEME.txt, sección «Base del diseño anterior».",
+        ]
+    if solo_falta_005(real):
+        return [
+            f"Falta la reestructuración por niveles: ejecuta {SCRIPT_005} y luego {SCRIPT_006}",
+            "en Database Actions > SQL con «Ejecutar script» (F5). Solo agregan, no borran datos y se pueden",
+            "repetir (guía: docs/reestructuracion/02_manual_oracle.md). NO ejecutes 001: borraría a los alumnos.",
         ]
     return [
         f"Ejecuta {SCRIPT_002} en Database Actions > SQL con «Ejecutar script» (F5).",

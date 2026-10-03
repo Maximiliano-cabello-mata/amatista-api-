@@ -23,19 +23,36 @@ Guía completa para la base real, paso a paso:
   004_usuario_aplicacion.sql .......... Opcional (T-004): usuario
                                         AMATISTA_APP con permisos mínimos
                                         para que el backend no use ADMIN.
+  005_niveles_habilidades_versiones.sql
+                                        Incremental (v3.0.0, reestructuración):
+                                        NIVELES, MODULOS.NIVEL_ID, HABILIDADES,
+                                        HABILIDADES_ALUMNO, EVALUACIONES_RUBRICA,
+                                        VERSIONES_BLENDER y
+                                        VERIFICACIONES_BLENDER. No borra datos.
+  006_herramientas_autor.sql .......... Vistas V_AMATISTA_MAPA,
+                                        V_AMATISTA_FICHAS_INCOMPLETAS y
+                                        V_AMATISTA_COMPATIBILIDAD, y el paquete
+                                        AMATISTA_AUTOR para crear niveles,
+                                        lecciones y fichas desde Database
+                                        Actions (no publica: eso valida el
+                                        backend).
 
-  002, 003 y 004 son idempotentes: se pueden ejecutar varias veces sin
-  error y sin duplicar nada.
+  002 a 006 son idempotentes: se pueden ejecutar varias veces sin error y
+  sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 004 (opcional)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 004 (opcional)
+      002 -> 003 -> 005 -> 006 -> 004 (opcional)
       NUNCA 001: borraría usuarios, sesiones y progreso.
+
+  Producción (02/10/2026) ya tiene 002 y 003: solo faltan 005 y 006, y se
+  ejecutan ANTES de actualizar el backend a la v3.0.0 (el código nuevo lee
+  MODULOS.NIVEL_ID; sin 005 el catálogo responde 503).
 
   ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
   te dice qué script falta.
@@ -110,8 +127,10 @@ Guía completa para la base real, paso a paso:
        - el script nuevo,
        - ESPERADO en backend/diagnostico_oracle.py.
      tests/test_esquema.py falla si alguno queda desalineado.
-  7. Una tabla nueva también se agrega a la lista de 004 y se vuelve a
-     ejecutar 004 (si se usa AMATISTA_APP), y a la consulta de filas de 003.
+  7. Una tabla nueva también se agrega a la lista de 004 y el script que la
+     crea da los permisos a AMATISTA_APP si existe (como 005). Las filas de
+     las tablas nuevas se cuentan en la verificación del script que las
+     crea: 003 ya corrió en producción y no se edita.
   8. Nada de binarios en la base (imágenes, videos, .glb): solo texto plano
      y JSON compacto. Índices nuevos solo si una consulta real los necesita,
      nunca sobre columnas que ya son PRIMARY KEY o UNIQUE.

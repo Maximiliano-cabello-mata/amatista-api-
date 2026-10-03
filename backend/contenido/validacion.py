@@ -63,6 +63,10 @@ MAX_TITULO = 200
 MAX_DESCRIPCION = 1000
 MAX_INSIGNIA = 80
 MAX_REEMPLAZA = 250
+# Ficha de la lección (reestructuración v3, docs/reestructuracion/01_modelo_de_contenido.md).
+MAX_OBJETIVO = 300
+MAX_HABILIDADES = 8
+PATRON_VERSION_BLENDER = re.compile(r"^\d+\.\d+(\.\d+)?$")
 
 _FALTA = object()
 
@@ -568,6 +572,80 @@ def _revisar_examen(errores: List[str], leccion: dict, ruta: str) -> None:
         cp.texto(pregunta, "feedbackIncorrect", obligatorio=False)
 
 
+def _lista_ids(c: _Contexto, objeto: dict, campo: str, maximo: int) -> None:
+    valor = _valor(objeto, campo)
+    if valor is _FALTA:
+        return
+    if not isinstance(valor, list) or not all(isinstance(x, str) and PATRON_ID.match(x) for x in valor):
+        c.error(f"«ficha.{campo}» debe ser una lista de ids (letras, números, guion y guion bajo)")
+    elif len(valor) > maximo:
+        c.error(f"«ficha.{campo}» admite como máximo {maximo} elementos (tiene {len(valor)})")
+
+
+def _revisar_ficha(c: _Contexto, leccion: dict) -> None:
+    """Ficha opcional de la lección: objetivo, habilidades, versión de Blender...
+
+    Es opcional para no romper las lecciones anteriores a la v3; el mapa del
+    curso (GET /api/contenido/mapa) señala las fichas incompletas.
+    """
+    ficha = _valor(leccion, "ficha")
+    if ficha is _FALTA:
+        return
+    if not isinstance(ficha, dict):
+        c.error("«ficha» debe ser un objeto")
+        return
+    # Los textos de la ficha pueden quedar vacíos mientras se escribe la lección.
+    c.texto(ficha, "objetivo", "ficha.", obligatorio=False, maximo=MAX_OBJETIVO, vacio=True)
+    _lista_ids(c, ficha, "habilidades", MAX_HABILIDADES)
+    _lista_ids(c, ficha, "prerrequisitos", 20)
+    c.texto(ficha, "edicion", "ficha.", obligatorio=False, maximo=20, vacio=True)
+    c.booleano(ficha, "offline", "ficha.")
+    blender = _valor(ficha, "blender")
+    if blender is not _FALTA:
+        if not isinstance(blender, dict):
+            c.error("«ficha.blender» debe ser un objeto {verificadaEn, notas}")
+        else:
+            version = c.texto(blender, "verificadaEn", "ficha.blender.", obligatorio=False, maximo=20)
+            if version is not None and not PATRON_VERSION_BLENDER.match(version):
+                c.error(f"«ficha.blender.verificadaEn» = «{version}» debe ser una versión como 4.2 o 4.2.3")
+            c.texto(blender, "notas", "ficha.blender.", obligatorio=False, maximo=500, vacio=True)
+    practica = _valor(ficha, "practica")
+    if practica is not _FALTA:
+        if not isinstance(practica, dict):
+            c.error("«ficha.practica» debe ser un objeto {archivo, evidencia}")
+        else:
+            c.texto(practica, "archivo", "ficha.practica.", obligatorio=False, maximo=300, vacio=True)
+            c.texto(practica, "evidencia", "ficha.practica.", obligatorio=False, maximo=300, vacio=True)
+    comprobacion = _valor(ficha, "comprobacion")
+    if comprobacion is not _FALTA and (
+        not isinstance(comprobacion, list) or not all(isinstance(x, str) and x.strip() for x in comprobacion)
+    ):
+        c.error("«ficha.comprobacion» debe ser una lista de criterios (textos)")
+
+
+def pendientes_ficha(leccion: Any, requiere_blender: bool = True) -> List[str]:
+    """Lo que le falta a la ficha para cumplir la estructura mínima (no son errores).
+
+    requiere_blender=False para cursos que no se trabajan en Blender (A-Frame).
+    """
+    if not isinstance(leccion, dict):
+        return ["ficha"]
+    ficha = leccion.get("ficha")
+    if not isinstance(ficha, dict):
+        return ["ficha"]
+    faltan = []
+    if not (isinstance(ficha.get("objetivo"), str) and ficha["objetivo"].strip()):
+        faltan.append("objetivo")
+    if not ficha.get("habilidades"):
+        faltan.append("habilidades")
+    blender = ficha.get("blender")
+    if requiere_blender and not (isinstance(blender, dict) and blender.get("verificadaEn")):
+        faltan.append("versión de Blender verificada")
+    if not ficha.get("comprobacion"):
+        faltan.append("criterios de comprobación")
+    return faltan
+
+
 def _revisar_leccion(errores: List[str], leccion: Any, ruta: str) -> None:
     c = _Contexto(errores, ruta)
     if not isinstance(leccion, dict):
@@ -588,6 +666,8 @@ def _revisar_leccion(errores: List[str], leccion: Any, ruta: str) -> None:
             c.texto(portada, "alt", "cover.")
         else:
             c.error("«cover» debe ser un objeto {src, alt}")
+
+    _revisar_ficha(c, leccion)
 
     reemplaza = _valor(leccion, "replaces")
     if reemplaza is not _FALTA:
@@ -639,6 +719,7 @@ def validar_modulo(datos: Any) -> List[str]:
     c.entero(modulo, "estimatedTimeMinutes", obligatorio=False, minimo=0, maximo=10000)
     c.entero(modulo, "order", minimo=1, maximo=999)
     c.identificador(modulo, "curso", obligatorio=False)
+    c.identificador(modulo, "nivel", obligatorio=False)
     c.texto(modulo, "insignia", obligatorio=False, maximo=MAX_INSIGNIA)
     c.opcion(modulo, "estado", ESTADOS_MODULO, obligatorio=False)
 

@@ -6,11 +6,17 @@ Uso, desde backend/ (importar y exportar usan la base de backend/.env):
     python herramientas/contenido.py validar archivo.json otro.json
     python herramientas/contenido.py importar [archivos...]   # upsert; crea los cursos blender y aframe si faltan
     python herramientas/contenido.py exportar mod_teoria_001 [salida.json] [--borradores]
-    python herramientas/contenido.py nuevo-modulo blender 2 "Interfaz y navegación" --insignia "Navegante"
+    python herramientas/contenido.py nuevo-modulo blender 2 "Interfaz y navegación" --insignia "Navegante" --nivel blender-n1
+    python herramientas/contenido.py nueva-leccion ../frontend/src/data/modulos/blender-modulo-2.json les_n1_mesa "Construir una mesa" --objetivo "..."
+    python herramientas/contenido.py mapa [blender]          # curso > nivel > módulo > lección desde los archivos
+    python herramientas/contenido.py sembrar-niveles          # crea en la base los 5 niveles de Blender que falten
 
-validar no necesita base de datos y sale con código 1 si hay errores (lo usa CI).
-nuevo-modulo crea ../frontend/src/data/modulos/<curso>-modulo-<n>.json en
-borrador con las 5 lecciones de la fórmula (gancho, explora, practica, reto, jefe).
+validar y mapa no necesitan base de datos; validar sale con código 1 si hay
+errores (lo usa CI). nuevo-modulo crea ../frontend/src/data/modulos/<curso>-modulo-<n>.json
+en borrador con las 5 lecciones de la fórmula (gancho, explora, practica, reto,
+jefe). nueva-leccion agrega al final de un módulo una lección con la estructura
+mínima de 10 pasos y su ficha (reestructuración v3). importar también crea
+los niveles de Blender que falten (los módulos pueden decir «nivel»).
 """
 import argparse
 import json
@@ -28,8 +34,15 @@ MODULOS = REPO / "frontend" / "src" / "data" / "modulos"
 # (y que "contenido" sea el paquete backend/contenido, no este archivo).
 sys.path.insert(0, str(BACKEND))
 
-from contenido.plantillas import CURSOS_BASE, modulo_esqueleto  # noqa: E402
-from contenido.validacion import MAX_TITULO, PATRON_ID, modulo_de, validar_modulo  # noqa: E402
+from contenido.plantillas import CURSOS_BASE, NIVELES_BLENDER, leccion_estructurada, modulo_esqueleto  # noqa: E402
+from contenido.validacion import (  # noqa: E402
+    MAX_TITULO,
+    PATRON_ID,
+    modulo_de,
+    pendientes_ficha,
+    validar_leccion,
+    validar_modulo,
+)
 
 PATRON_ARCHIVO = re.compile(r"^([A-Za-z0-9_]+)-modulo-(\d+)\.json$")
 
@@ -168,6 +181,7 @@ def comando_importar(archivos: Sequence[str]) -> int:
     from sqlalchemy.orm import Session
 
     from api.contenido import asegurar_cursos_base, importar_modulo
+    from api.niveles import sembrar_niveles_blender
     from contenido.validacion import ContenidoInvalido
 
     rutas = rutas_o_defecto(archivos)
@@ -186,9 +200,12 @@ def comando_importar(archivos: Sequence[str]) -> int:
     try:
         with Session(preparar_base()) as db:
             creados = asegurar_cursos_base(db)
+            niveles = sembrar_niveles_blender(db)
             db.commit()
             if creados:
                 print(f"Cursos creados: {', '.join(creados)}")
+            if niveles:
+                print(f"Niveles creados (en borrador): {', '.join(niveles)}")
             codigo = 0
             for ruta in rutas:
                 datos, _ = leer_archivo(ruta)
@@ -242,8 +259,103 @@ def comando_exportar(modulo_id: str, salida: Optional[str], borradores: bool) ->
     return 0
 
 
+def comando_sembrar_niveles() -> int:
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import Session
+
+    from api.contenido import asegurar_cursos_base
+    from api.niveles import sembrar_niveles_blender
+
+    try:
+        with Session(preparar_base()) as db:
+            asegurar_cursos_base(db)
+            creados = sembrar_niveles_blender(db)
+            db.commit()
+    except SQLAlchemyError as error:
+        print(mensaje_bd(error), file=sys.stderr)
+        return 1
+    if creados:
+        print(f"Niveles creados en borrador: {', '.join(creados)}. Publícalos en el panel o con amatista_autor.publicar_nivel.")
+    else:
+        print("Los niveles de Blender ya existían: no se cambió nada.")
+    return 0
+
+
+def comando_mapa(curso: Optional[str], carpeta: Optional[str]) -> int:
+    """Curso > nivel > módulo > lección de los archivos, con lo que falta en cada ficha."""
+    rutas = sorted((Path(carpeta) if carpeta else MODULOS).glob("*.json"))
+    titulos = {n["id"]: f"Nivel {n['numero']}" + (f" ({n['rama']})" if n["rama"] else "") + f": {n['titulo']}"
+               for n in NIVELES_BLENDER}
+    por_curso: Dict[str, Dict[str, List[Tuple[dict, Path]]]] = {}
+    for ruta in rutas:
+        datos, errores = leer_archivo(ruta)
+        modulo = modulo_de(datos) if datos is not None else None
+        if errores or not isinstance(modulo, dict):
+            print(f"ERROR {nombre_visible(ruta)}: no se pudo leer", file=sys.stderr)
+            continue
+        curso_modulo = modulo.get("curso") or curso_de_archivo(ruta) or "—"
+        if curso and curso_modulo != curso:
+            continue
+        por_curso.setdefault(curso_modulo, {}).setdefault(modulo.get("nivel") or "", []).append((modulo, ruta))
+    if not por_curso:
+        print("No hay módulos que mostrar.")
+        return 0
+    total = completas = 0
+    for curso_id, niveles in sorted(por_curso.items()):
+        print(f"\n{curso_id}")
+        for nivel_id in sorted(niveles, key=lambda n: (n == "", n)):
+            print(f"  {titulos.get(nivel_id, nivel_id) if nivel_id else 'Sin nivel asignado'}")
+            for modulo, ruta in sorted(niveles[nivel_id], key=lambda par: par[0].get("order") or 0):
+                print(f"    Módulo {modulo.get('order')} · {modulo.get('title')} [{modulo.get('estado', 'publicado')}]")
+                for leccion in modulo.get("lessons") or []:
+                    if not isinstance(leccion, dict):
+                        continue
+                    faltan = pendientes_ficha(leccion, curso_id == "blender")
+                    total += 1
+                    completas += not faltan
+                    marca = "✓" if not faltan else "·"
+                    detalle = "" if not faltan else f"  (falta: {', '.join(faltan)})"
+                    print(f"      {marca} {leccion.get('id')} {leccion.get('title')}{detalle}")
+    print(f"\n{completas} de {total} lecciones con la ficha completa.")
+    return 0
+
+
+def comando_nueva_leccion(archivo: str, leccion_id: str, titulo: str, objetivo: Optional[str]) -> int:
+    ruta = Path(archivo)
+    datos, errores = leer_archivo(ruta)
+    if errores:
+        print(f"ERROR {nombre_visible(ruta)}: {errores[0]}", file=sys.stderr)
+        return 1
+    modulo = modulo_de(datos)
+    if not isinstance(modulo, dict) or not isinstance(modulo.get("lessons"), list):
+        print(f"ERROR {nombre_visible(ruta)}: no es un archivo de módulo", file=sys.stderr)
+        return 1
+    if any(isinstance(x, dict) and x.get("id") == leccion_id for x in modulo["lessons"]):
+        print(f"Ya existe la lección «{leccion_id}» en este módulo.", file=sys.stderr)
+        return 1
+    leccion = leccion_estructurada(leccion_id, titulo.strip(), objetivo or "", bloqueada=bool(modulo["lessons"]))
+    problemas = validar_leccion(leccion)
+    if problemas:
+        for problema in problemas:
+            print(f"ERROR {problema}", file=sys.stderr)
+        return 2
+    modulo["lessons"].append(leccion)
+    guardar_json(datos, ruta)
+    print(
+        f"Agregada {leccion_id} al final de {nombre_visible(ruta)} con la estructura de 10 pasos. "
+        "Llena la ficha (objetivo, habilidades, versión de Blender, comprobación) y valida."
+    )
+    return 0
+
+
 def comando_nuevo_modulo(
-    curso: str, numero: int, titulo: str, insignia: Optional[str], destino: Optional[str], forzar: bool
+    curso: str,
+    numero: int,
+    titulo: str,
+    insignia: Optional[str],
+    destino: Optional[str],
+    forzar: bool,
+    nivel: Optional[str] = None,
 ) -> int:
     carpeta = Path(destino) if destino else MODULOS
     titulo = titulo.strip()
@@ -276,7 +388,10 @@ def comando_nuevo_modulo(
     if modulo_id in ids_modulos:
         print(f"Ya hay un módulo con el id «{modulo_id}» en {nombre_visible(carpeta)}.", file=sys.stderr)
         return 1
-    datos = modulo_esqueleto(curso, numero, titulo, insignia, modulo_id, ids_existentes)
+    if nivel and not PATRON_ID.match(nivel):
+        print("El nivel solo admite letras, números, guion y guion bajo (por ejemplo blender-n1).", file=sys.stderr)
+        return 2
+    datos = modulo_esqueleto(curso, numero, titulo, insignia, modulo_id, ids_existentes, nivel_id=nivel)
     errores = validar_modulo(datos)
     if errores:  # no debería pasar: las plantillas se prueban
         for error in errores:
@@ -296,7 +411,9 @@ def comando_nuevo_modulo(
 
 
 def main(argumentos: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Contenido de Amatista: validar, importar, exportar y crear módulos.")
+    parser = argparse.ArgumentParser(
+        description="Contenido de Amatista: validar, importar, exportar, crear módulos y lecciones, y ver el mapa."
+    )
     comandos = parser.add_subparsers(dest="comando", metavar="comando")
 
     validar = comandos.add_parser("validar", help="valida archivos de módulo (por defecto todos los del frontend)")
@@ -317,6 +434,19 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     nuevo.add_argument("--insignia", default=None, help="nombre de la insignia que desbloquea el examen final")
     nuevo.add_argument("--destino", default=None, help="carpeta de salida (por defecto ../frontend/src/data/modulos)")
     nuevo.add_argument("--forzar", action="store_true", help="sobrescribe el archivo si ya existe")
+    nuevo.add_argument("--nivel", default=None, help="nivel del módulo, por ejemplo blender-n1")
+
+    leccion = comandos.add_parser("nueva-leccion", help="agrega a un módulo una lección de 10 pasos con su ficha")
+    leccion.add_argument("archivo", help="archivo del módulo, por ejemplo ../frontend/src/data/modulos/blender-modulo-2.json")
+    leccion.add_argument("leccion_id", help="id nuevo de la lección (no se reutilizan)")
+    leccion.add_argument("titulo", help="título de la lección")
+    leccion.add_argument("--objetivo", default=None, help="objetivo observable (una frase)")
+
+    mapa = comandos.add_parser("mapa", help="curso > nivel > módulo > lección de los archivos y fichas pendientes")
+    mapa.add_argument("curso", nargs="?", help="id del curso (por defecto todos)")
+    mapa.add_argument("--carpeta", default=None, help="carpeta de módulos (por defecto ../frontend/src/data/modulos)")
+
+    comandos.add_parser("sembrar-niveles", help="crea en la base los niveles de Blender que falten")
 
     opciones = parser.parse_args(argumentos)
     if opciones.comando == "validar":
@@ -327,8 +457,23 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
         return comando_exportar(opciones.modulo_id, opciones.salida, opciones.borradores)
     if opciones.comando == "nuevo-modulo":
         return comando_nuevo_modulo(
-            opciones.curso, opciones.numero, opciones.titulo, opciones.insignia, opciones.destino, opciones.forzar
+            opciones.curso,
+            opciones.numero,
+            opciones.titulo,
+            opciones.insignia,
+            opciones.destino,
+            opciones.forzar,
+            opciones.nivel,
         )
+    if opciones.comando == "nueva-leccion":
+        if not PATRON_ID.match(opciones.leccion_id) or not opciones.titulo.strip():
+            print("Usa un id con letras, números, guion y guion bajo, y un título.", file=sys.stderr)
+            return 2
+        return comando_nueva_leccion(opciones.archivo, opciones.leccion_id, opciones.titulo, opciones.objetivo)
+    if opciones.comando == "mapa":
+        return comando_mapa(opciones.curso, opciones.carpeta)
+    if opciones.comando == "sembrar-niveles":
+        return comando_sembrar_niveles()
     parser.print_help()
     return 2
 

@@ -43,7 +43,7 @@ def test_esquema_correcto_no_tiene_problemas():
     assert comparar(real) == []
 
 
-def test_esperado_incluye_las_ocho_tablas():
+def test_esperado_incluye_las_catorce_tablas():
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -53,8 +53,34 @@ def test_esperado_incluye_las_ocho_tablas():
         "CURSOS",
         "MODULOS",
         "LECCIONES",
+        "NIVELES",
+        "HABILIDADES",
+        "HABILIDADES_ALUMNO",
+        "EVALUACIONES_RUBRICA",
+        "VERSIONES_BLENDER",
+        "VERIFICACIONES_BLENDER",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
+    assert ESPERADO["MODULOS"]["NIVEL_ID"] == "VARCHAR2"
+
+
+def test_base_con_002_pide_005_y_006_sin_001():
+    """Producción tiene 002 aplicado: falta solo lo de la reestructuración."""
+    real = {
+        tabla: {c: t for c, t in columnas.items() if (tabla, c) != ("MODULOS", "NIVEL_ID")}
+        for tabla, columnas in ESPERADO.items()
+        if tabla not in diagnostico_oracle.TABLAS_005
+    }
+    problemas = comparar(real)
+    assert "Falta la tabla NIVELES." in problemas
+    assert "Falta la columna MODULOS.NIVEL_ID." in problemas
+    recomendacion = " ".join(solucion(real))
+    assert "005_niveles_habilidades_versiones.sql" in recomendacion
+    assert "006_herramientas_autor.sql" in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+    # Si además falta algo de 002, primero va 002.
+    del real["LOGROS"]
+    assert "002_autenticacion_contenido_eventos.sql" in " ".join(solucion(real))
 
 
 def test_detecta_tabla_faltante_y_tipo_numerico():

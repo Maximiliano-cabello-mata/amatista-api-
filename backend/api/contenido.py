@@ -5,6 +5,9 @@
   304 si el navegador ya tiene la versión vigente (ETag). Con las tablas
   vacías devuelve cursos: [] y la PWA usa su catálogo empaquetado.
 - Edición: solo administradores; los profesores pueden leer (GET) y validar.
+- Reestructuración v3: cada curso tiene niveles (api/niveles.py) y cada
+  módulo puede pertenecer a uno (nivel_id). El catálogo los incluye como
+  campos nuevos; una PWA que no los conoce los ignora.
 - Los ids son inmutables (el progreso de los alumnos se guarda con ellos) y
   lo publicado no se borra: se archiva. Solo se publica lo que pasa
   contenido.validacion; un borrador sí se guarda con errores (el editor los
@@ -52,7 +55,7 @@ from contenido.validacion import (
     validar_modulo,
 )
 from database.conexion import obtener_db
-from database.modelos import Curso, Leccion, Modulo, Usuario, ahora
+from database.modelos import Curso, Leccion, Modulo, Nivel, Usuario, ahora
 
 router = APIRouter(prefix="/api/contenido", tags=["contenido"])
 
@@ -135,6 +138,7 @@ def modulo_meta(modulo: Modulo) -> dict:
     return {
         "id": modulo.id,
         "curso_id": modulo.curso_id,
+        "nivel_id": modulo.nivel_id,
         "numero": modulo.numero,
         "titulo": modulo.titulo,
         "descripcion": modulo.descripcion,
@@ -145,6 +149,33 @@ def modulo_meta(modulo: Modulo) -> dict:
         "actualizado_en": iso(modulo.actualizado_en),
         "publicado_en": iso(modulo.publicado_en),
     }
+
+
+def nivel_meta(nivel: Nivel) -> dict:
+    return {
+        "id": nivel.id,
+        "curso_id": nivel.curso_id,
+        "numero": nivel.numero,
+        "rama": nivel.rama,
+        "titulo": nivel.titulo,
+        "perfil": nivel.perfil,
+        "proyecto": nivel.proyecto,
+        "criterio_salida": nivel.criterio_salida,
+        "estado": nivel.estado,
+        "actualizado_en": iso(nivel.actualizado_en),
+    }
+
+
+def nivel_del_curso(db: Session, nivel_id: str, curso_id: str) -> Nivel:
+    """El nivel debe existir y ser del mismo curso que el módulo."""
+    nivel = db.get(Nivel, nivel_id)
+    if nivel is None:
+        raise HTTPException(status_code=404, detail=f"No existe el nivel «{nivel_id}».")
+    if nivel.curso_id != curso_id:
+        raise HTTPException(
+            status_code=409, detail=f"El nivel «{nivel_id}» es del curso «{nivel.curso_id}», no de «{curso_id}»."
+        )
+    return nivel
 
 
 def leccion_meta(leccion: Leccion) -> dict:
@@ -320,8 +351,19 @@ def version_catalogo(db: Session) -> str:
     agregar(
         db.execute(
             _modulos_visibles(
-                Modulo.id, Modulo.curso_id, Modulo.numero, Modulo.estado, Modulo.version, Modulo.actualizado_en
+                Modulo.id,
+                Modulo.curso_id,
+                Modulo.nivel_id,
+                Modulo.numero,
+                Modulo.estado,
+                Modulo.version,
+                Modulo.actualizado_en,
             ).order_by(Modulo.id)
+        )
+    )
+    agregar(
+        db.execute(
+            select(Nivel.id, Nivel.estado, Nivel.actualizado_en).where(Nivel.estado == "publicado").order_by(Nivel.id)
         )
     )
     agregar(
@@ -358,6 +400,15 @@ def cursos_catalogo(db: Session) -> List[dict]:
         if isinstance(leccion, dict):
             lecciones[modulo_id].append(leccion)
 
+    niveles: Dict[str, List[dict]] = defaultdict(list)
+    for nivel in db.scalars(
+        select(Nivel).where(Nivel.estado == "publicado").order_by(Nivel.numero, Nivel.rama, Nivel.id)
+    ):
+        datos = nivel_meta(nivel)
+        for campo in ("curso_id", "estado", "actualizado_en"):
+            del datos[campo]
+        niveles[nivel.curso_id].append(datos)
+
     por_curso: Dict[str, List[dict]] = defaultdict(list)
     for modulo in modulos:
         # Un módulo sin publicar (o sin lecciones publicadas) aparece como "Próximamente".
@@ -366,6 +417,7 @@ def cursos_catalogo(db: Session) -> List[dict]:
             {
                 "id": modulo.id,
                 "numero": modulo.numero,
+                "nivel_id": modulo.nivel_id,
                 "titulo": titulo_corto(modulo.titulo),
                 "insignia": modulo.insignia,
                 "contenido": modulo_json(modulo, lecciones[modulo.id]) if publicado else None,
@@ -382,6 +434,7 @@ def cursos_catalogo(db: Session) -> List[dict]:
             "nivel": curso.nivel,
             "acento": curso.acento,
             "recurso": recurso_de(curso),
+            "niveles": niveles[curso.id],
             "modulos": por_curso[curso.id],
         }
         for curso in cursos
@@ -469,6 +522,15 @@ def importar_modulo(db: Session, datos: Any, curso_id: Optional[str] = None) -> 
         "insignia": modulo.get("insignia") or None,
         "minutos": modulo.get("estimatedTimeMinutes"),
     }
+    # «nivel» es opcional: sin él se conserva el nivel que ya tenga el módulo en la base.
+    nivel_id = modulo.get("nivel")
+    if nivel_id:
+        nivel = db.get(Nivel, nivel_id)
+        if nivel is None or nivel.curso_id != curso_id:
+            raise ContenidoInvalido(
+                [f"module: no existe el nivel «{nivel_id}» en el curso «{curso_id}» (sembrar-niveles lo crea)"]
+            )
+        valores["nivel_id"] = nivel_id
     fila = db.get(Modulo, modulo["id"])
     if fila is not None and fila.curso_id != curso_id:
         raise ContenidoInvalido([f"module: el módulo «{fila.id}» ya existe en el curso «{fila.curso_id}»"])
@@ -564,6 +626,7 @@ def exportar_modulo(db: Session, modulo_id: str, borradores: bool = False) -> Op
         "module": {
             **base,
             "curso": modulo.curso_id,
+            **({"nivel": modulo.nivel_id} if modulo.nivel_id else {}),
             "insignia": modulo.insignia,
             "estado": modulo.estado,
             "lessons": lecciones,
@@ -588,7 +651,14 @@ def arbol(db: Session = Depends(obtener_db), _: Usuario = Depends(lector)):
     por_curso: Dict[str, List[dict]] = defaultdict(list)
     for modulo in modulos:
         por_curso[modulo.curso_id].append({**modulo_meta(modulo), "lecciones": por_modulo[modulo.id]})
-    return {"cursos": [{**curso_admin(curso), "modulos": por_curso[curso.id]} for curso in cursos]}
+    niveles: Dict[str, List[dict]] = defaultdict(list)
+    for nivel in db.scalars(select(Nivel).order_by(Nivel.numero, Nivel.rama, Nivel.id)):
+        niveles[nivel.curso_id].append(nivel_meta(nivel))
+    return {
+        "cursos": [
+            {**curso_admin(curso), "niveles": niveles[curso.id], "modulos": por_curso[curso.id]} for curso in cursos
+        ]
+    }
 
 
 @router.get("/plantillas")
@@ -723,6 +793,7 @@ class ModuloNuevo(BaseModel):
     minutos: Optional[int] = Field(default=None, ge=0, le=10000)
     id: Optional[str] = Field(default=None, min_length=1, max_length=MAX_ID, pattern=PATRON_ID_TEXTO)
     numero: Optional[int] = Field(default=None, ge=1, le=999)
+    nivel_id: Optional[str] = Field(default=None, min_length=1, max_length=MAX_ID)
     generar_esqueleto: bool = False
 
 
@@ -733,6 +804,7 @@ class CambiosModulo(BaseModel):
     insignia: Optional[str] = Field(default=None, max_length=80)
     minutos: Optional[int] = Field(default=None, ge=0, le=10000)
     numero: Optional[int] = Field(default=None, ge=1, le=999)
+    nivel_id: Optional[str] = Field(default=None, max_length=MAX_ID)  # null quita el nivel
 
 
 def modulo_con_lecciones(db: Session, modulo: Modulo) -> dict:
@@ -742,6 +814,8 @@ def modulo_con_lecciones(db: Session, modulo: Modulo) -> dict:
 @router.post("/modulos", status_code=201)
 def crear_modulo(cuerpo: ModuloNuevo, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
     curso = obtener_curso(db, cuerpo.curso_id)
+    if cuerpo.nivel_id:
+        nivel_del_curso(db, cuerpo.nivel_id, curso.id)
     numero = cuerpo.numero
     if numero is None:
         numero = (db.scalar(select(func.max(Modulo.numero)).where(Modulo.curso_id == curso.id)) or 0) + 1
@@ -765,6 +839,7 @@ def crear_modulo(cuerpo: ModuloNuevo, db: Session = Depends(obtener_db), _: Usua
     modulo = Modulo(
         id=modulo_id,
         curso_id=curso.id,
+        nivel_id=cuerpo.nivel_id,
         numero=numero,
         titulo=cuerpo.titulo,
         descripcion=cuerpo.descripcion,
@@ -793,6 +868,8 @@ def editar_modulo(
     cambios = cuerpo.model_dump(exclude_unset=True, exclude={"id"})
     if cambios.get("numero") is not None and numero_ocupado(db, modulo.curso_id, cambios["numero"], excepto=modulo.id):
         raise HTTPException(status_code=409, detail=f"Ya hay un módulo {cambios['numero']} en este curso.")
+    if cambios.get("nivel_id"):
+        nivel_del_curso(db, cambios["nivel_id"], modulo.curso_id)
     for campo, valor in cambios.items():
         if campo in ("titulo", "numero") and valor is None:
             continue

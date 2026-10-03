@@ -259,8 +259,8 @@ def test_flujo_completo_de_un_modulo(cliente, crear_cuenta):
     # Sin publicar aparece como "Próximamente".
     catalogo = cliente.get(CATALOGO).json()
     assert catalogo["cursos"][0]["modulos"] == [
-        {"id": "mod_blender_002", "numero": 2, "titulo": "Interfaz y navegación", "insignia": "Navegante",
-         "contenido": None}
+        {"id": "mod_blender_002", "numero": 2, "nivel_id": None, "titulo": "Interfaz y navegación",
+         "insignia": "Navegante", "contenido": None}
     ]
 
     # Editar una lección: valida y sube la versión.

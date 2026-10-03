@@ -1,7 +1,7 @@
 """Tablas de Amatista.
 
-Deben coincidir con los scripts de backend/sql/ (001 crea la base y 002 la
-amplía sin borrar datos). Todos los identificadores son texto (VARCHAR2):
+Deben coincidir con los scripts de backend/sql/ (001 crea la base, 002 la
+amplía sin borrar datos y 005 agrega la reestructuración por niveles). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
@@ -13,7 +13,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import TIMESTAMP, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text
+from sqlalchemy import TIMESTAMP, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -26,6 +26,16 @@ TIPOS_EVENTO = (
     "activity_submitted",
     "sync_succeeded",
 )
+# Reestructuración v3 (docs/reestructuracion/): curso > nivel > módulo > lección.
+NUMEROS_NIVEL = (1, 2, 3, 4, 5)
+# Sección 9 de la propuesta de contenido: cuatro estados por habilidad.
+ESTADOS_HABILIDAD = ("sin_practicar", "con_guia", "con_pistas", "autonoma")
+# Rúbrica común de proyecto: criterios A a E, cada uno con tres logros.
+CRITERIOS_RUBRICA = ("A", "B", "C", "D", "E")
+LOGROS_RUBRICA = ("pendiente", "con_ayuda", "autonomo")
+# Política de versiones de Blender (sección 5).
+CATEGORIAS_BLENDER = ("principal", "compatible", "sin_verificar", "retirada")
+RESULTADOS_VERIFICACION = ("verificada", "con_diferencias", "falla")
 
 
 def ahora() -> datetime:
@@ -194,12 +204,39 @@ class Curso(Base):
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
 
 
+class Nivel(Base):
+    """Nivel del curso (1 Desde cero … 5 Avanzado por especialidad).
+
+    El nivel 5 tiene una fila por rama ("web", "animacion"...): cada rama
+    tiene sus prerrequisitos y su proyecto final. Un nivel en borrador no
+    aparece en el catálogo; sus módulos sí, si están publicados (los módulos
+    sin nivel siguen funcionando igual que antes de la reestructuración).
+    """
+
+    __tablename__ = "niveles"
+    # La restricción UNIQUE crea su índice y cubre las búsquedas por curso (regla 2).
+    __table_args__ = (UniqueConstraint("curso_id", "numero", "rama", name="uq_niveles_curso_numero_rama"),)
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)  # 'blender-n1', 'blender-n5-web'
+    curso_id: Mapped[str] = mapped_column(String(50), ForeignKey("cursos.id"))
+    numero: Mapped[int] = mapped_column(Integer)  # 1 a 5
+    rama: Mapped[Optional[str]] = mapped_column(String(50))  # solo en el nivel 5
+    titulo: Mapped[str] = mapped_column(String(100))
+    perfil: Mapped[Optional[str]] = mapped_column(String(500))
+    proyecto: Mapped[Optional[str]] = mapped_column(String(300))
+    criterio_salida: Mapped[Optional[str]] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(12), default="borrador")
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
 class Modulo(Base):
     __tablename__ = "modulos"
     __table_args__ = (Index("ix_modulos_curso", "curso_id", "numero"),)
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # 'mod_teoria_001'
     curso_id: Mapped[str] = mapped_column(String(50), ForeignKey("cursos.id"))
+    # NULL = módulo anterior a los niveles (sigue visible en el catálogo).
+    nivel_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("niveles.id"))
     numero: Mapped[int] = mapped_column(Integer)  # posición dentro del curso (1, 2, ...)
     titulo: Mapped[str] = mapped_column(String(200))
     descripcion: Mapped[Optional[str]] = mapped_column(String(1000))
@@ -239,3 +276,94 @@ class Leccion(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
     publicado_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+
+
+# --- Reestructuración v3: habilidades, rúbrica y versiones de Blender --------
+
+
+class Habilidad(Base):
+    """Habilidad observable ("navegar sin mover objetos"). Las lecciones la
+    citan en su ficha (ficha.habilidades) y el alumno la demuestra."""
+
+    __tablename__ = "habilidades"
+    __table_args__ = (Index("ix_habilidades_curso", "curso_id", "orden"),)
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)  # 'bl-navegar-vista'
+    curso_id: Mapped[str] = mapped_column(String(50), ForeignKey("cursos.id"))
+    nivel_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("niveles.id"))
+    nombre: Mapped[str] = mapped_column(String(150))
+    descripcion: Mapped[Optional[str]] = mapped_column(String(500))
+    orden: Mapped[int] = mapped_column(Integer, default=0)
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class HabilidadAlumno(Base):
+    """Estado de una habilidad para un alumno: una fila por par (upsert)."""
+
+    __tablename__ = "habilidades_alumno"
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    habilidad_id: Mapped[str] = mapped_column(String(50), ForeignKey("habilidades.id"), primary_key=True)
+    estado: Mapped[str] = mapped_column(String(14), default="sin_practicar")
+    evidencia: Mapped[Optional[str]] = mapped_column(String(300))  # enlace o nota, nunca un binario
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class EvaluacionRubrica(Base):
+    """Rúbrica común del proyecto de un nivel: criterio A a E por alumno.
+
+    Se guarda la evaluación más reciente de cada criterio; el historial queda
+    en EVENTOS_APRENDIZAJE (activity_submitted).
+    """
+
+    __tablename__ = "evaluaciones_rubrica"
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    nivel_id: Mapped[str] = mapped_column(String(50), ForeignKey("niveles.id"), primary_key=True)
+    criterio: Mapped[str] = mapped_column(String(1), primary_key=True)
+    logro: Mapped[str] = mapped_column(String(12), default="pendiente")
+    evidencia: Mapped[Optional[str]] = mapped_column(String(300))
+    comentario: Mapped[Optional[str]] = mapped_column(String(500))
+    revisado_por: Mapped[Optional[str]] = mapped_column(String(100))
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class VersionBlender(Base):
+    """Versión de Blender y su categoría en el curso (principal, compatible...).
+
+    La versión principal (LTS) es una decisión pendiente: la tabla nace vacía
+    y se llena cuando se verifica (docs/reestructuracion/).
+    """
+
+    __tablename__ = "versiones_blender"
+
+    version: Mapped[str] = mapped_column(String(20), primary_key=True)  # '4.2.3'
+    categoria: Mapped[str] = mapped_column(String(14), default="sin_verificar")
+    es_lts: Mapped[int] = mapped_column(Integer, default=0)
+    soporte_hasta: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    notas: Mapped[Optional[str]] = mapped_column(String(500))
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class VerificacionBlender(Base):
+    """Una prueba de una lección en una versión de Blender (matriz de
+    compatibilidad de la sección 5): quién, cuándo, dónde y qué cambió."""
+
+    __tablename__ = "verificaciones_blender"
+    __table_args__ = (
+        ForeignKeyConstraint(["curso_id", "leccion_id"], ["lecciones.curso_id", "lecciones.id"]),
+        Index("ix_verificaciones_leccion", "curso_id", "leccion_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    curso_id: Mapped[str] = mapped_column(String(50))
+    leccion_id: Mapped[str] = mapped_column(String(50))
+    version_blender: Mapped[str] = mapped_column(String(20), ForeignKey("versiones_blender.version"))
+    sistema: Mapped[str] = mapped_column(String(60))  # 'Windows 11', 'Ubuntu 24.04'
+    version_leccion: Mapped[int] = mapped_column(Integer)  # LECCIONES.VERSION probada
+    version_addon: Mapped[Optional[str]] = mapped_column(String(20))
+    resultado: Mapped[str] = mapped_column(String(16))
+    diferencias: Mapped[Optional[str]] = mapped_column(String(1000))
+    evidencia: Mapped[Optional[str]] = mapped_column(String(300))
+    responsable: Mapped[Optional[str]] = mapped_column(String(100))
+    verificado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

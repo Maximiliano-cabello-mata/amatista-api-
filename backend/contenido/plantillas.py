@@ -6,6 +6,8 @@
   interactivos. Todo el texto dice "Reemplaza este contenido".
 - generar_esqueleto(): las lecciones borrador de un módulo nuevo.
 - CURSOS_BASE: los cursos de frontend/src/data/cursos.js (para importar).
+- NIVELES_BLENDER, ESTRUCTURA_LECCION, leccion_estructurada(): la
+  reestructuración v3 (cinco niveles y lección de 10 pasos con ficha).
 
 Todas las plantillas pasan contenido.validacion (lo comprueban las pruebas).
 """
@@ -483,12 +485,13 @@ def modulo_esqueleto(
     insignia: Optional[str] = None,
     modulo_id: Optional[str] = None,
     ids_existentes: Iterable[str] = (),
+    nivel_id: Optional[str] = None,
 ) -> dict:
     """Archivo de módulo nuevo ({"module": ...}) en borrador, armado con la fórmula."""
     modulo_id = modulo_id or f"mod_{curso_id}_{numero:03d}"
     prefijo, inicio, ancho = siguiente_numeracion(ids_existentes, curso_id)
     lecciones = generar_esqueleto(curso_id, modulo_id, prefijo, inicio, ancho)
-    return {
+    modulo = {
         "module": {
             "id": modulo_id,
             "title": f"Módulo {numero}: {titulo}",
@@ -501,6 +504,9 @@ def modulo_esqueleto(
             "lessons": lecciones,
         }
     }
+    if nivel_id:
+        modulo["module"]["nivel"] = nivel_id
+    return modulo
 
 
 # --- Cursos de frontend/src/data/cursos.js ------------------------------------
@@ -539,3 +545,149 @@ CURSOS_BASE: Dict[str, dict] = {
         "orden": 2,
     },
 }
+
+
+# --- Reestructuración v3: niveles y estructura mínima de lección --------------
+# Fuente: docs/propuestas/2026-10-03_propuesta_contenido_blender.txt (secciones 3
+# y 6). La CLI "sembrar-niveles" crea estos niveles en la base si faltan (no
+# sobrescribe lo que se editó después en el panel o en Oracle).
+
+NIVELES_BLENDER: List[dict] = [
+    {
+        "id": "blender-n1",
+        "numero": 1,
+        "rama": None,
+        "titulo": "Desde cero",
+        "perfil": "Nunca ha utilizado Blender o se pierde al abrirlo.",
+        "proyecto": "Habitación sencilla construida con primitivas.",
+        "criterio_salida": (
+            "Organiza una escena simple y conserva su trabajo, explicando qué transforma al mover la vista "
+            "y qué transforma al mover un objeto."
+        ),
+    },
+    {
+        "id": "blender-n2",
+        "numero": 2,
+        "rama": None,
+        "titulo": "Básico con conocimientos previos",
+        "perfil": "Conoce herramientas, pero tiene vacíos o poca consistencia.",
+        "proyecto": "Mesa con una lámpara estilizada o un objeto de complejidad equivalente.",
+        "criterio_salida": "Construye un objeto sencillo y adapta su forma sin copiar cada acción de un tutorial.",
+    },
+    {
+        "id": "blender-n3",
+        "numero": 3,
+        "rama": None,
+        "titulo": "Consolidación y autonomía",
+        "perfil": "Puede seguir tutoriales, pero se bloquea al comenzar por su cuenta.",
+        "proyecto": "Rincón de estudio propio a partir de una referencia o boceto.",
+        "criterio_salida": (
+            "Termina una escena pequeña con ayuda limitada y justifica al menos una decisión de modelado "
+            "y una corrección."
+        ),
+    },
+    {
+        "id": "blender-n4",
+        "numero": 4,
+        "rama": None,
+        "titulo": "Intermedio",
+        "perfil": "Termina proyectos pequeños y necesita un flujo más consistente.",
+        "proyecto": "Conjunto de objetos coherentes presentado en una escena (y en el laboratorio web cuando exista).",
+        "criterio_salida": "Resuelve un proyecto completo, documenta su entrega y corrige problemas identificados al revisarlo.",
+    },
+    {
+        "id": "blender-n5-web",
+        "numero": 5,
+        "rama": "web",
+        "titulo": "Avanzado: modelos y escenas para web y videojuegos",
+        "perfil": "Domina la base y quiere llevar sus modelos a la web y a los videojuegos.",
+        "proyecto": "Por definir con la rama (decisión pendiente, sección 13).",
+        "criterio_salida": None,
+    },
+    {
+        "id": "blender-n5-animacion",
+        "numero": 5,
+        "rama": "animacion",
+        "titulo": "Avanzado: animación y rigging",
+        "perfil": "Domina la base y quiere animar personajes y objetos.",
+        "proyecto": "Por definir con la rama (decisión pendiente, sección 13).",
+        "criterio_salida": None,
+    },
+    {
+        "id": "blender-n5-producto",
+        "numero": 5,
+        "rama": "producto",
+        "titulo": "Avanzado: visualización de productos",
+        "perfil": "Domina la base y quiere presentar productos.",
+        "proyecto": "Por definir con la rama (decisión pendiente, sección 13).",
+        "criterio_salida": None,
+    },
+    {
+        "id": "blender-n5-procedural",
+        "numero": 5,
+        "rama": "procedural",
+        "titulo": "Avanzado: procedimientos y automatización",
+        "perfil": "Domina la base y quiere automatizar con nodos y scripts (ampliación posterior).",
+        "proyecto": "Por definir con la rama (decisión pendiente, sección 13).",
+        "criterio_salida": None,
+    },
+]
+
+# Estructura mínima de cada lección (sección 6). 006_herramientas_autor.sql
+# arma el mismo esqueleto desde Oracle; tests/test_niveles.py comprueba que
+# los títulos coincidan.
+ESTRUCTURA_LECCION: List[Tuple[str, str, str]] = [
+    ("callout", "Objetivo", "Qué podrá hacer el alumno al terminar, en una frase observable."),
+    ("markdown_text", "Antes de empezar", "Prerrequisitos y versión de Blender en la que se verificó la lección."),
+    ("markdown_text", "Resultado esperado", "Describe la imagen de referencia del resultado (agrega un bloque image)."),
+    ("markdown_text", "Conceptos clave", "Explicación breve de lo necesario, nada más."),
+    ("markdown_text", "Práctica guiada", "Pasos numerados, con menús además de atajos."),
+    ("callout", "Tu variante", "Reto de transferencia: cambia algo manteniendo el objetivo."),
+    ("markdown_text", "Errores frecuentes y pistas", "Problema → pista opcional → cómo recuperarse."),
+    ("markdown_text", "Comprueba tu trabajo", "Lista de criterios de comprobación (los mismos de la ficha)."),
+    ("markdown_text", "Guarda tu evidencia", "Qué guardar: archivo editable, captura y variación."),
+    ("markdown_text", "Repaso", "Dónde se vuelve a usar esta habilidad más adelante."),
+]
+
+
+def ficha_vacia(objetivo: str = "") -> dict:
+    """Ficha de lección para llenar: objetivo, habilidades, versión verificada...
+
+    El nivel no va en la ficha: lo da el módulo (MODULOS.NIVEL_ID).
+    """
+    return {
+        "objetivo": objetivo,
+        "habilidades": [],
+        "prerrequisitos": [],
+        "blender": {"verificadaEn": None, "notas": ""},
+        "edicion": "1.0",
+        "practica": {"archivo": "", "evidencia": "Archivo editable y captura del resultado"},
+        "comprobacion": [],
+        "offline": False,
+    }
+
+
+def leccion_estructurada(
+    leccion_id: str,
+    titulo: str,
+    objetivo: str = "",
+    bloqueada: bool = True,
+) -> dict:
+    """Lección borrador con los 10 pasos de la estructura mínima y su ficha."""
+    bloques = []
+    for tipo, encabezado, guia in ESTRUCTURA_LECCION:
+        if tipo == "callout":
+            variante = "reto" if encabezado == "Tu variante" else "dato"
+            texto = objetivo if encabezado == "Objetivo" and objetivo else f"{REEMPLAZA}: {guia}"
+            bloques.append({"type": "callout", "variant": variante, "title": encabezado, "body": texto})
+        else:
+            bloques.append({"type": "markdown_text", "body": f"### {encabezado}\n{REEMPLAZA}: {guia}"})
+    return {
+        "id": leccion_id,
+        "title": titulo,
+        "type": "theory_reading",
+        "durationSeconds": 900,
+        "isLocked": bloqueada,
+        "ficha": ficha_vacia(objetivo),
+        "contentBlocks": bloques,
+    }
