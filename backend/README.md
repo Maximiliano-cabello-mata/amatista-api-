@@ -20,6 +20,8 @@ Los errores siempre responden `{"detail": "mensaje en español"}`.
 | Progreso | `POST /api/progreso` · `GET /api/progreso` · `GET /api/progreso/{usuario_id}` | Guardar y leer progreso; con token, la identidad sale de la sesión |
 | Eventos | `POST /api/eventos` | Eventos de aprendizaje deduplicados por id (métricas) |
 | Contenido (`api/contenido.py`) | `GET /api/contenido/catalogo` (público, ETag) · `admin/arbol`, `plantillas`, `validar`, CRUD de cursos, módulos y lecciones, `publicar`, `archivar`, `mover`, `exportar` | Contenido administrable borrador → publicado |
+| Niveles (`api/niveles.py`) | `GET/POST /api/contenido/niveles` · `PUT /niveles/{id}` · `POST /niveles/sembrar` · `GET /api/contenido/mapa/{curso_id}` | Niveles del curso (v3) y mapa de fichas pendientes (profesor lee, admin modifica) |
+| Blender (`api/blender.py`) | `GET /api/blender/versiones` (público) · `PUT /versiones/{v}` · `POST /verificaciones` · `GET /compatibilidad` | Versiones de Blender verificadas y matriz de compatibilidad |
 | Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas del lanzamiento y gestión de usuarios (profesor lee, admin modifica) |
 
 Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
@@ -65,9 +67,11 @@ estos pasos se hacen ahí.
 4. **Actualizar las tablas:** abre Database Actions → SQL y ejecuta con
    **Ejecutar script (F5)**, en orden, los scripts de `sql/` (detalle en
    [`sql/LEEME.txt`](sql/LEEME.txt)):
-   - Base que ya tiene datos de alumnos: `002` → `003` → (opcional) `004`.
-     **Nunca `001`**: borra las tablas.
-   - Base vacía: `001` → `002` → `003` → (opcional) `004`.
+   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → (opcional) `004`.
+     **Nunca `001`**: borra las tablas. Producción ya tiene `002` y `003`: solo faltan `005` y `006`.
+   - Base vacía: `001` → `002` → `003` → `005` → `006` → (opcional) `004`.
+   - Manual completo de la v3 (verificación y recetas para crear lecciones desde Oracle):
+     [`docs/reestructuracion/02_manual_oracle.md`](../docs/reestructuracion/02_manual_oracle.md).
 5. **Verificar:** `python diagnostico_oracle.py`. Debe terminar con
    «✓ Las tablas coinciden con lo que espera el backend».
 6. **Arrancar:** `uvicorn main:app --host 0.0.0.0 --port 8000` y abre
