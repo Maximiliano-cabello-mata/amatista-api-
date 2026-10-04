@@ -1,7 +1,8 @@
 """Tablas de Amatista.
 
 Deben coincidir con los scripts de backend/sql/ (001 crea la base, 002 la
-amplía sin borrar datos y 005 agrega la reestructuración por niveles). Todos los identificadores son texto (VARCHAR2):
+amplía sin borrar datos, 005 agrega la reestructuración por niveles y 007 el
+motor de prácticas de Blender). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
@@ -36,6 +37,10 @@ LOGROS_RUBRICA = ("pendiente", "con_ayuda", "autonomo")
 # Política de versiones de Blender (sección 5).
 CATEGORIAS_BLENDER = ("principal", "compatible", "sin_verificar", "retirada")
 RESULTADOS_VERIFICACION = ("verificada", "con_diferencias", "falla")
+# Motor de prácticas (sql/007, docs/motor/): vínculo del add-on con la cuenta.
+ESTADOS_VINCULO = ("pendiente", "listo", "canjeado")
+# Quién subió la versión vigente de una práctica.
+ORIGENES_PRACTICA = ("repositorio", "addon", "panel")
 
 
 def ahora() -> datetime:
@@ -367,3 +372,99 @@ class VerificacionBlender(Base):
     evidencia: Mapped[Optional[str]] = mapped_column(String(300))
     responsable: Mapped[Optional[str]] = mapped_column(String(100))
     verificado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+# --- Motor de prácticas de Blender (sql/007, docs/motor/) ---------------------
+
+
+class AddonVinculo(Base):
+    """Vínculo de un Blender con una cuenta (código de dispositivo).
+
+    El add-on pide un vínculo, el alumno escribe el código en la plataforma
+    (estado «listo») y el add-on lo canjea una sola vez por una sesión propia
+    en SESIONES. Solo se guarda el hash del secreto. Las filas vencidas se
+    borran solas al crear vínculos nuevos: la tabla queda siempre pequeña.
+    """
+
+    __tablename__ = "addon_vinculos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(9), unique=True)  # 'ABCD-2345'
+    secreto_hash: Mapped[str] = mapped_column(String(64))
+    usuario_id: Mapped[Optional[str]] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    dispositivo: Mapped[Optional[str]] = mapped_column(String(200))
+    estado: Mapped[str] = mapped_column(String(10), default="pendiente")
+    creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    expira_en: Mapped[datetime] = mapped_column(TIMESTAMP)
+
+
+class Practica(Base):
+    """Práctica del motor (practice.json, formato amatista.practice/1).
+
+    definicion guarda la última versión subida; version_publicada, la que
+    reciben los alumnos (su texto está en PRACTICA_VERSIONES). Subir una
+    versión nueva nunca la publica: publicar es un paso del administrador.
+    """
+
+    __tablename__ = "practicas"
+    __table_args__ = (Index("ix_practicas_leccion", "curso_id", "leccion_id"),)
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)  # 'blender.n1.mesa'
+    curso_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("cursos.id"))
+    leccion_id: Mapped[Optional[str]] = mapped_column(String(50))  # lección donde vive
+    titulo: Mapped[str] = mapped_column(String(200))
+    nivel: Mapped[int] = mapped_column(Integer, default=1)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    version_publicada: Mapped[Optional[int]] = mapped_column(Integer)
+    definicion: Mapped[str] = mapped_column(TextoJSON())  # CLOB con JSON (IS JSON en Oracle)
+    estado: Mapped[str] = mapped_column(String(12), default="borrador")
+    origen: Mapped[str] = mapped_column(String(12), default="addon")
+    autor_id: Mapped[Optional[str]] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    publicado_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+
+
+class PracticaVersion(Base):
+    """Historial: cada versión subida de una práctica, con quién y desde dónde."""
+
+    __tablename__ = "practica_versiones"
+
+    practica_id: Mapped[str] = mapped_column(String(80), ForeignKey("practicas.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    definicion: Mapped[str] = mapped_column(TextoJSON())
+    huella: Mapped[str] = mapped_column(String(64))  # SHA-256 del JSON canónico
+    nota: Mapped[Optional[str]] = mapped_column(String(500))
+    autor_id: Mapped[Optional[str]] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    version_addon: Mapped[Optional[str]] = mapped_column(String(20))
+    version_blender: Mapped[Optional[str]] = mapped_column(String(20))
+    creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class ProgresoPractica(Base):
+    """Avance de un alumno en una práctica: una fila por par (upsert).
+
+    El servidor vuelve a evaluar la foto de la escena con el motor; progreso
+    guarda el mejor resultado y completada nunca vuelve de 1 a 0. El detalle
+    de cada envío queda en EVENTOS_APRENDIZAJE (activity_submitted).
+    """
+
+    __tablename__ = "progreso_practicas"
+    __table_args__ = (Index("ix_prog_practicas_practica", "practica_id"),)
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    practica_id: Mapped[str] = mapped_column(String(80), ForeignKey("practicas.id"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    progreso: Mapped[int] = mapped_column(Integer, default=0)  # 0 a 100, el mejor
+    completada: Mapped[int] = mapped_column(Integer, default=0)
+    autonomia: Mapped[Optional[str]] = mapped_column(String(14))  # con_guia | con_pistas | autonoma
+    pistas: Mapped[int] = mapped_column(Integer, default=0)
+    correcciones: Mapped[int] = mapped_column(Integer, default=0)
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    paso_actual: Mapped[Optional[str]] = mapped_column(String(80))
+    # Ids de los objetivos cumplidos en la última evaluación: ["cubierta","patas"].
+    objetivos: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(1000))
+    version_blender: Mapped[Optional[str]] = mapped_column(String(20))
+    version_addon: Mapped[Optional[str]] = mapped_column(String(20))
+    abierta_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    completada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

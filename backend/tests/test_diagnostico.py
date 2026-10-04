@@ -43,7 +43,7 @@ def test_esquema_correcto_no_tiene_problemas():
     assert comparar(real) == []
 
 
-def test_esperado_incluye_las_catorce_tablas():
+def test_esperado_incluye_las_dieciocho_tablas():
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -59,8 +59,13 @@ def test_esperado_incluye_las_catorce_tablas():
         "EVALUACIONES_RUBRICA",
         "VERSIONES_BLENDER",
         "VERIFICACIONES_BLENDER",
+        "ADDON_VINCULOS",
+        "PRACTICAS",
+        "PRACTICA_VERSIONES",
+        "PROGRESO_PRACTICAS",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
+    assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"
     assert ESPERADO["MODULOS"]["NIVEL_ID"] == "VARCHAR2"
 
 
@@ -81,6 +86,27 @@ def test_base_con_002_pide_005_y_006_sin_001():
     # Si además falta algo de 002, primero va 002.
     del real["LOGROS"]
     assert "002_autenticacion_contenido_eventos.sql" in " ".join(solucion(real))
+
+
+def test_base_con_005_pide_solo_007():
+    """Producción con 005 y 006 aplicados: falta solo el motor de prácticas."""
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_007}
+    assert "Falta la tabla PRACTICAS." in comparar(real)
+    recomendacion = " ".join(solucion(real))
+    assert "007_motor_practicas.sql" in recomendacion
+    assert "005_niveles" not in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+
+
+def test_base_sin_005_pide_005_006_y_007():
+    real = {
+        tabla: dict(columnas)
+        for tabla, columnas in ESPERADO.items()
+        if tabla not in diagnostico_oracle.TABLAS_005 + diagnostico_oracle.TABLAS_007
+    }
+    recomendacion = " ".join(solucion(real))
+    assert "005_niveles_habilidades_versiones.sql" in recomendacion
+    assert "007_motor_practicas.sql" in recomendacion
 
 
 def test_detecta_tabla_faltante_y_tipo_numerico():

@@ -18,7 +18,9 @@ from database.modelos import (
     CRITERIOS_RUBRICA,
     ESTADOS_CONTENIDO,
     ESTADOS_HABILIDAD,
+    ESTADOS_VINCULO,
     LOGROS_RUBRICA,
+    ORIGENES_PRACTICA,
     RESULTADOS_VERIFICACION,
     ROLES,
     TIPOS_EVENTO,
@@ -226,13 +228,21 @@ def test_email_unico_y_checks_con_las_constantes_de_los_modelos():
 
     assert valores("CK_USUARIOS_ROL") == set(ROLES)
     assert valores("CK_EVENTOS_TIPO") == set(TIPOS_EVENTO)
-    for nombre in ("CK_CURSOS_ESTADO", "CK_MODULOS_ESTADO", "CK_LECCIONES_ESTADO", "CK_NIVELES_ESTADO"):
+    for nombre in (
+        "CK_CURSOS_ESTADO", "CK_MODULOS_ESTADO", "CK_LECCIONES_ESTADO", "CK_NIVELES_ESTADO", "CK_PRACTICAS_ESTADO",
+    ):
         assert valores(nombre) == set(ESTADOS_CONTENIDO), nombre
     assert valores("CK_HAB_ALUMNO_ESTADO") == set(ESTADOS_HABILIDAD)
     assert valores("CK_RUBRICA_CRITERIO") == set(CRITERIOS_RUBRICA)
     assert valores("CK_RUBRICA_LOGRO") == set(LOGROS_RUBRICA)
     assert valores("CK_VERSIONES_CATEGORIA") == set(CATEGORIAS_BLENDER)
     assert valores("CK_VERIFICACIONES_RESULTADO") == set(RESULTADOS_VERIFICACION)
+    assert valores("CK_VINCULOS_ESTADO") == set(ESTADOS_VINCULO)
+    assert valores("CK_PRACTICAS_ORIGEN") == set(ORIGENES_PRACTICA)
+    # La autonomía de una práctica es un estado de habilidad ya practicada.
+    assert valores("CK_PROG_PRACTICAS_AUTONOMIA") == set(ESTADOS_HABILIDAD) - {"sin_practicar"}
+    for nombre in ("CK_PRACTICAS_DEFINICION", "CK_PRAC_VERSIONES_DEFINICION", "CK_PROG_PRACTICAS_OBJETIVOS"):
+        assert "IS JSON" in definiciones[nombre].upper(), nombre
     assert "IS JSON" in definiciones["CK_PROGRESO_DATOS_JSON"].upper()
     assert "IS JSON" in definiciones["CK_LECCIONES_CONTENIDO"].upper()
 
@@ -251,9 +261,9 @@ def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
 
 
 def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas():
-    """005 trae la verificación vigente de todas las tablas (sustituye a la de 002)."""
+    """007 trae la verificación vigente de todas las tablas (sustituye a las de 002 y 005)."""
     esperadas = dict(
-        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("005"), re.I)
+        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("007"), re.I)
     )
     assert {tabla: int(n) for tabla, n in esperadas.items()} == {
         nombre: len(tabla.columns) for nombre, tabla in TABLAS.items()
@@ -262,9 +272,9 @@ def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas
 
 def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas():
     # 003 ya se ejecutó en producción: las tablas nuevas se cuentan en la
-    # verificación del script que las crea (005), sin editar 003.
+    # verificación del script que las crea (005 o 007), sin editar 003.
     mantenimiento = sin_comentarios(script("003"))
-    conteos = mantenimiento + sin_comentarios(script("005"))
+    conteos = mantenimiento + sin_comentarios(script("005")) + sin_comentarios(script("007"))
     for nombre in TABLAS:
         assert re.search(rf"COUNT\(\*\)(\s+AS\s+\w+)?\s+FROM\s+{nombre}\b", conteos, re.I), nombre
     lista = re.search(r"ODCIVARCHAR2LIST\(([^)]*)\)", sin_comentarios(script("004")), re.I).group(1)
@@ -276,7 +286,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 # --- Sintaxis y reglas de los scripts ----------------------------------------
 
 
-@pytest.mark.parametrize("prefijo", ["002", "005", "006"])
+@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):
@@ -308,8 +318,8 @@ def test_comillas_y_sql_dinamico(archivo):
     assert "&" not in texto(archivo), f"{archivo.name}: '&' abre variables de sustitución en Database Actions"
     for literal in re.findall(rf"EXECUTE\s+IMMEDIATE\s+{LITERAL}", codigo, re.I):
         assert not literal.rstrip().endswith(";"), f"{archivo.name}: EXECUTE IMMEDIATE con ';' (ORA-00911)"
-    if archivo.name.startswith(("002", "005")):
-        # En 002 y 005 todos los literales son DDL: ninguno puede terminar en ';'.
+    if archivo.name.startswith(("002", "005", "007")):
+        # En 002, 005 y 007 todos los literales son DDL: ninguno puede terminar en ';'.
         assert not re.search(r";\s*'", codigo), f"{archivo.name}: un DDL termina con ';' dentro del literal"
 
 

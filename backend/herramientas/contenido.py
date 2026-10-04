@@ -10,6 +10,7 @@ Uso, desde backend/ (importar y exportar usan la base de backend/.env):
     python herramientas/contenido.py nueva-leccion ../frontend/src/data/modulos/blender-modulo-2.json les_n1_mesa "Construir una mesa" --objetivo "..."
     python herramientas/contenido.py mapa [blender]          # curso > nivel > módulo > lección desde los archivos
     python herramientas/contenido.py sembrar-niveles          # crea en la base los 5 niveles de Blender que falten
+    python herramientas/contenido.py practicas [--publicar]   # registra en la base las prácticas de practices/blender/ (sql/007)
 
 validar y mapa no necesitan base de datos; validar sale con código 1 si hay
 errores (lo usa CI). nuevo-modulo crea ../frontend/src/data/modulos/<curso>-modulo-<n>.json
@@ -281,6 +282,31 @@ def comando_sembrar_niveles() -> int:
     return 0
 
 
+def comando_practicas(publicar: bool) -> int:
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import Session
+
+    from api.addon import sincronizar_practicas
+
+    try:
+        with Session(preparar_base()) as db:
+            resumen = sincronizar_practicas(db, None, publicar)
+            db.commit()
+    except SQLAlchemyError as error:
+        print(mensaje_bd(error), file=sys.stderr)
+        print("¿Ya ejecutaste sql/007_motor_practicas.sql en Oracle?", file=sys.stderr)
+        return 1
+    for practica in resumen["practicas"]:
+        cambio = "sin cambios" if practica["sin_cambios"] else "nueva versión"
+        print(f"  {practica['id']}: versión {practica['version']} ({cambio}), {practica['estado']}")
+    for error in resumen["errores"]:
+        print(f"  ERROR {error}", file=sys.stderr)
+    print(f"Lecciones enlazadas: {resumen['lecciones_enlazadas']}.")
+    if any(p["estado"] != "publicado" for p in resumen["practicas"]):
+        print("Hay prácticas en borrador: publícalas en el panel (Prácticas de Blender) o repite con --publicar.")
+    return 1 if resumen["errores"] else 0
+
+
 def comando_mapa(curso: Optional[str], carpeta: Optional[str]) -> int:
     """Curso > nivel > módulo > lección de los archivos, con lo que falta en cada ficha."""
     rutas = sorted((Path(carpeta) if carpeta else MODULOS).glob("*.json"))
@@ -447,6 +473,8 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     mapa.add_argument("--carpeta", default=None, help="carpeta de módulos (por defecto ../frontend/src/data/modulos)")
 
     comandos.add_parser("sembrar-niveles", help="crea en la base los niveles de Blender que falten")
+    practicas = comandos.add_parser("practicas", help="registra en la base las prácticas de practices/blender/")
+    practicas.add_argument("--publicar", action="store_true", help="publica la versión registrada para los alumnos")
 
     opciones = parser.parse_args(argumentos)
     if opciones.comando == "validar":
@@ -474,6 +502,8 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
         return comando_mapa(opciones.curso, opciones.carpeta)
     if opciones.comando == "sembrar-niveles":
         return comando_sembrar_niveles()
+    if opciones.comando == "practicas":
+        return comando_practicas(opciones.publicar)
     parser.print_help()
     return 2
 

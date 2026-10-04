@@ -20,7 +20,8 @@ from database.conexion import crear_motor
 
 # Tablas, columnas y tipos que espera el backend: database/modelos.py.
 # sql/001 crea las tres primeras, sql/002 las cinco siguientes y sql/005 las de
-# la reestructuración por niveles (más MODULOS.NIVEL_ID).
+# la reestructuración por niveles (más MODULOS.NIVEL_ID) y sql/007 las del motor
+# de prácticas de Blender.
 # tests/test_esquema.py comprueba que esta lista no se desalinee.
 ESPERADO = {
     "USUARIOS": {
@@ -185,9 +186,64 @@ ESPERADO = {
         "RESPONSABLE": "VARCHAR2",
         "VERIFICADO_EN": "TIMESTAMP",
     },
+    # 007: motor de prácticas de Blender.
+    "ADDON_VINCULOS": {
+        "ID": "VARCHAR2",
+        "CODIGO": "VARCHAR2",
+        "SECRETO_HASH": "VARCHAR2",
+        "USUARIO_ID": "VARCHAR2",
+        "DISPOSITIVO": "VARCHAR2",
+        "ESTADO": "VARCHAR2",
+        "CREADO_EN": "TIMESTAMP",
+        "EXPIRA_EN": "TIMESTAMP",
+    },
+    "PRACTICAS": {
+        "ID": "VARCHAR2",
+        "CURSO_ID": "VARCHAR2",
+        "LECCION_ID": "VARCHAR2",
+        "TITULO": "VARCHAR2",
+        "NIVEL": "NUMBER",
+        "VERSION": "NUMBER",
+        "VERSION_PUBLICADA": "NUMBER",
+        "DEFINICION": "CLOB",
+        "ESTADO": "VARCHAR2",
+        "ORIGEN": "VARCHAR2",
+        "AUTOR_ID": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+        "PUBLICADO_EN": "TIMESTAMP",
+    },
+    "PRACTICA_VERSIONES": {
+        "PRACTICA_ID": "VARCHAR2",
+        "VERSION": "NUMBER",
+        "DEFINICION": "CLOB",
+        "HUELLA": "VARCHAR2",
+        "NOTA": "VARCHAR2",
+        "AUTOR_ID": "VARCHAR2",
+        "VERSION_ADDON": "VARCHAR2",
+        "VERSION_BLENDER": "VARCHAR2",
+        "CREADO_EN": "TIMESTAMP",
+    },
+    "PROGRESO_PRACTICAS": {
+        "USUARIO_ID": "VARCHAR2",
+        "PRACTICA_ID": "VARCHAR2",
+        "VERSION": "NUMBER",
+        "PROGRESO": "NUMBER",
+        "COMPLETADA": "NUMBER",
+        "AUTONOMIA": "VARCHAR2",
+        "PISTAS": "NUMBER",
+        "CORRECCIONES": "NUMBER",
+        "INTENTOS": "NUMBER",
+        "PASO_ACTUAL": "VARCHAR2",
+        "OBJETIVOS": "VARCHAR2",
+        "VERSION_BLENDER": "VARCHAR2",
+        "VERSION_ADDON": "VARCHAR2",
+        "ABIERTA_EN": "TIMESTAMP",
+        "COMPLETADA_EN": "TIMESTAMP",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
 }
 
-# Las tablas que crea 001; las demás llegan con 002 y 005.
+# Las tablas que crea 001; las demás llegan con 002, 005 y 007.
 TABLAS_BASE = ("USUARIOS", "SESIONES", "PROGRESO_LECCIONES")
 # Lo que agrega 005 (reestructuración por niveles): tablas y columnas.
 TABLAS_005 = (
@@ -195,6 +251,8 @@ TABLAS_005 = (
     "VERIFICACIONES_BLENDER",
 )
 COLUMNAS_005 = {("MODULOS", "NIVEL_ID")}
+# Lo que agrega 007 (motor de prácticas de Blender): solo tablas nuevas.
+TABLAS_007 = ("ADDON_VINCULOS", "PRACTICAS", "PRACTICA_VERSIONES", "PROGRESO_PRACTICAS")
 
 # Largos mínimos (en caracteres) que causarían ORA-12899 si fueran menores.
 # SESIONES.ID guarda el hash SHA-256 del token: 64 caracteres (001 lo creó con 36).
@@ -218,6 +276,7 @@ SCRIPT_002 = "sql/002_autenticacion_contenido_eventos.sql"
 SCRIPT_003 = "sql/003_mantenimiento.sql"
 SCRIPT_005 = "sql/005_niveles_habilidades_versiones.sql"
 SCRIPT_006 = "sql/006_herramientas_autor.sql"
+SCRIPT_007 = "sql/007_motor_practicas.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -320,17 +379,26 @@ def ids_numericos(real):
     ]
 
 
-def solo_falta_005(real):
-    """True si lo de 002 está completo y lo único que falta es de 005."""
+def _completo_salvo(real, tablas, columnas_extra=frozenset()):
     for tabla, columnas in ESPERADO.items():
-        if tabla in TABLAS_005:
+        if tabla in tablas:
             continue
         if tabla not in real:
             return False
         for columna in columnas:
-            if (tabla, columna) not in COLUMNAS_005 and columna not in real[tabla]:
+            if (tabla, columna) not in columnas_extra and columna not in real[tabla]:
                 return False
     return True
+
+
+def solo_falta_005(real):
+    """True si lo de 002 está completo y lo único que falta es de 005 (y 007)."""
+    return _completo_salvo(real, TABLAS_005 + TABLAS_007, COLUMNAS_005)
+
+
+def solo_falta_007(real):
+    """True si todo hasta 005 está y solo faltan las tablas del motor (007)."""
+    return _completo_salvo(real, TABLAS_007)
 
 
 def solucion(real, otros_esquemas=()):
@@ -345,7 +413,7 @@ def solucion(real, otros_esquemas=()):
             ]
         return [
             "Base vacía: en Database Actions > SQL ejecuta con «Ejecutar script» (F5), en orden,",
-            f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005} y {SCRIPT_006} (ver sql/LEEME.txt).",
+            f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005}, {SCRIPT_006} y {SCRIPT_007} (ver sql/LEEME.txt).",
         ]
     numericos = ids_numericos(real)
     if numericos:
@@ -354,9 +422,15 @@ def solucion(real, otros_esquemas=()):
             "Sin alumnos reales: ejecuta 001 y luego 002 y 003. Con alumnos reales: respalda antes",
             "y sigue sql/LEEME.txt, sección «Base del diseño anterior».",
         ]
+    if solo_falta_007(real):
+        return [
+            f"Falta el motor de prácticas de Blender: ejecuta {SCRIPT_007} en Database Actions > SQL",
+            "con «Ejecutar script» (F5). Solo crea tablas nuevas, no borra datos y se puede repetir",
+            "(guía: docs/reestructuracion/02_manual_oracle.md, sección 7). NO ejecutes 001: borraría a los alumnos.",
+        ]
     if solo_falta_005(real):
         return [
-            f"Falta la reestructuración por niveles: ejecuta {SCRIPT_005} y luego {SCRIPT_006}",
+            f"Falta la reestructuración por niveles: ejecuta {SCRIPT_005}, {SCRIPT_006} y {SCRIPT_007}",
             "en Database Actions > SQL con «Ejecutar script» (F5). Solo agregan, no borran datos y se pueden",
             "repetir (guía: docs/reestructuracion/02_manual_oracle.md). NO ejecutes 001: borraría a los alumnos.",
         ]

@@ -227,6 +227,16 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
         "solution": ESCENA_INICIAL.replace('color="gray"', 'color="red"'),
         "preview": True,
     },
+    "blender_practice": {
+        "type": "blender_practice",
+        "id": "practica_1",
+        "practica": "blender.n1.mesa",
+        "title": f"{REEMPLAZA}: práctica en Blender",
+        "text": "Abre Blender con el add-on de Amatista: la práctica te guía paso a paso y tu avance aparece aquí.",
+        "minutes": 20,
+        "steps": ["Crea la cubierta", "Agrega cuatro patas", "Guarda el archivo"],
+        "allowManual": False,
+    },
 }
 
 

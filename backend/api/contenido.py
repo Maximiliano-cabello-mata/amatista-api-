@@ -591,6 +591,11 @@ def importar_modulo(db: Session, datos: Any, curso_id: Optional[str] = None) -> 
             restante.orden = orden
             restante.actualizado_en = momento
     db.flush()
+    if '"blender_practice"' in json.dumps(modulo.get("lessons") or [], ensure_ascii=False):
+        # Solo los módulos con prácticas de Blender tocan PRACTICAS (sql/007).
+        from api.addon import enlazar_lecciones
+
+        enlazar_lecciones(db)
     return {
         "modulo_id": fila.id,
         "curso_id": curso_id,

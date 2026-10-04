@@ -41,6 +41,9 @@ BLOQUES_INTERACTIVOS = (
     "hotspots",
     "scene_explorer",
     "code_challenge",
+    # Práctica del motor dentro de Blender (docs/motor/): se resuelve cuando el
+    # servidor registra la práctica completada desde el add-on.
+    "blender_practice",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -507,6 +510,27 @@ def _code_challenge(c: _Contexto, b: dict) -> None:
     c.booleano(b, "preview")
 
 
+# Mismo patrón que los ids de práctica del motor (engine/.../practice/schema.py).
+PATRON_PRACTICA = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}$")
+
+
+def _blender_practice(c: _Contexto, b: dict) -> None:
+    practica = c.texto(b, "practica", maximo=80)
+    if practica is not None and not PATRON_PRACTICA.match(practica):
+        c.error(f"«practica» = «{practica}» debe ser un id de práctica como blender.n1.mesa (minúsculas, números, punto, guion)")
+    c.texto(b, "title", maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=2000)
+    c.entero(b, "minutes", obligatorio=False, minimo=1, maximo=240)
+    # Vista previa de los pasos para mostrar sin conexión (el detalle vive en la práctica).
+    pasos = _valor(b, "steps")
+    if pasos is not _FALTA and (
+        not isinstance(pasos, list) or len(pasos) > 30 or not all(isinstance(p, str) and p.strip() for p in pasos)
+    ):
+        c.error("«steps» debe ser una lista de hasta 30 textos")
+    # Permite marcarla como hecha sin el add-on (por ejemplo, en un computador sin Blender).
+    c.booleano(b, "allowManual")
+
+
 REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "markdown_text": _markdown_text,
     "image": _image,
@@ -524,6 +548,7 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "hotspots": _hotspots,
     "scene_explorer": _scene_explorer,
     "code_challenge": _code_challenge,
+    "blender_practice": _blender_practice,
 }
 
 

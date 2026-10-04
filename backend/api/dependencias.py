@@ -22,6 +22,9 @@ from seguridad import DURACION_SESION, hash_token
 # ultimo_acceso se escribe como mucho cada 10 minutos por sesión: evita una
 # escritura en Oracle por cada petición.
 REFRESCO_ACCESO = timedelta(minutes=10)
+# Sesiones creadas por el add-on de Blender (api/addon.py) y lo único que pueden usar.
+PREFIJO_ADDON = "blender-addon"
+RUTAS_ADDON = ("/api/addon/", "/api/blender/")
 
 
 def extraer_token(request: Request) -> Optional[str]:
@@ -60,6 +63,10 @@ def usuario_opcional(request: Request, db: Session = Depends(obtener_db)) -> Opt
     usuario = db.get(Usuario, sesion.usuario_id) if sesion else None
     if usuario is None:
         raise HTTPException(status_code=401, detail="Tu sesión venció. Vuelve a iniciar sesión.")
+    if (sesion.dispositivo or "").startswith(PREFIJO_ADDON) and not request.url.path.startswith(RUTAS_ADDON):
+        # La sesión de Blender solo sirve para el add-on: si alguien copia ese
+        # token no puede cambiar la contraseña ni entrar al panel.
+        raise HTTPException(status_code=403, detail="Esta sesión es del add-on de Blender y no sirve aquí.")
 
     momento = ahora()
     if sesion.ultimo_acceso is None or momento - sesion.ultimo_acceso > REFRESCO_ACCESO:
