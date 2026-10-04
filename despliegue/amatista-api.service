@@ -1,5 +1,5 @@
 # Servicio systemd de la API de Amatista (T-003).
-# Instalación y explicación: docs/despliegue/2026-10-02_despliegue_oci.txt
+# Instalación y explicación: docs/despliegue/2026-10-04_despliegue_oci.md
 #
 #   sudo cp despliegue/amatista-api.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now amatista-api
@@ -11,7 +11,7 @@
 
 [Unit]
 Description=Amatista API (FastAPI + uvicorn)
-Documentation=https://github.com/Maximiliano-cabello-mata/amatista/blob/main/docs/despliegue/2026-10-02_despliegue_oci.txt
+Documentation=https://github.com/Maximiliano-cabello-mata/amatista/blob/main/docs/despliegue/2026-10-04_despliegue_oci.md
 After=network-online.target
 Wants=network-online.target
 # Evita un bucle de reinicios si la configuración está rota (revisa journalctl).

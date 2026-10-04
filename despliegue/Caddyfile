@@ -1,6 +1,6 @@
 # Caddy delante de la API de Amatista (T-005): HTTPS automático con
 # Let's Encrypt y proxy hacia uvicorn en 127.0.0.1:8000.
-# Instalación y explicación: docs/despliegue/2026-10-02_despliegue_oci.txt
+# Instalación y explicación: docs/despliegue/2026-10-04_despliegue_oci.md
 #
 #   sudo cp despliegue/Caddyfile /etc/caddy/Caddyfile
 #   sudo caddy validate --config /etc/caddy/Caddyfile

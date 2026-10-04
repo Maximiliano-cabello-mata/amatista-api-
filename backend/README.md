@@ -28,7 +28,7 @@ Los errores siempre responden `{"detail": "mensaje en español"}`.
 Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
 Contenido desde la terminal: `python herramientas/contenido.py validar | importar | exportar | nuevo-modulo | nueva-leccion | mapa | sembrar-niveles | practicas`.
 
-La documentación interactiva queda en `http://<servidor>:8000/docs`.
+La documentación interactiva queda en `http://localhost:8000/docs` en desarrollo. En el servidor, Caddy responde 404 en `/docs`: se ve con un túnel SSH (`ssh -L 8000:127.0.0.1:8000 <vm>`).
 
 ## Probar en tu computadora sin Oracle (SQLite)
 
