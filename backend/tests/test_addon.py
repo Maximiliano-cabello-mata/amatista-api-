@@ -144,11 +144,11 @@ def test_sincronizar_publica_y_los_alumnos_ven_solo_lo_publicado(cliente, crear_
     _, alumno = crear_cuenta()
     resumen = sembrar(cliente, admin)
     assert resumen["errores"] == []
-    assert [p["id"] for p in resumen["practicas"]] == ["blender.n1.mesa"]
+    assert {p["id"] for p in resumen["practicas"]} == {"blender.n1.mesa", "blender.n1.podio"}
     assert resumen["practicas"][0]["version_publicada"] == 1
 
     lista = cliente.get(f"{API}/practicas", headers=alumno).json()["practicas"]
-    assert [p["id"] for p in lista] == ["blender.n1.mesa"]
+    assert {p["id"] for p in lista} == {"blender.n1.mesa", "blender.n1.podio"}
     assert lista[0]["titulo"] == "Construir una mesa" and "estado" not in lista[0]
 
     # Un desarrollador sube una versión nueva: queda en borrador, el alumno sigue con la 1.
@@ -174,7 +174,8 @@ def test_sincronizar_publica_y_los_alumnos_ven_solo_lo_publicado(cliente, crear_
     assert cliente.get(f"{API}/practicas/blender.n1.mesa", headers=alumno).json()["version"] == 2
 
     cliente.post(f"{API}/practicas/blender.n1.mesa/archivar", headers=admin)
-    assert cliente.get(f"{API}/practicas", headers=alumno).json()["practicas"] == []
+    restantes = cliente.get(f"{API}/practicas", headers=alumno).json()["practicas"]
+    assert {p["id"] for p in restantes} == {"blender.n1.podio"}
     assert cliente.get(f"{API}/practicas/blender.n1.mesa", headers=alumno).status_code == 404
 
 
