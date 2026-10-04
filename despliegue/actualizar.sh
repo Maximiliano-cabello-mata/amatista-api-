@@ -7,8 +7,13 @@
 #   bash /opt/amatista/despliegue/actualizar.sh dev      # otra rama
 #
 # Variables opcionales: AMATISTA_REPO (por defecto, la carpeta de este
-# repositorio), AMATISTA_SERVICIO (amatista-api) y AMATISTA_URL_SALUD
+# repositorio), AMATISTA_SERVICIO y AMATISTA_URL_SALUD
 # (http://127.0.0.1:8000/api/salud).
+#
+# Servicio: amatista-api (la unidad de despliegue/amatista-api.service). La VM
+# de producción corre hoy la unidad que ya tenía instalada, amatista-backend
+# (bitácora del 3 de octubre, §20): si amatista-api no existe y
+# amatista-backend sí, el script usa esa sola.
 #
 # Un cambio de esquema NO se aplica aquí: los scripts de backend/sql/ se
 # ejecutan a mano en Database Actions (ver backend/sql/LEEME.txt) ANTES de
@@ -18,6 +23,10 @@ set -euo pipefail
 REPO="${AMATISTA_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 RAMA="${1:-main}"
 SERVICIO="${AMATISTA_SERVICIO:-amatista-api}"
+if [ -z "${AMATISTA_SERVICIO:-}" ] && ! systemctl cat amatista-api >/dev/null 2>&1 \
+   && systemctl cat amatista-backend >/dev/null 2>&1; then
+  SERVICIO=amatista-backend
+fi
 URL_SALUD="${AMATISTA_URL_SALUD:-http://127.0.0.1:8000/api/salud}"
 
 paso() { printf '\n==> %s\n' "$*"; }

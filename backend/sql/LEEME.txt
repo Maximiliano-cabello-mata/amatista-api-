@@ -57,9 +57,11 @@ Guía completa para la base real, paso a paso:
       002 -> 003 -> 005 -> 006 -> 007 -> 004 (opcional)
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
-  Producción (02/10/2026) ya tiene 002 y 003: solo faltan 005 y 006, y se
-  ejecutan ANTES de actualizar el backend a la v3.0.0 (el código nuevo lee
-  MODULOS.NIVEL_ID; sin 005 el catálogo responde 503).
+  Producción (03/10/2026) ya tiene 002, 003, 005 y 006 (14 tablas; bitácora
+  docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22).
+  Falta 007, que se ejecuta después del piloto y ANTES de actualizar el
+  backend al código del motor de prácticas (T-055). 004 sigue opcional: la
+  base de producción todavía usa ADMIN (T-004).
 
   ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
   te dice qué script falta.

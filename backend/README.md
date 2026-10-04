@@ -22,10 +22,11 @@ Los errores siempre responden `{"detail": "mensaje en español"}`.
 | Contenido (`api/contenido.py`) | `GET /api/contenido/catalogo` (público, ETag) · `admin/arbol`, `plantillas`, `validar`, CRUD de cursos, módulos y lecciones, `publicar`, `archivar`, `mover`, `exportar` | Contenido administrable borrador → publicado |
 | Niveles (`api/niveles.py`) | `GET/POST /api/contenido/niveles` · `PUT /niveles/{id}` · `POST /niveles/sembrar` · `GET /api/contenido/mapa/{curso_id}` | Niveles del curso (v3) y mapa de fichas pendientes (profesor lee, admin modifica) |
 | Blender (`api/blender.py`) | `GET /api/blender/versiones` (público) · `PUT /versiones/{v}` · `POST /verificaciones` · `GET /compatibilidad` | Versiones de Blender verificadas y matriz de compatibilidad |
+| Add-on de Blender (`api/addon.py`) | `/api/addon/v1`: `estado`, `vinculos` (código y confirmar), `yo`, `salir`, `dispositivos`, `practicas` (listar, registrar, publicar, archivar, versiones, sincronizar, abrir), `practica-actual`, `intentos`, `mi-progreso`, `descargas/{sistema}`, `extension.zip`, `extensiones/index.json` | El add-on y la PWA: vincular Blender, prácticas del motor y su progreso ([docs/motor/referencia/05_api.md](../docs/motor/referencia/05_api.md)) |
 | Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas del lanzamiento y gestión de usuarios (profesor lee, admin modifica) |
 
 Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
-Contenido desde la terminal: `python herramientas/contenido.py validar | importar | exportar | nuevo-modulo`.
+Contenido desde la terminal: `python herramientas/contenido.py validar | importar | exportar | nuevo-modulo | nueva-leccion | mapa | sembrar-niveles | practicas`.
 
 La documentación interactiva queda en `http://<servidor>:8000/docs`.
 
@@ -49,8 +50,9 @@ Pruebas automáticas: `python -m pytest`.
 La base solo acepta conexiones desde la IP del servidor (ACL), así que
 estos pasos se hacen ahí.
 
-1. **Respaldar y actualizar.** El código que hoy corre en el servidor no
-   está en el repositorio, así que primero se guarda una copia:
+1. **Respaldar y actualizar.** Desde el 2 de octubre el servidor sigue este
+   repositorio (`~/amatista`, remoto oficial). La primera vez se guardó una
+   copia del código local; los pasos quedan como referencia:
    ```bash
    cp -r ~/amatista/backend ~/backend_respaldo_$(date +%F)
    cd ~/amatista
@@ -67,9 +69,9 @@ estos pasos se hacen ahí.
 4. **Actualizar las tablas:** abre Database Actions → SQL y ejecuta con
    **Ejecutar script (F5)**, en orden, los scripts de `sql/` (detalle en
    [`sql/LEEME.txt`](sql/LEEME.txt)):
-   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → (opcional) `004`.
-     **Nunca `001`**: borra las tablas. Producción ya tiene `002` y `003`: solo faltan `005` y `006`.
-   - Base vacía: `001` → `002` → `003` → `005` → `006` → (opcional) `004`.
+   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → `007` → (opcional) `004`.
+     **Nunca `001`**: borra las tablas. Producción ya tiene `002`, `003`, `005` y `006` (3 oct): falta `007`, después del piloto (T-055).
+   - Base vacía: `001` → `002` → `003` → `005` → `006` → `007` → (opcional) `004`.
    - Manual completo de la v3 (verificación y recetas para crear lecciones desde Oracle):
      [`docs/reestructuracion/02_manual_oracle.md`](../docs/reestructuracion/02_manual_oracle.md).
 5. **Verificar:** `python diagnostico_oracle.py`. Debe terminar con
@@ -82,6 +84,10 @@ estos pasos se hacen ahí.
 Los archivos listos están en [`despliegue/`](../despliegue/): `amatista-api.service` (systemd),
 `Caddyfile` (HTTPS) y `actualizar.sh`. Cada uno explica en su encabezado cómo instalarlo.
 Para ver los errores del servicio: `journalctl -u amatista-api -f`.
+
+La VM de producción ya corre la API con la unidad que tenía instalada, **`amatista-backend`**
+(`journalctl -u amatista-backend -f`); `actualizar.sh` la detecta sola si `amatista-api` no existe.
+Pasar a la unidad del repositorio queda en T-003.
 
 ## Errores de Oracle frecuentes
 
