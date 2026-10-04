@@ -37,17 +37,24 @@ Guía completa para la base real, paso a paso:
                                         Actions (no publica: eso valida el
                                         backend).
 
-  002 a 006 son idempotentes: se pueden ejecutar varias veces sin error y
+  007_motor_practicas.sql ............. Incremental (motor de prácticas de
+                                        Blender): ADDON_VINCULOS, PRACTICAS,
+                                        PRACTICA_VERSIONES, PROGRESO_PRACTICAS
+                                        y V_AMATISTA_PRACTICAS. No borra datos.
+                                        Guía: docs/reestructuracion/
+                                        02_manual_oracle.md, sección 10.
+
+  002 a 007 son idempotentes: se pueden ejecutar varias veces sin error y
   sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 005 -> 006 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 004 (opcional)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 005 -> 006 -> 004 (opcional)
+      002 -> 003 -> 005 -> 006 -> 007 -> 004 (opcional)
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
   Producción (02/10/2026) ya tiene 002 y 003: solo faltan 005 y 006, y se
