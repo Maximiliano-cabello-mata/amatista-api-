@@ -5,9 +5,12 @@
 #   sudo systemctl daemon-reload && sudo systemctl enable --now amatista-api
 #   journalctl -u amatista-api -f        # registros (nunca muestran contraseñas ni tokens)
 #
-# Supone el repositorio en /opt/amatista, el venv en /opt/amatista/backend/venv
-# y el usuario de sistema "amatista" (sin shell ni privilegios). Si usas otras
-# rutas, cámbialas aquí y en despliegue/actualizar.sh.
+# Rutas de la VM de producción: repositorio en /home/opc/amatista, venv en
+# backend/venv y usuario opc (bitácora del 3 de octubre, §20). Reemplaza a la
+# unidad amatista-backend que ya corre: nunca dejes las dos habilitadas.
+#   sudo systemctl disable --now amatista-backend && sudo systemctl enable --now amatista-api
+# Para un despliegue más aislado (/opt/amatista y un usuario "amatista" sin
+# shell), cambia User, Group, WorkingDirectory, ExecStart y usa ProtectHome=true.
 
 [Unit]
 Description=Amatista API (FastAPI + uvicorn)
@@ -20,19 +23,20 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=amatista
-Group=amatista
-WorkingDirectory=/opt/amatista/backend
+User=opc
+Group=opc
+WorkingDirectory=/home/opc/amatista/backend
 # Variables de backend/.env.example (Oracle, AMATISTA_*, SMTP_*, CORS_ORIGINS).
-# El archivo es root:root 600: systemd lo lee antes de bajar a "amatista".
-EnvironmentFile=/etc/amatista/amatista-api.env
+# Opcional ("-"): si no existe, el backend lee backend/.env como hoy. Si
+# existe, es root:root 600 y systemd lo lee antes de bajar a "opc".
+EnvironmentFile=-/etc/amatista/amatista-api.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Solo escucha en 127.0.0.1: el único acceso público es Caddy (HTTPS).
 # --proxy-headers con 127.0.0.1: confía en X-Forwarded-* solo si vienen de Caddy.
 # Un solo proceso: los límites por IP (api/limites.py) viven en memoria y
 # las conexiones a Oracle por proceso son DB_POOL + DB_POOL_EXTRA.
-ExecStart=/opt/amatista/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+ExecStart=/home/opc/amatista/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
@@ -42,7 +46,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
-ProtectHome=true
+# read-only: el código vive en /home/opc; el proceso lo lee pero no escribe.
+ProtectHome=read-only
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

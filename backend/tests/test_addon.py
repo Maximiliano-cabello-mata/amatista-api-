@@ -26,7 +26,7 @@ from database.modelos import (
 from amatista_engine.models import SceneObject, SceneState  # noqa: E402  (contenido.motor agrega engine/ al path)
 
 API = "/api/addon/v1"
-MESA = json.loads((motor.CARPETA_PRACTICAS / "level_1" / "mesa.json").read_text(encoding="utf-8"))
+MESA = json.loads((motor.RAIZ / "practices" / "archivo" / "v2" / "mesa.json").read_text(encoding="utf-8"))
 
 
 def escena_mesa(guardada=True, patas=4, sin_roles=False):
@@ -46,8 +46,17 @@ def escena_mesa(guardada=True, patas=4, sin_roles=False):
 
 
 @pytest.fixture()
-def sembrar():
-    """Curso blender, habilidades de la mesa y la práctica publicada desde el repositorio."""
+def sembrar(monkeypatch, tmp_path):
+    """Curso blender, habilidades de la mesa y las prácticas v2 (mesa y podio) publicadas «desde el repositorio».
+
+    Estas pruebas cubren el mecanismo con las prácticas archivadas de la v2;
+    test_sincronizar_el_plan_de_estudios_v3 cubre las del plan de estudios.
+    """
+    for nombre in ("mesa", "podio"):
+        carpeta = tmp_path / "blender" / nombre
+        carpeta.mkdir(parents=True)
+        (carpeta / "practica.json").write_bytes((motor.RAIZ / "practices" / "archivo" / "v2" / f"{nombre}.json").read_bytes())
+    monkeypatch.setattr(motor, "CARPETA_PRACTICAS", tmp_path / "blender")
 
     def hacer(cliente, admin):
         with Session(conexion.motor()) as db:
@@ -197,6 +206,16 @@ def test_subir_practica_invalida_o_sin_permiso(cliente, crear_cuenta):
 # --- Progreso -------------------------------------------------------------------
 
 
+def test_sincronizar_el_plan_de_estudios_v3(cliente, crear_cuenta):
+    _, admin = crear_cuenta(rol="admin")
+    resumen = cliente.post(f"{API}/practicas/sincronizar", headers=admin).json()
+    assert resumen["errores"] == []
+    assert {p["id"] for p in resumen["practicas"]} == {
+        "blender.bp.m1.tren", "blender.bp.m2.espada", "blender.bp.m3.nave",
+        "blender.bpi.m1.pinta-nave", "blender.bpi.m2.tres-puntos", "blender.bpi.m3.pelota",
+    }
+
+
 def test_intentos_evaluados_por_el_servidor(cliente, crear_cuenta, sembrar):
     _, admin = crear_cuenta(rol="admin")
     alumno_id, alumno = crear_cuenta()
@@ -320,17 +339,35 @@ def test_repositorio_de_extensiones(cliente, monkeypatch):
     assert estado["blender_minimo"] == "4.2.0" and estado["version_addon"] == motor.VERSION_ADDON
 
 
+def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
+    from api.contenido import asegurar_cursos_base, importar_modulo
+
+    _, admin = crear_cuenta(rol="admin")
+    carpeta = motor.RAIZ / "frontend" / "src" / "data" / "modulos"
+    with Session(conexion.motor()) as db:
+        asegurar_cursos_base(db)
+        for archivo in sorted(carpeta.glob("blender_*-modulo-*.json")):
+            importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))
+        db.commit()
+    resumen = cliente.post(f"{API}/practicas/sincronizar?publicar=true", headers=admin).json()
+    assert resumen["errores"] == [] and resumen["lecciones_enlazadas"] == 6
+    with Session(conexion.motor()) as db:
+        enlaces = {p.id: (p.curso_id, p.leccion_id) for p in db.query(Practica).all()}
+    assert enlaces["blender.bp.m1.tren"] == ("blender_principiante", "bp1_practica")
+    assert enlaces["blender.bpi.m3.pelota"] == ("blender_principiante_intermedio", "bpi3_practica")
+
+
 def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):
     from api.contenido import importar_modulo
     from api.niveles import sembrar_niveles_blender
 
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
-    archivo = motor.RAIZ / "frontend" / "src" / "data" / "modulos" / "blender-modulo-2.json"
+    archivo = motor.RAIZ / "frontend" / "src" / "data" / "modulos" / "archivo" / "blender-modulo-2.json"
     with Session(conexion.motor()) as db:
         sembrar_niveles_blender(db)
         resumen = importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))
         db.commit()
-        assert resumen["estado"] == "borrador"  # «revision» en el archivo: no llega a los alumnos
+        assert resumen["estado"] == "archivado"  # curso v2 archivado en el motor v3: no llega a los alumnos
         practica = db.get(Practica, "blender.n1.mesa")
         assert (practica.curso_id, practica.leccion_id) == ("blender", "les_103")

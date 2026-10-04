@@ -124,6 +124,8 @@ def curso_admin(curso: Curso) -> dict:
         "acento": curso.acento,
         "recurso": recurso_de(curso),
         "orden": curso.orden,
+        "ruta": curso.ruta,
+        "requisito": curso.requisito_id,
         "estado": curso.estado,
         "actualizado_en": iso(curso.actualizado_en),
     }
@@ -435,6 +437,8 @@ def cursos_catalogo(db: Session) -> List[dict]:
             "nivel": curso.nivel,
             "acento": curso.acento,
             "recurso": recurso_de(curso),
+            "ruta": curso.ruta,
+            "requisito": curso.requisito_id,
             "niveles": niveles[curso.id],
             "modulos": por_curso[curso.id],
         }
@@ -475,12 +479,21 @@ def catalogo(request: Request, db: Session = Depends(obtener_db)):
 
 
 def asegurar_cursos_base(db: Session) -> List[str]:
-    """Crea los cursos de frontend/src/data/cursos.js que falten (no toca los existentes)."""
+    """Crea los cursos de frontend/src/data/cursos.js que falten.
+
+    De los existentes solo llena ruta y requisito si están vacíos (sql/008).
+    """
     creados = []
     for datos in CURSOS_BASE.values():
-        if db.get(Curso, datos["id"]) is None:
+        curso = db.get(Curso, datos["id"])
+        if curso is None:
             db.add(Curso(**datos, estado="publicado", actualizado_en=ahora()))
+            db.flush()  # el requisito apunta a un curso creado en esta misma vuelta
             creados.append(datos["id"])
+            continue
+        for campo in ("ruta", "requisito_id"):
+            if getattr(curso, campo) is None and datos.get(campo):
+                setattr(curso, campo, datos[campo])
     db.flush()
     return creados
 

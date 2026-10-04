@@ -98,6 +98,32 @@ def test_base_con_005_pide_solo_007():
     assert "NO ejecutes 001" in recomendacion
 
 
+def sin_columnas_008(real):
+    for tabla, columna in diagnostico_oracle.COLUMNAS_008:
+        real[tabla].pop(columna, None)
+    return real
+
+
+def test_produccion_actual_pide_007_y_008():
+    """Producción del 03/10: 14 tablas (sin 007) y CURSOS sin las columnas de 008."""
+    real = sin_columnas_008(
+        {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_007}
+    )
+    recomendacion = " ".join(solucion(real))
+    assert "007_motor_practicas.sql" in recomendacion
+    assert "008_cursos_por_ruta.sql" in recomendacion
+    assert "002_" not in recomendacion
+
+
+def test_base_con_007_pide_solo_008():
+    real = sin_columnas_008({tabla: dict(columnas) for tabla, columnas in ESPERADO.items()})
+    assert any("RUTA" in problema for problema in comparar(real))
+    recomendacion = " ".join(solucion(real))
+    assert "008_cursos_por_ruta.sql" in recomendacion
+    assert "007_motor" not in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+
+
 def test_base_sin_005_pide_005_006_y_007():
     real = {
         tabla: dict(columnas)

@@ -207,6 +207,10 @@ class Curso(Base):
     orden: Mapped[int] = mapped_column(Integer, default=0)
     estado: Mapped[str] = mapped_column(String(12), default="publicado")
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    # Motor v3 (sql/008): familia del curso ('blender', 'aframe') y curso que
+    # conviene terminar antes. Los cuatro cursos de Blender comparten ruta.
+    ruta: Mapped[Optional[str]] = mapped_column(String(30))
+    requisito_id: Mapped[Optional[str]] = mapped_column(String(50), ForeignKey("cursos.id"))
 
 
 class Nivel(Base):

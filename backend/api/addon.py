@@ -654,11 +654,11 @@ def sincronizar_practicas(db: Session, autor: Optional[Usuario], publicar: bool)
         # registrar_version revisa todo antes de tocar la base: si falla, no deja nada a medias.
         try:
             respuesta = registrar_version(
-                db, PracticaSubida(definicion=datos, nota=f"Repositorio: {ruta.name}"), autor, "repositorio", momento
+                db, PracticaSubida(definicion=datos, nota=f"Repositorio: {ruta.parent.name}/{ruta.name}"), autor, "repositorio", momento
             )
         except HTTPException as error:
             detalle = error.detail if isinstance(error.detail, str) else "; ".join(error.detail["errores"][:3])
-            errores.append(f"{ruta.name}: {detalle}")
+            errores.append(f"{ruta.parent.name}/{ruta.name}: {detalle}")
             continue
         if publicar:
             practica = db.get(Practica, respuesta["id"])

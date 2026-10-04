@@ -13,11 +13,27 @@ from herramientas import contenido as cli
 
 BACKEND = Path(__file__).resolve().parent.parent
 MODULOS = BACKEND.parent / "frontend" / "src" / "data" / "modulos"
-BLENDER = MODULOS / "blender-modulo-1.json"
+def _como_publicado(ruta: Path) -> Path:
+    """El módulo 1 del curso v2 quedó archivado (motor v3); estas pruebas lo usan publicado como ejemplo."""
+    import tempfile
+
+    copia = Path(tempfile.mkdtemp()) / ruta.name
+    datos = json.loads(ruta.read_text(encoding="utf-8"))
+    datos["module"]["estado"] = "publicado"
+    copia.write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")
+    return copia
+
+
+BLENDER = _como_publicado(MODULOS / "archivo" / "blender-modulo-1.json")
 AFRAME = MODULOS / "aframe-modulo-1.json"
 SQL_006 = BACKEND / "sql" / "006_herramientas_autor.sql"
 API = "/api/contenido"
 CATALOGO = "/api/contenido/catalogo"
+
+
+def con_modulos(catalogo: dict) -> list:
+    """Cursos del catálogo que ya tienen módulos (los cursos base sin módulos también se listan)."""
+    return [c for c in catalogo["cursos"] if c["modulos"]]
 
 
 def leer(ruta: Path) -> dict:
@@ -113,17 +129,17 @@ def test_importar_crea_niveles_y_asigna_el_modulo(cliente, crear_cuenta):
 
     # En el catálogo: el módulo dice su nivel; los niveles en borrador no aparecen.
     catalogo = cliente.get(CATALOGO).json()
-    blender = catalogo["cursos"][0]
+    blender = con_modulos(catalogo)[0]
     assert blender["niveles"] == []
     assert blender["modulos"][0]["nivel_id"] == "blender-n1"
-    assert catalogo["cursos"][1]["modulos"][0]["nivel_id"] is None
+    assert con_modulos(catalogo)[1]["modulos"][0]["nivel_id"] is None
 
     # Publicar el nivel cambia la versión del catálogo y lo muestra.
     respuesta = cliente.put(f"{API}/niveles/blender-n1", json={"estado": "publicado"}, headers=admin)
     assert respuesta.status_code == 200
     despues = cliente.get(CATALOGO, headers={"If-None-Match": catalogo["version"]})
     assert despues.status_code == 200
-    nivel = despues.json()["cursos"][0]["niveles"][0]
+    nivel = con_modulos(despues.json())[0]["niveles"][0]
     assert (nivel["id"], nivel["numero"], nivel["titulo"]) == ("blender-n1", 1, "Desde cero")
     assert "estado" not in nivel and "curso_id" not in nivel
 
@@ -164,8 +180,8 @@ def test_crear_editar_y_asignar_niveles(cliente, crear_cuenta):
         headers=admin,
     )
     assert creado.status_code == 201 and creado.json()["nivel_id"] == "blender-n1"
-    arbol = cliente.get(f"{API}/admin/arbol", headers=admin).json()["cursos"]
-    assert [n["id"] for n in arbol[0]["niveles"]][:2] == ["blender-n1", "blender-n2"]
+    arbol = {c["id"]: c for c in cliente.get(f"{API}/admin/arbol", headers=admin).json()["cursos"]}
+    assert [n["id"] for n in arbol["blender"]["niveles"]][:2] == ["blender-n1", "blender-n2"]
 
 
 def test_mapa_del_curso(cliente, crear_cuenta):

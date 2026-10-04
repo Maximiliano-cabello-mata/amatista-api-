@@ -22,10 +22,26 @@ from herramientas import contenido as cli
 
 BACKEND = Path(__file__).resolve().parent.parent
 MODULOS = BACKEND.parent / "frontend" / "src" / "data" / "modulos"
-BLENDER = MODULOS / "blender-modulo-1.json"
+def _como_publicado(ruta: Path) -> Path:
+    """El módulo 1 del curso v2 quedó archivado (motor v3); estas pruebas lo usan publicado como ejemplo."""
+    import tempfile
+
+    copia = Path(tempfile.mkdtemp()) / ruta.name
+    datos = json.loads(ruta.read_text(encoding="utf-8"))
+    datos["module"]["estado"] = "publicado"
+    copia.write_text(json.dumps(datos, ensure_ascii=False), encoding="utf-8")
+    return copia
+
+
+BLENDER = _como_publicado(MODULOS / "archivo" / "blender-modulo-1.json")
 AFRAME = MODULOS / "aframe-modulo-1.json"
 CATALOGO = "/api/contenido/catalogo"
 CAMPOS_MODULO = ("id", "title", "description", "estimatedTimeMinutes", "order")
+
+
+def con_modulos(catalogo: dict) -> list:
+    """Cursos del catálogo que ya tienen módulos (los cursos base sin módulos también se listan)."""
+    return [c for c in catalogo["cursos"] if c["modulos"]]
 
 
 def leer(ruta: Path) -> dict:
@@ -133,7 +149,7 @@ def test_herramientas_nuevas_validan():
 
 
 def test_la_practica_en_blender_cierra_el_modulo():
-    modulo = leer(MODULOS / "blender-modulo-2.json")
+    modulo = leer(MODULOS / "archivo" / "blender-modulo-2.json")
     assert validar_modulo(modulo) == []
     lecciones = modulo["module"]["lessons"]
     lecciones.insert(0, lecciones.pop())  # la práctica antes de las lecciones
@@ -218,8 +234,8 @@ def test_catalogo_vacio(cliente):
 def test_importar_json_reales_y_catalogo_con_el_mismo_formato(cliente, capsys):
     importar_reales()
     datos = cliente.get(CATALOGO).json()
-    assert [c["id"] for c in datos["cursos"]] == ["blender", "aframe"]
-    for curso, ruta in zip(datos["cursos"], (BLENDER, AFRAME)):
+    assert [c["id"] for c in con_modulos(datos)] == ["blender", "aframe"]
+    for curso, ruta in zip(con_modulos(datos), (BLENDER, AFRAME)):
         base = CURSOS_BASE[curso["id"]]
         assert (curso["titulo"], curso["numero"], curso["estado"]) == (base["titulo"], base["numero"], "disponible")
         assert curso["recurso"] == {"texto": base["recurso_texto"], "url": base["recurso_url"]}
@@ -257,7 +273,7 @@ def test_catalogo_etag_y_304(cliente, crear_cuenta):
     despues = cliente.get(CATALOGO, headers={"If-None-Match": version})
     assert despues.status_code == 200
     assert despues.json()["version"] != version
-    lecciones = despues.json()["cursos"][0]["modulos"][0]["contenido"]["lessons"]
+    lecciones = con_modulos(despues.json())[0]["modulos"][0]["contenido"]["lessons"]
     assert [x["id"] for x in lecciones] == ["les_001", "les_002", "les_004"]
 
 
@@ -527,7 +543,7 @@ def test_texto_json_lee_igual_el_dict_de_oracle_y_el_texto_de_sqlite():
 
 def test_arbol_marca_la_practica_en_blender(cliente, crear_cuenta):
     _, admin = crear_cuenta(rol="admin")
-    assert cli.main(["importar", str(BLENDER), str(MODULOS / "blender-modulo-2.json")]) == 0
+    assert cli.main(["importar", str(BLENDER), str(MODULOS / "archivo" / "blender-modulo-2.json")]) == 0
     arbol = cliente.get("/api/contenido/admin/arbol", headers=admin).json()
     lecciones = {
         x["id"]: x["practica_blender"]

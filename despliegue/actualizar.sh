@@ -15,6 +15,10 @@
 # (bitácora del 3 de octubre, §20): si amatista-api no existe y
 # amatista-backend sí, el script usa esa sola.
 #
+# Rama: si la VM está en otra rama local (por ejemplo despliegue/v3-2026-10-03)
+# y todos sus commits ya están en origin/<rama>, el script se cambia solo a
+# <rama>. Si tiene commits propios, se detiene y los muestra.
+#
 # Un cambio de esquema NO se aplica aquí: los scripts de backend/sql/ se
 # ejecutan a mano en Database Actions (ver backend/sql/LEEME.txt) ANTES de
 # actualizar el código que los necesita. Revertir el código no revierte la base.
@@ -35,8 +39,6 @@ fallar() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 cd "$REPO"
 git diff --quiet && git diff --cached --quiet \
   || fallar "hay cambios sin confirmar en $REPO; el servidor no debe tener ediciones locales (git status)."
-[ "$(git rev-parse --abbrev-ref HEAD)" = "$RAMA" ] \
-  || fallar "el repositorio está en $(git rev-parse --abbrev-ref HEAD), no en $RAMA (git switch $RAMA)."
 
 anterior="$(git rev-parse HEAD)"
 
@@ -48,6 +50,25 @@ volver() {
 
 paso "Descargando $RAMA"
 git fetch --prune origin
+git rev-parse --verify -q "origin/$RAMA" >/dev/null || fallar "la rama $RAMA no existe en origin."
+
+# La VM puede estar en una rama local que ya no existe en origin (por
+# ejemplo despliegue/v3-2026-10-03). Si todo lo suyo ya está en
+# origin/$RAMA, se cambia sola; si tiene commits propios, se detiene.
+actual="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$actual" != "$RAMA" ]; then
+  propios="$(git log --oneline "origin/$RAMA..HEAD")"
+  if [ -n "$propios" ]; then
+    printf '%s\n' "$propios" >&2
+    fallar "la rama local $actual tiene esos commits que no están en origin/$RAMA. Respáldalos (git branch respaldo-$actual) y cambia de rama a mano."
+  fi
+  paso "Cambiando de $actual a $RAMA (todo lo de $actual ya está en origin/$RAMA)"
+  if git show-ref --verify -q "refs/heads/$RAMA"; then
+    git switch -q "$RAMA"
+  else
+    git switch -q -c "$RAMA" --track "origin/$RAMA"
+  fi
+fi
 git merge --ff-only "origin/$RAMA"
 nuevo="$(git rev-parse HEAD)"
 if [ "$nuevo" = "$anterior" ]; then

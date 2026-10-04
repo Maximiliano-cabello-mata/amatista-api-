@@ -68,11 +68,17 @@ def evaluar(definicion: Dict[str, Any], escena: Dict[str, Any], pistas: Dict[str
 
 
 def practicas_del_repositorio() -> List[Tuple[Path, Dict[str, Any]]]:
-    """Las practice.json de practices/blender/ (la carpeta sandbox no se publica)."""
+    """Las prácticas del plan de estudios: practices/blender/<curso>/<módulo>/practica.json.
+
+    cursos.json y los pruebas.json viven en las mismas carpetas pero no son
+    prácticas; practices/archivo/ (las prácticas v2) no se publica.
+    """
     encontradas = []
     for ruta in sorted(CARPETA_PRACTICAS.rglob("*.json")):
         try:
-            encontradas.append((ruta, json.loads(ruta.read_text(encoding="utf-8"))))
+            datos = json.loads(ruta.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        if isinstance(datos, dict) and str(datos.get("schema", "")).startswith("amatista.practice/"):
+            encontradas.append((ruta, datos))
     return encontradas

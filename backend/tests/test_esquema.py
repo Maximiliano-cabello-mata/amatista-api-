@@ -261,9 +261,9 @@ def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
 
 
 def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas():
-    """007 trae la verificación vigente de todas las tablas (sustituye a las de 002 y 005)."""
+    """El último script con verificación (008) la trae vigente para todas las tablas."""
     esperadas = dict(
-        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("007"), re.I)
+        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("008"), re.I)
     )
     assert {tabla: int(n) for tabla, n in esperadas.items()} == {
         nombre: len(tabla.columns) for nombre, tabla in TABLAS.items()
@@ -286,7 +286,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 # --- Sintaxis y reglas de los scripts ----------------------------------------
 
 
-@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007"])
+@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):

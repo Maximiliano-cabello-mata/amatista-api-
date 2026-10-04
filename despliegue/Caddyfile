@@ -1,22 +1,39 @@
-# Caddy delante de la API de Amatista (T-005): HTTPS automático con
-# Let's Encrypt y proxy hacia uvicorn en 127.0.0.1:8000.
-# Instalación y explicación: docs/despliegue/2026-10-04_despliegue_oci.md
+# Caddy delante de la API de Amatista (T-005), detrás de Cloudflare.
 #
+#   Alumno ──HTTPS──> Cloudflare (proxy, nube naranja) ──HTTPS──> Caddy :443 ──> uvicorn 127.0.0.1:8000
+#
+# Dominio oficial: api.amatista-3d.me. Guía completa (DNS, certificados,
+# PWA y alternativas): docs/despliegue/2026-10-04_dominio_amatista-3d.md
+#
+#   sudo install -d -m 750 -o root -g caddy /etc/caddy/certs
 #   sudo cp despliegue/Caddyfile /etc/caddy/Caddyfile
 #   sudo caddy validate --config /etc/caddy/Caddyfile
 #   sudo systemctl reload caddy
 #
-# Antes: cambia api.ejemplo.com por el nombre DNS que apunta a la IP pública
-# de la VM (sin dominio propio sirve <ip-con-guiones>.sslip.io) y abre los
-# puertos 80 y 443 en OCI. El 80 solo se usa para emitir el certificado y
-# redirigir a https.
+# Certificado (elige uno en el bloque del sitio, "tls ..."):
+#   A) Recomendado: certificado de origen de Cloudflare (15 años, gratis) en
+#      /etc/caddy/certs/origen.pem y origen.key, con SSL/TLS en «Full (strict)».
+#      No depende de Let's Encrypt ni del puerto 80.
+#   B) Sin Cloudflare (nube gris, «solo DNS»): borra la línea "tls" y Caddy
+#      pide y renueva solo un certificado de Let's Encrypt (puertos 80 y 443).
 
 {
-	# Correo para avisos de Let's Encrypt (vencimientos). Opcional.
+	# Correo para avisos de Let's Encrypt (solo opción B). Opcional.
 	# email tu-correo@ejemplo.com
+
+	servers {
+		# La IP real del alumno llega en CF-Connecting-IP, y solo se cree si
+		# la petición viene de Cloudflare. Rangos de https://www.cloudflare.com/ips/
+		# (revísalos cada tanto; cambian muy poco).
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
 }
 
-api.ejemplo.com {
+api.amatista-3d.me {
+	# Opción A. Para la opción B, borra esta línea.
+	tls /etc/caddy/certs/origen.pem /etc/caddy/certs/origen.key
+
 	encode zstd gzip
 
 	header {
@@ -38,14 +55,17 @@ api.ejemplo.com {
 	@depuracion path /docs /docs/* /redoc /redoc/* /openapi.json
 	respond @depuracion 404
 
-	# Peticiones de la PWA: lotes de progreso y eventos (unos KB). 1 MB sobra.
+	# Peticiones de la PWA: lotes de progreso y eventos (unos KB). Las
+	# prácticas que sube el modo autor del add-on caben de sobra en 1 MB.
 	request_body {
 		max_size 1MB
 	}
 
-	# Caddy agrega la IP del alumno al final de X-Forwarded-For; el backend
-	# la usa para los límites por IP con AMATISTA_PROXY_CONFIABLE=1.
+	# X-Forwarded-For lleva solo la IP real del alumno ({client_ip}: la de
+	# CF-Connecting-IP si vino de Cloudflare, si no la de la conexión). El
+	# backend la usa para los límites por IP con AMATISTA_PROXY_CONFIABLE=1.
 	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-For {client_ip}
 		health_uri /
 		health_interval 30s
 	}

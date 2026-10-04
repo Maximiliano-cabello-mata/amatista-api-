@@ -19,7 +19,8 @@
 --   (job de 003) corre como dueño; la API solo necesita DELETE.
 --
 -- Cómo ejecutarlo:
---   1. Database Actions > SQL como ADMIN (dueño de las tablas). Requiere 002, 005 y 007.
+--   1. Database Actions > SQL como ADMIN (dueño de las tablas). Requiere 002 y 005;
+--      las tablas de 007 reciben permisos si ya existen (si no, 007 los da).
 --   2. Pega el archivo y escribe la contraseña en v_password (abajo).
 --      NO guardes este archivo con la contraseña ni lo subas al repositorio:
 --      cámbiala solo en la hoja de Database Actions.
@@ -65,13 +66,32 @@ DECLARE
                 'VERSIONES_BLENDER', 'VERIFICACIONES_BLENDER',
                 -- 007 (motor de prácticas de Blender)
                 'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS');
+  v_opcional  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
+                'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS');
+
+  FUNCTION existe(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
+    v_n PLS_INTEGER;
+  BEGIN
+    SELECT COUNT(*) INTO v_n FROM user_tables WHERE table_name = p_tabla;
+    RETURN v_n > 0;
+  END;
+
+  FUNCTION es_opcional(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
+  BEGIN
+    FOR j IN 1 .. v_opcional.COUNT LOOP
+      IF v_opcional(j) = p_tabla THEN
+        RETURN TRUE;
+      END IF;
+    END LOOP;
+    RETURN FALSE;
+  END;
 BEGIN
-  -- Las 18 tablas deben existir en este esquema (002, 005 y 007 aplicados).
+  -- Las tablas de 002 y 005 deben existir en este esquema. Las de 007 pueden
+  -- faltar (producción antes de T-055): 007 da sus permisos al crearlas.
   FOR i IN 1 .. v_tablas.COUNT LOOP
-    SELECT COUNT(*) INTO v_cuenta FROM user_tables WHERE table_name = v_tablas(i);
-    IF v_cuenta = 0 THEN
+    IF NOT existe(v_tablas(i)) AND NOT es_opcional(v_tablas(i)) THEN
       RAISE_APPLICATION_ERROR(-20001, 'Falta la tabla ' || v_tablas(i)
-        || ' en este esquema: ejecuta 004 con el dueño de las tablas y después de 002, 005 y 007.');
+        || ' en este esquema: ejecuta 004 con el dueño de las tablas y después de 002 y 005.');
     END IF;
   END LOOP;
 
@@ -91,7 +111,11 @@ BEGIN
 
   EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO amatista_app';
   FOR i IN 1 .. v_tablas.COUNT LOOP
-    EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ' || v_tablas(i) || ' TO amatista_app';
+    IF existe(v_tablas(i)) THEN
+      EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ' || v_tablas(i) || ' TO amatista_app';
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Sin ' || v_tablas(i) || ' todavía: 007 le dará los permisos al crearla.');
+    END IF;
   END LOOP;
   DBMS_OUTPUT.PUT_LINE('Permisos listos. Configura DB_USER=AMATISTA_APP y DB_ESQUEMA='
     || SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') || ' en backend/.env.');

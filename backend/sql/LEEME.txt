@@ -43,24 +43,35 @@ Guía completa para la base real, paso a paso:
                                         y V_AMATISTA_PRACTICAS. No borra datos.
                                         Guía: docs/reestructuracion/
                                         02_manual_oracle.md, sección 10.
+  008_cursos_por_ruta.sql ............. Incremental (motor v3, plan de
+                                        estudios): CURSOS.RUTA y
+                                        CURSOS.REQUISITO_ID. Trae la
+                                        verificación vigente de las 18 tablas.
+  009_archivar_blender_v2.sql ......... Archiva (no borra) el curso blender
+                                        de la v2 y las prácticas blender.n1.*.
+                                        Va DESPUÉS de importar los cursos
+                                        nuevos. Guía de 008 y 009:
+                                        docs/base-de-datos/02_manual_008_009.md
 
-  002 a 007 son idempotentes: se pueden ejecutar varias veces sin error y
+  002 a 009 son idempotentes: se pueden ejecutar varias veces sin error y
   sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 004 (opcional)
+      (009 solo si hay datos de la v2 que archivar)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 005 -> 006 -> 007 -> 004 (opcional)
+      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 004 (opcional) -> 009
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
   Producción (03/10/2026) ya tiene 002, 003, 005 y 006 (14 tablas; bitácora
   docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22).
   Falta 007, que se ejecuta después del piloto y ANTES de actualizar el
-  backend al código del motor de prácticas (T-055). 004 sigue opcional: la
+  backend al código del motor de prácticas (T-055), y luego 008 y 009 (motor
+  v3; docs/base-de-datos/02_manual_008_009.md). 004 sigue opcional: la
   base de producción todavía usa ADMIN (T-004).
 
   ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
@@ -156,4 +167,13 @@ Guía completa para la base real, paso a paso:
     y, para que el job la use todos los días, cambia su job_action en 003
     (BEGIN amatista_purgar(90, 180); END;) y vuelve a ejecutar 003.
   - Detalle del cálculo: encabezado de 002_autenticacion_contenido_eventos.sql.
+=============================================================================
+
+8. MIGRAR A OTRA BASE DE DATOS
+-----------------------------------------------------------------------------
+  python herramientas/migrar.py exportar respaldo/     (solo lee; JSONL)
+  python herramientas/migrar.py ddl --dialecto postgresql
+  python herramientas/migrar.py importar respaldo/ --url ... --crear-tablas
+  Guía: docs/base-de-datos/03_migracion.md. "exportar" también sirve como
+  respaldo antes de ejecutar cualquier script.
 =============================================================================

@@ -551,6 +551,42 @@ def modulo_esqueleto(
 # cursos en la base si faltan (no sobrescribe lo que se editó en el panel).
 
 CURSOS_BASE: Dict[str, dict] = {
+    # Ruta de Blender del motor v3 (practices/blender/cursos.json).
+    "blender_principiante": {
+        "id": "blender_principiante",
+        "numero": "01",
+        "titulo": "Blender Principiante",
+        "subtitulo": "Desde cero: tu primer contacto con el 3D",
+        "descripcion": (
+            "Para quien nunca abrió Blender: te mueves en el espacio 3D, modelas tu primera malla y usas "
+            "modificadores. Practicas dentro de Blender con Amatista a tu lado."
+        ),
+        "nivel": "Principiante",
+        "acento": "blender",
+        "recurso_texto": "Descarga Blender gratis",
+        "recurso_url": "https://www.blender.org/download/",
+        "orden": 1,
+        "ruta": "blender",
+        "requisito_id": None,
+    },
+    "blender_principiante_intermedio": {
+        "id": "blender_principiante_intermedio",
+        "numero": "02",
+        "titulo": "Blender Principiante-Intermedio",
+        "subtitulo": "Materiales, luz, render y animación",
+        "descripcion": (
+            "Ya sabes moverte y modelar: ahora pintas tu nave, la iluminas como un fotógrafo, sacas tu primer "
+            "render y animas una pelota que rebota."
+        ),
+        "nivel": "Principiante-Intermedio",
+        "acento": "blender",
+        "recurso_texto": "Descarga Blender gratis",
+        "recurso_url": "https://www.blender.org/download/",
+        "orden": 2,
+        "ruta": "blender",
+        "requisito_id": "blender_principiante",
+    },
+    # Curso de la v2, archivado en el motor v3 (sql/009): se conserva para el progreso guardado.
     "blender": {
         "id": "blender",
         "numero": "01",
@@ -564,7 +600,9 @@ CURSOS_BASE: Dict[str, dict] = {
         "acento": "blender",
         "recurso_texto": "Descarga Blender gratis",
         "recurso_url": "https://www.blender.org/download/",
-        "orden": 1,
+        "orden": 4,
+        "ruta": "blender",
+        "requisito_id": None,
     },
     "aframe": {
         "id": "aframe",
@@ -579,7 +617,9 @@ CURSOS_BASE: Dict[str, dict] = {
         "acento": "neon",
         "recurso_texto": "Documentación de A-Frame",
         "recurso_url": "https://aframe.io/docs/",
-        "orden": 2,
+        "orden": 5,
+        "ruta": "aframe",
+        "requisito_id": None,
     },
 }
 
