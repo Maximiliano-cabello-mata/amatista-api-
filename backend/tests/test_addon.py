@@ -317,3 +317,19 @@ def test_repositorio_de_extensiones(cliente, monkeypatch):
     assert entrada["archive_hash"] == "sha256:" + hashlib.sha256(archivo).hexdigest()
     estado = cliente.get(f"{API}/estado").json()
     assert estado["blender_minimo"] == "4.2.0" and estado["version_addon"] == motor.VERSION_ADDON
+
+
+def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):
+    from api.contenido import importar_modulo
+    from api.niveles import sembrar_niveles_blender
+
+    _, admin = crear_cuenta(rol="admin")
+    sembrar(cliente, admin)
+    archivo = motor.RAIZ / "frontend" / "src" / "data" / "modulos" / "blender-modulo-2.json"
+    with Session(conexion.motor()) as db:
+        sembrar_niveles_blender(db)
+        resumen = importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))
+        db.commit()
+        assert resumen["estado"] == "borrador"  # «revision» en el archivo: no llega a los alumnos
+        practica = db.get(Practica, "blender.n1.mesa")
+        assert (practica.curso_id, practica.leccion_id) == ("blender", "les_103")
