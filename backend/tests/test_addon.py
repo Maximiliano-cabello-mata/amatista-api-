@@ -213,6 +213,12 @@ def test_sincronizar_el_plan_de_estudios_v3(cliente, crear_cuenta):
     assert {p["id"] for p in resumen["practicas"]} == {
         "blender.bp.m1.tren", "blender.bp.m2.espada", "blender.bp.m3.nave",
         "blender.bpi.m1.pinta-nave", "blender.bpi.m2.tres-puntos", "blender.bpi.m3.pelota",
+        # Exploraciones a mitad de cada módulo: teoría y Blender se intercalan.
+        "blender.bp.m1.explora", "blender.bp.m2.explora", "blender.bp.m3.explora",
+        "blender.bpi.m1.explora", "blender.bpi.m2.explora", "blender.bpi.m3.explora",
+        # Nivel Intermedio (v3.2).
+        "blender.bi.m1.explora", "blender.bi.m1.puente", "blender.bi.m2.explora", "blender.bi.m2.aldea",
+        "blender.bi.m3.explora", "blender.bi.m3.diorama",
     }
 
 
@@ -350,11 +356,13 @@ def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
             importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))
         db.commit()
     resumen = cliente.post(f"{API}/practicas/sincronizar?publicar=true", headers=admin).json()
-    assert resumen["errores"] == [] and resumen["lecciones_enlazadas"] == 6
+    # Nueve módulos con dos prácticas cada uno: exploración y cierre.
+    assert resumen["errores"] == [] and resumen["lecciones_enlazadas"] == 18
     with Session(conexion.motor()) as db:
         enlaces = {p.id: (p.curso_id, p.leccion_id) for p in db.query(Practica).all()}
     assert enlaces["blender.bp.m1.tren"] == ("blender_principiante", "bp1_practica")
     assert enlaces["blender.bpi.m3.pelota"] == ("blender_principiante_intermedio", "bpi3_practica")
+    assert enlaces["blender.bp.m1.explora"] == ("blender_principiante", "bp1_blender")
 
 
 def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):

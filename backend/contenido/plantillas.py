@@ -586,6 +586,23 @@ CURSOS_BASE: Dict[str, dict] = {
         "ruta": "blender",
         "requisito_id": "blender_principiante",
     },
+    "blender_intermedio": {
+        "id": "blender_intermedio",
+        "numero": "03",
+        "titulo": "Blender Intermedio",
+        "subtitulo": "Trabaja como en un estudio",
+        "descripcion": (
+            "Precisión con medidas, Array y Bisel; una escena ordenada en colecciones y tu diorama "
+            "iluminado y renderizado para el portafolio."
+        ),
+        "nivel": "Intermedio",
+        "acento": "blender",
+        "recurso_texto": "Descarga Blender gratis",
+        "recurso_url": "https://www.blender.org/download/",
+        "orden": 3,
+        "ruta": "blender",
+        "requisito_id": "blender_principiante_intermedio",
+    },
     # Curso de la v2, archivado en el motor v3 (sql/009): se conserva para el progreso guardado.
     "blender": {
         "id": "blender",

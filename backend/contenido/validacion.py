@@ -848,20 +848,29 @@ def es_practica_blender(leccion: Any) -> bool:
     )
 
 
-def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
-    """Primero el módulo, luego la práctica en Blender (v3.1, docs/plataforma/02).
+def practicas_de_leccion(leccion: Any) -> List[str]:
+    """Ids de práctica de los bloques blender_practice de una lección."""
+    bloques = leccion.get("contentBlocks") if isinstance(leccion, dict) else None
+    return [
+        b["practica"] for b in (bloques if isinstance(bloques, list) else [])
+        if isinstance(b, dict) and b.get("type") == "blender_practice" and isinstance(b.get("practica"), str)
+    ]
 
-    Después de una lección con práctica en Blender solo pueden venir otras
-    prácticas o el examen final: la práctica es el cierre del módulo.
+
+def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
+    """Teoría y Blender se intercalan (v3.2, docs/plataforma/02).
+
+    Un módulo puede tener varias prácticas en Blender en cualquier lugar: una
+    exploración corta entre dos lecciones de teoría y la práctica de cierre.
+    Lo único que no se permite es repetir la misma práctica en el módulo: el
+    motor registra un avance por práctica.
     """
-    vista = None
+    vistas: Dict[str, int] = {}
     for i, leccion in enumerate(lecciones):
-        if not isinstance(leccion, dict):
-            continue
-        if es_practica_blender(leccion):
-            vista = vista if vista is not None else i
-        elif vista is not None and leccion.get("type") != "exam":
-            _Contexto(errores, f"lessons[{i}]").error(
-                f"va después de la práctica en Blender (lessons[{vista}]): la práctica cierra el módulo, "
-                "muévela al final (solo el examen puede ir después)"
-            )
+        for practica in practicas_de_leccion(leccion):
+            if practica in vistas:
+                _Contexto(errores, f"lessons[{i}]").error(
+                    f"la práctica «{practica}» ya está en lessons[{vistas[practica]}]: cada práctica va una sola vez por módulo"
+                )
+            else:
+                vistas[practica] = i

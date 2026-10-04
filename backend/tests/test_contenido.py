@@ -17,7 +17,14 @@ from contenido.plantillas import (
     modulo_esqueleto,
     siguiente_numeracion,
 )
-from contenido.validacion import BLOQUES_INTERACTIVOS, PASOS_FORMULA, TIPOS_BLOQUE, validar_leccion, validar_modulo
+from contenido.validacion import (
+    BLOQUES_INTERACTIVOS,
+    PASOS_FORMULA,
+    TIPOS_BLOQUE,
+    es_practica_blender,
+    validar_leccion,
+    validar_modulo,
+)
 from herramientas import contenido as cli
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -148,19 +155,20 @@ def test_herramientas_nuevas_validan():
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
 
 
-def test_la_practica_en_blender_cierra_el_modulo():
-    modulo = leer(MODULOS / "archivo" / "blender-modulo-2.json")
+def test_teoria_y_blender_se_intercalan():
+    modulo = leer(MODULOS / "blender_principiante-modulo-1.json")
     assert validar_modulo(modulo) == []
     lecciones = modulo["module"]["lessons"]
-    lecciones.insert(0, lecciones.pop())  # la práctica antes de las lecciones
-    errores = validar_modulo(modulo)
-    assert any("va después de la práctica en Blender (lessons[0])" in e for e in errores), errores
-    # Un examen sí puede ir después de la práctica.
-    lecciones.append(lecciones.pop(0))
-    examen = {**leer(BLENDER)["module"]["lessons"][-1], "id": "les_examen_m2"}
-    assert examen["type"] == "exam"
-    lecciones.append(examen)
+    tipos = ["blender" if es_practica_blender(l) else l["type"] for l in lecciones]
+    # Teoría · Blender · teoría · Blender · examen.
+    assert tipos == ["theory_interactive", "blender", "theory_interactive", "blender", "exam"]
+    # Una práctica antes de toda la teoría también es válida…
+    lecciones.insert(0, lecciones.pop(1))
     assert validar_modulo(modulo) == []
+    # …pero la misma práctica dos veces en el módulo no.
+    lecciones.append({**lecciones[0], "id": "bp1_repetida"})
+    errores = validar_modulo(modulo)
+    assert any("ya está en lessons[0]" in e for e in errores), errores
 
 
 def test_tolerante_con_campos_extra_y_estricto_con_obligatorios():
