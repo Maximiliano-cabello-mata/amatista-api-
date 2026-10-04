@@ -30,6 +30,10 @@ BLOQUES_CONTENIDO = (
     "callout",
     "code_snippet",
     "video_player",
+    # Herramientas de enseñanza v3.1 (docs/plataforma/04_herramientas_de_ensenanza.md).
+    "step_by_step",
+    "shortcuts",
+    "compare",
 )
 # Llevan id único en la lección y "required" (por defecto true): la lección
 # se completa cuando todos los requeridos están resueltos.
@@ -48,6 +52,8 @@ BLOQUES_INTERACTIVOS = (
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
 VARIANTES_AVISO = ("dato", "reto")
+MODOS_COMPARAR = ("columns", "slider")
+MAX_TECLAS = 6
 PRIMITIVAS = ("sphere", "box", "cylinder", "cone", "torus", "icosahedron")
 PARAMETROS_ESCENA = ("segments", "color", "wireframe", "metalness", "roughness", "scale", "rotationSpeed")
 TIPOS_CONTROL = ("range", "color", "toggle")
@@ -321,6 +327,71 @@ def _video_player(c: _Contexto, b: dict) -> None:
 # --- Bloques interactivos ----------------------------------------------------
 
 
+def _teclas(c: _Contexto, objeto: dict, prefijo: str, obligatorio: bool, campo: str = "keys") -> None:
+    """keys: combinación que se pulsa a la vez (["Shift", "D"]); then: la que
+    va después (S y luego Z = {"keys": ["S"], "then": ["Z"]})."""
+    teclas = _valor(objeto, campo)
+    if teclas is _FALTA:
+        if obligatorio:
+            c.error(f"falta «{prefijo}{campo}»")
+        return
+    if (
+        not isinstance(teclas, list)
+        or not 1 <= len(teclas) <= MAX_TECLAS
+        or not all(isinstance(t, str) and t.strip() and len(t) <= 20 for t in teclas)
+    ):
+        c.error(f"«{prefijo}{campo}» debe ser una lista de 1 a {MAX_TECLAS} teclas («Shift», «D»)")
+    if campo == "keys":
+        _teclas(c, objeto, prefijo, False, "then")
+
+
+def _step_by_step(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False)
+    for i, paso in c.objetos(b, "steps", 1, 12):
+        p = f"steps[{i}]."
+        c.texto(paso, "title", p)
+        c.texto(paso, "text", p, obligatorio=False)
+        _teclas(c, paso, p, obligatorio=False)
+        imagen = c.texto(paso, "image", p, obligatorio=False)
+        c.texto(paso, "alt", p, obligatorio=imagen is not None)
+
+
+def _shortcuts(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False)
+    for i, atajo in c.objetos(b, "items", 1, 24):
+        p = f"items[{i}]."
+        _teclas(c, atajo, p, obligatorio=True)
+        c.texto(atajo, "action", p)
+    c.booleano(b, "practice")
+
+
+def _lado(c: _Contexto, b: dict, campo: str) -> None:
+    lado = _valor(b, campo)
+    if not isinstance(lado, dict):
+        c.error(f"«{campo}» debe ser un objeto {{label, image, text}}")
+        return
+    p = f"{campo}."
+    c.texto(lado, "label", p)
+    imagen = c.texto(lado, "image", p, obligatorio=False)
+    c.texto(lado, "alt", p, obligatorio=imagen is not None)
+    texto = c.texto(lado, "text", p, obligatorio=False)
+    if imagen is None and texto is None:
+        c.error(f"«{campo}» necesita «image» o «text»")
+
+
+def _compare(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False)
+    _lado(c, b, "before")
+    _lado(c, b, "after")
+    modo = c.opcion(b, "mode", MODOS_COMPARAR, obligatorio=False)
+    if modo == "slider":
+        for campo in ("before", "after"):
+            lado = b.get(campo)
+            if isinstance(lado, dict) and not lado.get("image"):
+                c.error(f"«mode» = «slider» necesita «{campo}.image»")
+    c.texto(b, "caption", obligatorio=False)
+
+
 def _opciones(c: _Contexto, b: dict, minimo: int, maximo: int, campo: str = "options") -> None:
     opciones = c.objetos(b, campo, minimo, maximo)
     for i, opcion in opciones:
@@ -541,6 +612,9 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "callout": _callout,
     "code_snippet": _code_snippet,
     "video_player": _video_player,
+    "step_by_step": _step_by_step,
+    "shortcuts": _shortcuts,
+    "compare": _compare,
     "quiz_inline": _quiz_inline,
     "ordering": _ordering,
     "matching": _matching,
@@ -762,4 +836,32 @@ def validar_modulo(datos: Any) -> List[str]:
                 _Contexto(errores, ruta).error(f"el id «{leccion_id}» se repite (ya lo usa lessons[{ids[leccion_id]}])")
             else:
                 ids[leccion_id] = i
+    _revisar_orden_practica(errores, lecciones)
     return errores
+
+
+def es_practica_blender(leccion: Any) -> bool:
+    """Lección que contiene un bloque blender_practice (la práctica del módulo)."""
+    bloques = leccion.get("contentBlocks") if isinstance(leccion, dict) else None
+    return isinstance(bloques, list) and any(
+        isinstance(b, dict) and b.get("type") == "blender_practice" for b in bloques
+    )
+
+
+def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
+    """Primero el módulo, luego la práctica en Blender (v3.1, docs/plataforma/02).
+
+    Después de una lección con práctica en Blender solo pueden venir otras
+    prácticas o el examen final: la práctica es el cierre del módulo.
+    """
+    vista = None
+    for i, leccion in enumerate(lecciones):
+        if not isinstance(leccion, dict):
+            continue
+        if es_practica_blender(leccion):
+            vista = vista if vista is not None else i
+        elif vista is not None and leccion.get("type") != "exam":
+            _Contexto(errores, f"lessons[{i}]").error(
+                f"va después de la práctica en Blender (lessons[{vista}]): la práctica cierra el módulo, "
+                "muévela al final (solo el examen puede ir después)"
+            )

@@ -50,6 +50,7 @@ from contenido.validacion import (
     PATRON_ID,
     TIPOS_LECCION,
     ContenidoInvalido,
+    es_practica_blender,
     modulo_de,
     validar_leccion,
     validar_modulo,
@@ -650,9 +651,18 @@ def arbol(db: Session = Depends(obtener_db), _: Usuario = Depends(lector)):
     lecciones = db.scalars(
         select(Leccion).options(defer(Leccion.contenido)).order_by(Leccion.orden, Leccion.id)
     ).all()
+    # Qué lecciones traen la práctica en Blender (el panel marca el cierre del
+    # módulo y avisa si falta). Solo el id y el JSON, sin el resto de la fila.
+    con_practica = {
+        (curso_id, id_)
+        for curso_id, id_, contenido in db.execute(
+            select(Leccion.curso_id, Leccion.id, Leccion.contenido).where(Leccion.estado != "archivado")
+        )
+        if es_practica_blender(leer_json(contenido))
+    }
     por_modulo: Dict[str, List[dict]] = defaultdict(list)
     for leccion in lecciones:
-        por_modulo[leccion.modulo_id].append(leccion_meta(leccion))
+        por_modulo[leccion.modulo_id].append({**leccion_meta(leccion), "practica_blender": (leccion.curso_id, leccion.id) in con_practica})
     por_curso: Dict[str, List[dict]] = defaultdict(list)
     for modulo in modulos:
         por_curso[modulo.curso_id].append({**modulo_meta(modulo), "lecciones": por_modulo[modulo.id]})

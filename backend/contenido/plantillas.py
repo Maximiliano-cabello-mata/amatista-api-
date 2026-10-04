@@ -149,6 +149,33 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
         "preview": True,
     },
     "video_player": {"type": "video_player", "url": "videos/reemplaza-este-video.mp4"},
+    "step_by_step": {
+        "type": "step_by_step",
+        "title": f"{REEMPLAZA}: duplicar un objeto",
+        "steps": [
+            {"title": "Selecciona el objeto", "text": "Haz clic sobre él en la vista 3D.", "keys": ["Clic"]},
+            {"title": "Duplícalo", "text": "La copia queda pegada al ratón.", "keys": ["Shift", "D"]},
+            {"title": "Colócalo", "text": "Mueve el ratón y haz clic para dejarlo.", "keys": ["Clic"]},
+        ],
+    },
+    "shortcuts": {
+        "type": "shortcuts",
+        "title": f"{REEMPLAZA}: atajos para transformar",
+        "items": [
+            {"keys": ["G"], "action": "Mover"},
+            {"keys": ["R"], "action": "Rotar"},
+            {"keys": ["S"], "action": "Escalar"},
+            {"keys": ["S"], "then": ["Z"], "action": "Escalar solo en Z"},
+        ],
+        "practice": True,
+    },
+    "compare": {
+        "type": "compare",
+        "title": f"{REEMPLAZA}: antes y después",
+        "before": {"label": "Antes", "text": "Un cubo de 2 × 2 × 2."},
+        "after": {"label": "Después", "text": "La cubierta: ancha y delgada (2 × 1 × 0.1)."},
+        "mode": "columns",
+    },
     "quiz_inline": {
         "type": "quiz_inline",
         "id": "quiz_1",

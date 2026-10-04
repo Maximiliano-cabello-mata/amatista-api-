@@ -110,12 +110,41 @@ def test_errores_dicen_donde_esta_el_problema():
         ({**EJEMPLOS_BLOQUES["code_challenge"], "language": "python"}, "«language» = «python» no es válido"),
         ({**EJEMPLOS_BLOQUES["code_challenge"], "checks": []}, "entre 1 y 20 checks"),
         ({**EJEMPLOS_BLOQUES["callout"], "variant": "alerta"}, "«variant» = «alerta» no es válido"),
+        ({**EJEMPLOS_BLOQUES["step_by_step"], "steps": []}, "entre 1 y 12 steps"),
+        (
+            {**EJEMPLOS_BLOQUES["step_by_step"], "steps": [{"title": "x", "keys": "S"}]},
+            "«steps[0].keys» debe ser una lista",
+        ),
+        ({**EJEMPLOS_BLOQUES["shortcuts"], "items": [{"action": "Mover"}]}, "falta «items[0].keys»"),
+        ({**EJEMPLOS_BLOQUES["compare"], "mode": "slider"}, "necesita «before.image»"),
+        ({**EJEMPLOS_BLOQUES["compare"], "after": {"label": "Después"}}, "«after» necesita «image» o «text»"),
     ],
 )
 def test_errores_de_bloques(bloque, esperado):
     errores = validar_leccion(leccion_con(bloque))
     assert any(esperado in error for error in errores), errores
     assert all(error.startswith("contentBlocks[0]") for error in errores), errores
+
+
+def test_herramientas_nuevas_validan():
+    for tipo in ("step_by_step", "shortcuts", "compare"):
+        assert tipo in TIPOS_BLOQUE and tipo not in BLOQUES_INTERACTIVOS
+        assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
+
+
+def test_la_practica_en_blender_cierra_el_modulo():
+    modulo = leer(MODULOS / "blender-modulo-2.json")
+    assert validar_modulo(modulo) == []
+    lecciones = modulo["module"]["lessons"]
+    lecciones.insert(0, lecciones.pop())  # la práctica antes de las lecciones
+    errores = validar_modulo(modulo)
+    assert any("va después de la práctica en Blender (lessons[0])" in e for e in errores), errores
+    # Un examen sí puede ir después de la práctica.
+    lecciones.append(lecciones.pop(0))
+    examen = {**leer(BLENDER)["module"]["lessons"][-1], "id": "les_examen_m2"}
+    assert examen["type"] == "exam"
+    lecciones.append(examen)
+    assert validar_modulo(modulo) == []
 
 
 def test_tolerante_con_campos_extra_y_estricto_con_obligatorios():
@@ -344,6 +373,7 @@ def test_flujo_completo_de_un_modulo(cliente, crear_cuenta):
     estados = {x["id"]: x["estado"] for x in arbol["cursos"][0]["modulos"][0]["lecciones"]}
     assert estados["les_blender_002"] == "archivado" and estados["les_blender_006"] == "borrador"
     assert "leccion" not in arbol["cursos"][0]["modulos"][0]["lecciones"][0]
+    assert arbol["cursos"][0]["modulos"][0]["lecciones"][0]["practica_blender"] is False
 
     # Exportar da el formato de archivo del frontend (solo lo publicado).
     exportado = cliente.get(f"{api}/modulos/mod_blender_002/exportar", headers=admin).json()
@@ -493,3 +523,17 @@ def test_texto_json_lee_igual_el_dict_de_oracle_y_el_texto_de_sqlite():
     assert tipo.process_result_value([1, 2], None) == "[1,2]"
     assert tipo.process_result_value('{"a":1}', None) == '{"a":1}'
     assert tipo.process_result_value(None, None) is None
+
+
+def test_arbol_marca_la_practica_en_blender(cliente, crear_cuenta):
+    _, admin = crear_cuenta(rol="admin")
+    assert cli.main(["importar", str(BLENDER), str(MODULOS / "blender-modulo-2.json")]) == 0
+    arbol = cliente.get("/api/contenido/admin/arbol", headers=admin).json()
+    lecciones = {
+        x["id"]: x["practica_blender"]
+        for curso in arbol["cursos"]
+        for modulo in curso["modulos"]
+        for x in modulo["lecciones"]
+    }
+    practicas = [i for i, v in lecciones.items() if v]
+    assert len(practicas) == 1 and len(lecciones) > 1
