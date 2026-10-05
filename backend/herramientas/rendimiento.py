@@ -127,12 +127,14 @@ def limpiar() -> None:
 def escena_de_solucion(practica: Path) -> Dict[str, Any]:
     """La escena del caso «Solución» de pruebas.json, como la manda el add-on."""
     sys.path.insert(0, str(RAIZ / "engine"))
+    from amatista_engine.practice.loader import parse_practice
     from amatista_engine.snapshot import scene_to_dict
     from amatista_engine.testing import escena_de_caso
 
     casos = json.loads((practica / "pruebas.json").read_text(encoding="utf-8"))["casos"]
     caso = next((c for c in casos if c["nombre"].lower().startswith("solución")), casos[-1])
-    return scene_to_dict(escena_de_caso(caso))
+    definicion = parse_practice(json.loads((practica / "practica.json").read_text(encoding="utf-8")))
+    return scene_to_dict(escena_de_caso(caso, definicion))
 
 
 def escenarios(tokens: Dict[str, str]) -> List[Dict[str, Any]]:
