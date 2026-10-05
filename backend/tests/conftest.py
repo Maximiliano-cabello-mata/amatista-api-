@@ -17,6 +17,9 @@ def entorno_pruebas(monkeypatch):
     monkeypatch.setenv("AMATISTA_SIN_LIMITES", "1")
     # Las pruebas parten de una base sin prácticas; test_practicas_al_arrancar la prende.
     monkeypatch.setenv("AMATISTA_SINCRONIZAR_PRACTICAS", "0")
+    # Las pruebas cambian la base directo: el catálogo se revisa en cada petición.
+    monkeypatch.setenv("AMATISTA_CACHE_CATALOGO_S", "0")
+    monkeypatch.setenv("AMATISTA_CACHE_RESUMEN_S", "0")
     monkeypatch.delenv("AMATISTA_ADMINS", raising=False)
     monkeypatch.delenv("SMTP_HOST", raising=False)
 
@@ -25,7 +28,10 @@ def entorno_pruebas(monkeypatch):
 def cliente(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'prueba.db'}")
     conexion.motor.cache_clear()
+    from api.contenido import invalidar_catalogo
     from main import app
+
+    invalidar_catalogo()
 
     with TestClient(app) as c:
         yield c

@@ -17,7 +17,10 @@ importar_modulo y exportar_modulo también los usa herramientas/contenido.py.
 """
 import hashlib
 import json
+import os
 import re
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
@@ -103,6 +106,8 @@ def rechazo(estado: int, mensaje: str, errores: List[str]) -> JSONResponse:
 def confirmar(db: Session, ruta: str) -> None:
     try:
         db.commit()
+        if ruta.startswith("/api/contenido"):
+            invalidar_catalogo()
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -338,7 +343,7 @@ def _modulos_visibles(*columnas):
 
 def version_catalogo(db: Session) -> str:
     """Huella estable de lo publicado; solo lee metadatos (nunca el JSON de las lecciones)."""
-    huella = hashlib.sha1()
+    huella = hashlib.sha1(usedforsecurity=False)  # huella de caché, no de seguridad
 
     def agregar(filas) -> None:
         for fila in filas:
@@ -461,18 +466,61 @@ def etag_coincide(cabecera: Optional[str], version: str) -> bool:
     return False
 
 
+# Caché del catálogo en memoria (informe de rendimiento del 5 de octubre: era
+# la ruta pública más lenta, ~30 ms y ~30 peticiones/s con 40 alumnos a la
+# vez). Se guarda el JSON ya armado junto con su versión; la versión se vuelve
+# a consultar a la base como mucho cada AMATISTA_CACHE_CATALOGO_S segundos
+# (10 por defecto, 0 = siempre) y al guardar contenido desde esta API.
+_CATALOGO: Dict[str, Any] = {"version": None, "revisado": 0.0, "cuerpo": None}
+_CANDADO_CATALOGO = threading.Lock()
+
+
+def segundos_cache_catalogo() -> float:
+    try:
+        return max(0.0, float(os.getenv("AMATISTA_CACHE_CATALOGO_S", "10")))
+    except ValueError:
+        return 10.0
+
+
+def invalidar_catalogo() -> None:
+    with _CANDADO_CATALOGO:
+        _CATALOGO.update(version=None, revisado=0.0, cuerpo=None)
+
+
+def version_vigente(db: Session) -> str:
+    momento = time.monotonic()
+    with _CANDADO_CATALOGO:
+        version = _CATALOGO["version"]
+        if version and momento - _CATALOGO["revisado"] < segundos_cache_catalogo():
+            return version
+    version = version_catalogo(db)
+    with _CANDADO_CATALOGO:
+        if version != _CATALOGO["version"]:
+            _CATALOGO.update(version=version, cuerpo=None)
+        _CATALOGO["revisado"] = momento
+    return version
+
+
 @router.get("/catalogo")
 def catalogo(request: Request, db: Session = Depends(obtener_db)):
     try:
-        version = version_catalogo(db)
+        version = version_vigente(db)
         # no-cache: el navegador guarda la respuesta pero siempre pregunta (304 si no cambió).
         cabeceras = {"ETag": f'"{version}"', "Cache-Control": "no-cache"}
         if etag_coincide(request.headers.get("if-none-match"), version):
             return Response(status_code=304, headers=cabeceras)
-        cursos = cursos_catalogo(db)
+        with _CANDADO_CATALOGO:
+            cuerpo = _CATALOGO["cuerpo"] if _CATALOGO["version"] == version else None
+        if cuerpo is None:
+            cursos = cursos_catalogo(db)
+            cuerpo = json.dumps({"version": version, "generado_en": iso(ahora()), "cursos": cursos},
+                                ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            with _CANDADO_CATALOGO:
+                if _CATALOGO["version"] == version:
+                    _CATALOGO["cuerpo"] = cuerpo
     except SQLAlchemyError as error:
         raise error_bd(error, "/api/contenido/catalogo", estado=503)
-    return JSONResponse({"version": version, "generado_en": iso(ahora()), "cursos": cursos}, headers=cabeceras)
+    return Response(content=cuerpo, media_type="application/json", headers=cabeceras)
 
 
 # --- Importar y exportar (también desde herramientas/contenido.py) -------------

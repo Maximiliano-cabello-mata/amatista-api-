@@ -67,8 +67,12 @@ MENSAJE_SIN_CONFIRMAR = (
 
 # Peticiones por minuto y por IP. Generosos porque un salón de clases sale a
 # internet con una sola IP; el bloqueo por cuenta frena el abuso dirigido.
-LIMITE_REGISTRO = limitar(20)
-LIMITE_INICIO = limitar(30)
+# Un aula entera comparte una sola IP pública: los límites de registro e
+# inicio alcanzan para un grupo de 40 a la vez. Contra adivinar contraseñas
+# protege además el bloqueo de la cuenta tras 5 fallos (MAX_FALLOS).
+LIMITE_REGISTRO = limitar(60)
+LIMITE_INICIO_MAXIMO = 60
+LIMITE_INICIO = limitar(LIMITE_INICIO_MAXIMO)
 LIMITE_CORREOS = limitar(10)  # recuperar y reenviar-codigo mandan correos
 LIMITE_CODIGOS = limitar(20)
 LIMITE_CAMBIO = limitar(10)

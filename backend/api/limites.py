@@ -15,6 +15,7 @@ Variables:
   activarse detrás de Caddy: si la API está expuesta directo, cualquiera
   podría inventar esa cabecera para saltarse el límite.
 """
+import hashlib
 import math
 import os
 import threading
@@ -83,19 +84,35 @@ def ip_cliente(request: Request) -> str:
     return request.client.host if request.client else "desconocida"
 
 
-def limitar(maximo: int, ventana: float = 60.0) -> Callable[[Request], None]:
-    """Dependencia de FastAPI: 429 si la IP superó `maximo` peticiones en la ventana.
+def clave_cuenta(request: Request) -> str:
+    """La sesión (su hash) si la petición trae token; si no, la IP.
+
+    Un aula entera sale a internet con UNA sola IP: contar por cuenta evita
+    que 30 alumnos conectados se frenen entre sí en las rutas con sesión.
+    """
+    autorizacion = request.headers.get("authorization", "")
+    token = autorizacion[7:].strip() if autorizacion.lower().startswith("bearer ") else ""
+    token = token or request.headers.get("x-sesion-id", "").strip()
+    if token:
+        return "t:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+    return ip_cliente(request)
+
+
+def limitar(maximo: int, ventana: float = 60.0, por: str = "ip") -> Callable[[Request], None]:
+    """Dependencia de FastAPI: 429 si la IP (o la cuenta) superó `maximo` peticiones en la ventana.
 
     Uso: @router.post("/ruta", dependencies=[Depends(limitar(10))])
-    Cada ruta cuenta por separado (la clave es IP + ruta).
+    Cada ruta cuenta por separado (la clave es IP + ruta, o sesión + ruta con
+    por="cuenta").
     """
     limitador = Limitador(maximo, ventana)
     _limitadores.append(limitador)
+    quien = clave_cuenta if por == "cuenta" else ip_cliente
 
     def verificar(request: Request) -> None:
         if limites_desactivados():
             return
-        permitida, espera = limitador.intentar(f"{ip_cliente(request)}|{request.url.path}")
+        permitida, espera = limitador.intentar(f"{quien(request)}|{request.url.path}")
         if not permitida:
             raise HTTPException(status_code=429, detail=MENSAJE, headers={"Retry-After": str(espera)})
 

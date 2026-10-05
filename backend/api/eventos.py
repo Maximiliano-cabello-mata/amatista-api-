@@ -17,9 +17,14 @@ from sqlalchemy.orm import Session
 
 from api.comun import asegurar_usuario, error_bd
 from api.dependencias import resolver_alumno, usuario_opcional
+from api.limites import limitar
 from api.progreso import a_utc, registrar_acceso
 from database.conexion import obtener_db
 from database.modelos import TIPOS_EVENTO, EventoAprendizaje, Usuario, ahora
+
+# Escrituras sin sesión (alumnos anónimos): frena a quien llene la base a
+# propósito. 300 por minuto por cuenta o IP alcanza para un aula que sincroniza.
+LIMITE_ESCRITURA = limitar(300, por="cuenta")
 
 router = APIRouter(prefix="/api", tags=["eventos"])
 
@@ -108,7 +113,7 @@ def guardar(db: Session, alumno_id: str, unicos: Dict[str, EventoEntrada], momen
     return nuevos
 
 
-@router.post("/eventos")
+@router.post("/eventos", dependencies=[Depends(LIMITE_ESCRITURA)])
 def guardar_eventos(
     datos: SolicitudEventos,
     actual: Optional[Usuario] = Depends(usuario_opcional),

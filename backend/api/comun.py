@@ -1,4 +1,6 @@
 import logging
+import re
+import uuid
 from typing import Optional
 
 from fastapi import HTTPException
@@ -37,11 +39,13 @@ def usuario_publico(usuario: Usuario) -> dict:
 def error_bd(error: SQLAlchemyError, ruta: str, estado: int = 500) -> HTTPException:
     """Registra el error completo en la terminal y devuelve un mensaje corto.
 
-    El mensaje incluye el código de Oracle (por ejemplo ORA-00942) para que
-    se pueda diagnosticar desde el navegador.
+    Al navegador solo llega el código de Oracle (por ejemplo ORA-00942) y un
+    folio para buscar el detalle en el log: el texto completo del error
+    puede revelar nombres de tablas, columnas o del esquema.
     """
-    log.exception("Error de base de datos en %s", ruta)
+    folio = uuid.uuid4().hex[:8]
+    log.exception("Error de base de datos en %s (folio %s)", ruta, folio)
     original = getattr(error, "orig", None) or error
-    texto = str(original).strip()
-    primera_linea = texto.splitlines()[0] if texto else type(original).__name__
-    return HTTPException(status_code=estado, detail=f"Error de base de datos: {primera_linea}")
+    codigo = re.search(r"\b(?:ORA|DPI|PLS)-\d{4,5}\b", str(original))
+    resumen = codigo.group(0) if codigo else type(original).__name__
+    return HTTPException(status_code=estado, detail=f"Error de base de datos ({resumen}, folio {folio}).")

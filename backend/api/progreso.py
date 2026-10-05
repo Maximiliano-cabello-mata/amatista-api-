@@ -23,8 +23,13 @@ from api.dependencias import (
     usuario_opcional,
     usuario_requerido,
 )
+from api.limites import limitar
 from database.conexion import obtener_db
 from database.modelos import Logro, ProgresoLeccion, Usuario, ahora
+
+# Escrituras sin sesión (alumnos anónimos): frena a quien llene la base a
+# propósito. 300 por minuto por cuenta o IP alcanza para un aula que sincroniza.
+LIMITE_ESCRITURA = limitar(300, por="cuenta")
 
 router = APIRouter(prefix="/api", tags=["progreso"])
 
@@ -239,7 +244,7 @@ def guardar(
                 db.add(Logro(usuario_id=alumno_id, insignia_id=insignia, obtenido_en=momento))
 
 
-@router.post("/progreso")
+@router.post("/progreso", dependencies=[Depends(LIMITE_ESCRITURA)])
 def guardar_progreso(
     datos: SolicitudProgreso,
     actual: Optional[Usuario] = Depends(usuario_opcional),

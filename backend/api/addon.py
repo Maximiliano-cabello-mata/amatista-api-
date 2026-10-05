@@ -46,7 +46,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from api import progreso as api_progreso
 from api.auth import abrir_sesion
@@ -95,8 +95,9 @@ MAX_OBJETIVOS_TEXTO = 1000
 LIMITE_VINCULOS = limitar(20)
 LIMITE_CONSULTAS = limitar(60)
 LIMITE_CONFIRMAR = limitar(10)
-LIMITE_INTENTOS = limitar(120)
-LIMITE_DESCARGAS = limitar(20)
+# Por cuenta: un aula comparte una sola IP pública.
+LIMITE_INTENTOS = limitar(60, por="cuenta")
+LIMITE_DESCARGAS = limitar(60)  # un aula baja el instalador al mismo tiempo
 
 
 # --- Ayudantes -------------------------------------------------------------------
@@ -115,6 +116,58 @@ def leer(texto: Optional[str]) -> Any:
         return json.loads(texto) if texto else None
     except ValueError:
         return None
+
+
+# --- Protección del add-on (docs/seguridad/02_proteccion_del_codigo.md) -----------
+
+
+def secreto_firma() -> bytes:
+    """AMATISTA_SECRETO_FIRMA (en el .env del servidor): firma las marcas de agua."""
+    return os.getenv("AMATISTA_SECRETO_FIRMA", "").encode("utf-8")
+
+
+def firmar(datos: Dict[str, Any]) -> Optional[str]:
+    secreto = secreto_firma()
+    if not secreto:
+        return None
+    texto = json.dumps(datos, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hmac.new(secreto, texto.encode("utf-8"), "sha256").hexdigest()
+
+
+def licencia_para(usuario: Optional[Usuario]) -> Dict[str, Any]:
+    """Marca de agua de una descarga: quién la bajó y cuándo, firmada por el servidor."""
+    datos = {
+        "id": uuid.uuid4().hex[:16],
+        "cuenta": usuario.id if usuario is not None else "publica",
+        "emitida": iso(ahora()),
+        "version": motor.VERSION_ADDON,
+        "aviso": "Amatista Motor se entrega a esta cuenta para uso personal dentro de los cursos de Amatista.",
+    }
+    return {**datos, "firma": firmar(datos)}
+
+
+def licencia_valida(licencia: Dict[str, Any]) -> bool:
+    datos = {k: v for k, v in licencia.items() if k != "firma"}
+    firma = firmar(datos)
+    return bool(firma and licencia.get("firma") and hmac.compare_digest(firma, str(licencia["firma"])))
+
+
+def copia_verificada(request: Request) -> bool:
+    """La copia del add-on dice ser la oficial y su huella es la que entrega este servidor.
+
+    Un add-on modificado puede mentir aquí: es una señal, no una garantía. Lo
+    que sí garantiza el servidor es que la calificación la calcula él.
+    """
+    if request.headers.get("x-amatista-integridad") != "oficial":
+        return False
+    huella = request.headers.get("x-amatista-huella", "")
+    return hmac.compare_digest(huella, motor.construir.huella_oficial())
+
+
+def politica_copias() -> str:
+    """registrar (por defecto): acepta y marca; exigir: rechaza copias no verificadas de alumnos."""
+    valor = os.getenv("AMATISTA_ADDON_VERIFICADO", "registrar").strip().lower()
+    return valor if valor in ("registrar", "exigir") else "registrar"
 
 
 def url_api(request: Request) -> str:
@@ -234,6 +287,42 @@ def progreso_meta(fila: Optional[ProgresoPractica]) -> Optional[dict]:
         "completada_en": iso(fila.completada_en),
         "actualizado_en": iso(fila.actualizado_en),
     }
+
+
+# Resumen de cada definición (título, pasos...) por práctica y versión: la
+# lista del add-on ya no lee y convierte 18 CLOB de JSON en cada petición
+# (informe de rendimiento del 5 de octubre).
+_RESUMENES_DEF: Dict[tuple, Dict[str, Any]] = {}
+
+
+def resumen_definicion(db: Session, practica: Practica, version: int) -> Dict[str, Any]:
+    """Lo que practica_meta usa de la definición de esa versión (o de la vigente, si falta)."""
+    vigente = version == practica.version
+    clave = (practica.id, version, practica.actualizado_en if vigente else None)
+    guardado = _RESUMENES_DEF.get(clave)
+    if guardado is not None:
+        return guardado
+    definicion = None
+    if not vigente:
+        fila = db.get(PracticaVersion, (practica.id, version))
+        definicion = leer(fila.definicion) if fila is not None else None
+        if fila is None:
+            clave = (practica.id, version, practica.actualizado_en)
+    definicion = definicion or leer(practica.definicion) or {}
+    resumen = {
+        "title": definicion.get("title"),
+        "description": definicion.get("description"),
+        "level": definicion.get("level"),
+        "estimatedMinutes": definicion.get("estimatedMinutes"),
+        "targets": [
+            {"id": t.get("id"), "title": t.get("title"), "optional": t.get("optional")}
+            for t in definicion.get("targets", []) if isinstance(t, dict)
+        ],
+    }
+    if len(_RESUMENES_DEF) > 1000:
+        _RESUMENES_DEF.clear()
+    _RESUMENES_DEF[clave] = resumen
+    return resumen
 
 
 def practica_meta(practica: Practica, definicion: Dict[str, Any], version: int,
@@ -422,7 +511,8 @@ def desconectar(dispositivo_id: str, db: Session = Depends(obtener_db), usuario:
 def listar_practicas(curso_id: Optional[str] = None, db: Session = Depends(obtener_db),
                      usuario: Optional[Usuario] = Depends(usuario_opcional)):
     equipo = es_equipo(usuario)
-    consulta = select(Practica).order_by(Practica.nivel, Practica.id)
+    # La definición (CLOB) solo se lee si su resumen no está en caché.
+    consulta = select(Practica).options(defer(Practica.definicion)).order_by(Practica.nivel, Practica.id)
     if curso_id:
         consulta = consulta.where(Practica.curso_id == curso_id)
     if not equipo:
@@ -434,17 +524,10 @@ def listar_practicas(curso_id: Optional[str] = None, db: Session = Depends(obten
             f.practica_id: f
             for f in db.scalars(select(ProgresoPractica).where(ProgresoPractica.usuario_id == usuario.id))
         }
-    publicadas = {}
-    if not equipo and practicas:
-        claves = [(p.id, p.version_publicada) for p in practicas if p.version_publicada != p.version]
-        for p_id, version in claves:
-            fila = db.get(PracticaVersion, (p_id, version))
-            if fila is not None:
-                publicadas[p_id] = leer(fila.definicion)
     resultado = []
     for practica in practicas:
         version = version_para(practica, usuario)
-        definicion = publicadas.get(practica.id) or leer(practica.definicion) or {}
+        definicion = resumen_definicion(db, practica, version)
         resultado.append(practica_meta(practica, definicion, version, progresos.get(practica.id), equipo))
     if equipo:
         estadisticas = {
@@ -797,6 +880,12 @@ def subir_habilidades(db: Session, usuario: Usuario, habilidades, autonomia: str
 @router.post("/intentos", dependencies=[Depends(LIMITE_INTENTOS)])
 def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(obtener_db),
                       usuario: Usuario = Depends(usuario_requerido)):
+    verificada = copia_verificada(request)
+    if not verificada and politica_copias() == "exigir" and not es_equipo(usuario):
+        raise HTTPException(
+            status_code=403,
+            detail="Esta copia de Amatista Motor no es la oficial. Descárgala de nuevo desde la plataforma (Mi Blender).",
+        )
     practica = obtener_practica(db, cuerpo.practica_id, usuario)
     version = version_para(practica, usuario)
     if cuerpo.version and cuerpo.version != version:
@@ -859,7 +948,7 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
             momento,
         )
     datos = compactar({"p": practica.id[:60], "v": version, "pr": progreso, "c": int(reporte.completed),
-                       "h": fila.pistas, "a": (autonomia or "")[:10]})
+                       "h": fila.pistas, "a": (autonomia or "")[:10], "ok": int(verificada)})
     db.add(
         EventoAprendizaje(
             id=str(uuid.uuid4()),
@@ -886,6 +975,7 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
         "autonomia": autonomia,
         "habilidades": habilidades,
         "pasos": [{"id": s.target_id, "estado": s.status} for s in reporte.steps],
+        "copia_verificada": verificada,
     }
 
 
@@ -934,7 +1024,8 @@ def descargar(sistema: str, request: Request, db: Session = Depends(obtener_db),
                                   DURACION_VINCULO_PAQUETE, usuario)
     cerrar(db, "/api/addon/v1/descargas")
     contenido = motor.construir.construir_paquete(
-        sistema, servidor=servidor, plataforma=plataforma, vinculo={"id": fila.id, "secreto": secreto}
+        sistema, servidor=servidor, plataforma=plataforma, vinculo={"id": fila.id, "secreto": secreto},
+        licencia=licencia_para(usuario),
     )
     return _zip(contenido, nombre, privado=True)
 

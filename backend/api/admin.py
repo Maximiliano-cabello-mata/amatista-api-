@@ -24,6 +24,9 @@ SQLite y Oracle). Los días se cortan en hora de Ciudad de México, como los
 cortes del plan.
 """
 import logging
+import os
+import threading
+import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
@@ -158,12 +161,41 @@ def por_curso(db: Session) -> List[dict]:
     ]
 
 
+# El resumen recorre todos los eventos del periodo (informe de rendimiento del
+# 5 de octubre: ~100 ms con un profesor y ~700 ms con diez a la vez). Las
+# métricas del plan no cambian de un segundo a otro: se guardan
+# AMATISTA_CACHE_RESUMEN_S segundos (30 por defecto; 0 = sin caché).
+_RESUMENES: Dict[int, tuple] = {}
+_CANDADO_RESUMEN = threading.Lock()
+
+
+def segundos_cache_resumen() -> float:
+    try:
+        return max(0.0, float(os.getenv("AMATISTA_CACHE_RESUMEN_S", "30")))
+    except ValueError:
+        return 30.0
+
+
 @router.get("/resumen")
 def resumen(
     dias: int = Query(7, ge=1, le=90),
     _: Usuario = Depends(lectores),
     db: Session = Depends(obtener_db),
 ):
+    vigencia = segundos_cache_resumen()
+    momento = time.monotonic()
+    with _CANDADO_RESUMEN:
+        guardado = _RESUMENES.get(dias)
+    if vigencia and guardado and momento - guardado[0] < vigencia:
+        return guardado[1]
+    datos = calcular_resumen(db, dias)
+    if vigencia:
+        with _CANDADO_RESUMEN:
+            _RESUMENES[dias] = (momento, datos)
+    return datos
+
+
+def calcular_resumen(db: Session, dias: int) -> dict:
     momento = ahora()
     zona = zona_metricas()
     desde = momento - timedelta(days=dias)

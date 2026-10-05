@@ -10,8 +10,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -59,7 +61,68 @@ def registrar_practicas_del_repositorio():
         registro.warning("Práctica sin registrar: %s", error)
 
 
-app = FastAPI(title="Amatista API", version="0.3.0", lifespan=ciclo_de_vida)
+def apagado(nombre: str) -> bool:
+    return os.getenv(nombre, "").strip().lower() in ("1", "si", "sí", "true")
+
+
+# AMATISTA_OCULTAR_DOCS=1 no publica /docs, /redoc ni /openapi.json (producción
+# sin Caddy delante). Con Caddy ya responden 404 ahí (despliegue/Caddyfile).
+_DOCS = not apagado("AMATISTA_OCULTAR_DOCS")
+app = FastAPI(
+    title="Amatista API",
+    version="0.3.0",
+    lifespan=ciclo_de_vida,
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
+)
+
+# Tamaño máximo de un cuerpo (por defecto 2 MB): la escena más grande del
+# add-on pesa unos cientos de KB. Lo mismo hace Caddy con request_body.
+MAX_CUERPO = int(os.getenv("AMATISTA_MAX_CUERPO", 2 * 1024 * 1024))
+
+# Cabeceras de seguridad (las mismas que pone Caddy): si la API queda expuesta
+# sin proxy, como hoy en el puerto 8000 de la VM, siguen llegando al navegador.
+CABECERAS_SEGURAS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+}
+# Respuestas con datos de una cuenta: nunca en cachés compartidas.
+RUTAS_PRIVADAS = ("/api/auth/", "/api/progreso", "/api/admin/", "/api/addon/v1/yo", "/api/addon/v1/mi-progreso")
+
+
+@app.middleware("http")
+async def proteger(request: Request, siguiente):
+    largo = request.headers.get("content-length")
+    if largo and largo.isdigit() and int(largo) > MAX_CUERPO:
+        return JSONResponse({"detail": "La petición es demasiado grande."}, status_code=413)
+    respuesta = await siguiente(request)
+    for nombre, valor in CABECERAS_SEGURAS.items():
+        respuesta.headers.setdefault(nombre, valor)
+    if request.url.path.startswith(RUTAS_PRIVADAS):
+        respuesta.headers.setdefault("Cache-Control", "no-store")
+    return respuesta
+
+
+class ComprimirJSON(GZipMiddleware):
+    """Comprime JSON grandes (catálogo, prácticas); los .zip ya vienen comprimidos.
+
+    Caddy también comprime, pero no vuelve a comprimir lo que ya trae
+    Content-Encoding: las dos capas no se pisan.
+    """
+
+    async def __call__(self, scope, receive, send):
+        ruta = scope.get("path", "")
+        if ruta.endswith(".zip") or "/descargas/" in ruta:
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(ComprimirJSON, minimum_size=1024, compresslevel=5)
 
 app.add_middleware(
     CORSMiddleware,

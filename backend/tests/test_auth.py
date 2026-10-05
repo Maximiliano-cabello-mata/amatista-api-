@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from api import correo, limites
+from api import auth, correo, limites
 from api.fusion import fusionar_alumno
 from database import conexion
 from database.modelos import EventoAprendizaje, Logro, ProgresoLeccion, Sesion, Usuario, ahora
@@ -674,7 +674,7 @@ def test_limite_por_ip_responde_429(cliente, con_limites):
     # Otras rutas cuentan por separado.
     assert cliente.post("/api/auth/reenviar-codigo", json={"email": "ana@amatista.local"}).status_code == 200
     # Las peticiones inválidas también cuentan (no se puede esquivar con 422).
-    for _ in range(30):
+    for _ in range(auth.LIMITE_INICIO_MAXIMO):
         cliente.post("/api/auth/iniciar-sesion", json={})
     assert cliente.post("/api/auth/iniciar-sesion", json={}).status_code == 429
 

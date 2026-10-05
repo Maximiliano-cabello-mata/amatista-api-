@@ -105,13 +105,18 @@ def test_progreso_valida_datos(cliente):
     assert cliente.post("/api/progreso", json={"usuario_id": "a", "eventos": []}).status_code == 422
 
 
-def test_error_de_base_de_datos_devuelve_mensaje(cliente):
+def test_error_de_base_de_datos_no_revela_la_base(cliente, caplog):
     with conexion.motor().begin() as c:
         c.execute(text("DROP TABLE progreso_lecciones"))
     evento = {"curso_id": "blender", "leccion_id": "les_001", "completada": True}
     respuesta = cliente.post("/api/progreso", json={"usuario_id": "a", "eventos": [evento]})
     assert respuesta.status_code == 500
-    assert "no such table" in respuesta.json()["detail"]
+    detalle = respuesta.json()["detail"]
+    # Al navegador: el tipo de error y un folio; el detalle (tablas, columnas) solo al log.
+    assert detalle.startswith("Error de base de datos (OperationalError, folio ")
+    assert "progreso_lecciones" not in detalle and "no such table" not in detalle
+    folio = detalle.split("folio ")[1].rstrip(").")
+    assert any(folio in r.getMessage() for r in caplog.records)
 
 
 def test_cors_permite_localhost_en_cualquier_puerto(cliente):
