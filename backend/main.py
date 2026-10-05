@@ -31,7 +31,32 @@ async def ciclo_de_vida(app: FastAPI):
     # repiten los problemas de tablas viejas que create_all no corrige.
     if motor().dialect.name == "sqlite":
         Base.metadata.create_all(motor())
+    registrar_practicas_del_repositorio()
     yield
+
+
+def registrar_practicas_del_repositorio():
+    """Detecta los practica.json de practices/blender/ y los registra en la base.
+
+    Si falta la tabla PRACTICAS (sql/007 sin aplicar) o la base no responde,
+    solo avisa en el log: la API arranca igual.
+    """
+    if os.getenv("AMATISTA_SINCRONIZAR_PRACTICAS", "1").strip().lower() in ("0", "no", "false"):
+        return
+    registro = logging.getLogger("amatista.practicas")
+    with Session(motor()) as db:
+        try:
+            resumen = addon.sincronizar_al_arrancar(db)
+        except SQLAlchemyError as error:
+            db.rollback()
+            registro.warning("No se registraron las prácticas del repositorio (¿falta sql/007?): %s", error.__class__.__name__)
+            return
+    registro.info(
+        "Prácticas del repositorio: %d nuevas, %d actualizadas, %d lecciones enlazadas",
+        len(resumen["nuevas"]), len(resumen["actualizadas"]), resumen["lecciones_enlazadas"],
+    )
+    for error in resumen["errores"]:
+        registro.warning("Práctica sin registrar: %s", error)
 
 
 app = FastAPI(title="Amatista API", version="0.3.0", lifespan=ciclo_de_vida)

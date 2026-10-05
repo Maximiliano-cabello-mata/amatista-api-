@@ -11,6 +11,7 @@ Uso, desde backend/ (importar y exportar usan la base de backend/.env):
     python herramientas/contenido.py mapa [blender]          # curso > nivel > módulo > lección desde los archivos
     python herramientas/contenido.py sembrar-niveles          # crea en la base los 5 niveles de Blender que falten
     python herramientas/contenido.py practicas [--publicar]   # registra en la base las prácticas de practices/blender/ (sql/007)
+    python herramientas/contenido.py practicas --revisar      # dice cuáles faltan en la base o están sin publicar
 
 validar y mapa no necesitan base de datos; validar sale con código 1 si hay
 errores (lo usa CI). nuevo-modulo crea ../frontend/src/data/modulos/<curso>-modulo-<n>.json
@@ -282,6 +283,47 @@ def comando_sembrar_niveles() -> int:
     return 0
 
 
+def revisar_practicas(db) -> list:
+    """[(id, qué pasa)] de cada práctica del repositorio que los alumnos todavía no ven."""
+    from contenido import motor as motor_practicas
+    from database.modelos import Practica, PracticaVersion
+
+    pendientes = []
+    for _, datos in motor_practicas.practicas_del_repositorio():
+        practica = db.get(Practica, datos["id"])
+        if practica is None:
+            pendientes.append((datos["id"], "no está en la base"))
+            continue
+        ultima = db.get(PracticaVersion, (practica.id, practica.version))
+        if ultima is None or ultima.huella != motor_practicas.huella(datos):
+            pendientes.append((practica.id, f"la base tiene una versión vieja ({practica.version})"))
+        elif practica.estado != "publicado" or practica.version_publicada != practica.version:
+            pendientes.append((practica.id, f"registrada pero en «{practica.estado}», sin publicar"))
+    return pendientes
+
+
+def comando_revisar_practicas() -> int:
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import Session
+
+    from contenido import motor as motor_practicas
+
+    total = len(motor_practicas.practicas_del_repositorio())
+    try:
+        with Session(preparar_base()) as db:
+            pendientes = revisar_practicas(db)
+    except SQLAlchemyError as error:
+        print(mensaje_bd(error), file=sys.stderr)
+        print("¿Ya ejecutaste sql/007_motor_practicas.sql en Oracle?", file=sys.stderr)
+        return 1
+    for practica_id, motivo in pendientes:
+        print(f"  FALTA {practica_id}: {motivo}")
+    print(f"{total - len(pendientes)} de {total} prácticas del repositorio están publicadas y al día.")
+    if pendientes:
+        print("Reinicia el servicio (registra solas las nuevas) o corre: python herramientas/contenido.py practicas --publicar")
+    return 1 if pendientes else 0
+
+
 def comando_practicas(publicar: bool) -> int:
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
@@ -475,6 +517,7 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     comandos.add_parser("sembrar-niveles", help="crea en la base los niveles de Blender que falten")
     practicas = comandos.add_parser("practicas", help="registra en la base las prácticas de practices/blender/")
     practicas.add_argument("--publicar", action="store_true", help="publica la versión registrada para los alumnos")
+    practicas.add_argument("--revisar", action="store_true", help="solo dice qué prácticas del repositorio faltan en la base")
 
     opciones = parser.parse_args(argumentos)
     if opciones.comando == "validar":
@@ -503,6 +546,8 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     if opciones.comando == "sembrar-niveles":
         return comando_sembrar_niveles()
     if opciones.comando == "practicas":
+        if opciones.revisar:
+            return comando_revisar_practicas()
         return comando_practicas(opciones.publicar)
     parser.print_help()
     return 2

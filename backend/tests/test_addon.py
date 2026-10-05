@@ -310,6 +310,22 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 # --- Descargas ------------------------------------------------------------------
 
 
+def test_la_descarga_es_amatista_motor_3_2_con_todo_lo_nuevo(cliente):
+    """La plataforma entrega la versión del repositorio, con las 18 prácticas y las temáticas."""
+    estado = cliente.get(f"{API}/estado").json()
+    assert estado["nombre"] == "Amatista Motor 3.2" and estado["version_addon"] == "3.2.0"
+    respuesta = cliente.get(f"{API}/descargas/macos")
+    assert 'filename="Amatista-Motor-3.2-macos.zip"' in respuesta.headers["content-disposition"]
+    paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
+    assert "Amatista Motor 3.2/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 3.2/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 3.2 PARA BLENDER")
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.2/amatista-3.2.0.zip")))
+    nombres = extension.namelist()
+    assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
+    assert "practicas/temas.json" in nombres and "temas.py" in nombres
+    assert sum(1 for n in nombres if n.endswith("/practica.json")) == 18
+
+
 def test_descarga_publica_y_personal(cliente, crear_cuenta, monkeypatch):
     monkeypatch.setenv("AMATISTA_URL_API", "https://api.amatista.test")
     monkeypatch.setenv("AMATISTA_URL_PWA", "https://amatista.test")
@@ -319,15 +335,15 @@ def test_descarga_publica_y_personal(cliente, crear_cuenta, monkeypatch):
     publica = cliente.get(f"{API}/descargas/windows")
     assert publica.status_code == 200 and publica.headers["content-type"] == "application/zip"
     paquete = zipfile.ZipFile(io.BytesIO(publica.content))
-    assert "Amatista/Instalar Amatista.bat" in paquete.namelist()
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read(f"Amatista/amatista-{motor.VERSION_ADDON}.zip")))
+    assert f"{motor.construir.CARPETA_PAQUETE}/Instalar Amatista.bat" in paquete.namelist()
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read(f"{motor.construir.CARPETA_PAQUETE}/amatista-{motor.VERSION_ADDON}.zip")))
     config = json.loads(extension.read("config.json"))
     assert config["servidor"] == "https://api.amatista.test" and "vinculo" not in config
 
     personal = cliente.get(f"{API}/descargas/linux", headers=alumno)
     assert personal.headers["cache-control"] == "private, no-store"
     paquete = zipfile.ZipFile(io.BytesIO(personal.content))
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read(f"Amatista/amatista-{motor.VERSION_ADDON}.zip")))
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read(f"{motor.construir.CARPETA_PAQUETE}/amatista-{motor.VERSION_ADDON}.zip")))
     vinculo = json.loads(extension.read("config.json"))["vinculo"]
     # El add-on canjea el vínculo del paquete al abrir Blender: queda conectado sin pasos.
     listo = cliente.post(f"{API}/vinculos/{vinculo['id']}/estado", json={"secreto": vinculo["secreto"]}).json()

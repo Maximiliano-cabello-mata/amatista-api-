@@ -280,6 +280,7 @@ def estado(request: Request):
     servidor = url_api(request)
     return {
         "api": "v1",
+        "nombre": motor.construir.NOMBRE_COMPLETO,
         "version_addon": motor.VERSION_ADDON,
         "version_motor": motor.VERSION_MOTOR,
         "blender_minimo": motor.BLENDER_MINIMO,
@@ -671,6 +672,43 @@ def sincronizar_practicas(db: Session, autor: Optional[Usuario], publicar: bool)
     return {"practicas": registradas, "errores": errores, "lecciones_enlazadas": enlazar_lecciones(db)}
 
 
+def sincronizar_al_arrancar(db: Session) -> dict:
+    """Al arrancar, registra solas las prácticas nuevas o cambiadas de practices/blender/.
+
+    Así el servidor «detecta» los practica.json del repositorio sin correr
+    «contenido.py practicas» a mano. Publica las prácticas nuevas y las que ya
+    seguían al repositorio (su versión publicada era la última); una práctica
+    que el equipo dejó en borrador o archivada se registra pero no se publica.
+    Con commit. Se apaga con AMATISTA_SINCRONIZAR_PRACTICAS=0.
+    """
+    momento = ahora()
+    nuevas, actualizadas, errores = [], [], []
+    for ruta, datos in motor.practicas_del_repositorio():
+        anterior = db.get(Practica, datos.get("id"))
+        seguia_al_repo = anterior is not None and anterior.estado == "publicado" and anterior.version_publicada == anterior.version
+        try:
+            respuesta = registrar_version(
+                db, PracticaSubida(definicion=datos, nota=f"Repositorio (al arrancar): {ruta.parent.name}/{ruta.name}"),
+                None, "repositorio", momento,
+            )
+        except HTTPException as error:
+            detalle = error.detail if isinstance(error.detail, str) else "; ".join(error.detail["errores"][:3])
+            errores.append(f"{ruta.parent.name}/{ruta.name}: {detalle}")
+            continue
+        if respuesta.get("sin_cambios"):
+            continue
+        practica = db.get(Practica, respuesta["id"])
+        if anterior is None or seguia_al_repo:
+            practica.version_publicada = practica.version
+            practica.estado = "publicado"
+            practica.publicado_en = momento
+        (nuevas if anterior is None else actualizadas).append(practica.id)
+    db.flush()
+    enlazadas = enlazar_lecciones(db)
+    db.commit()
+    return {"nuevas": nuevas, "actualizadas": actualizadas, "errores": errores, "lecciones_enlazadas": enlazadas}
+
+
 @router.post("/practicas/sincronizar")
 def sincronizar_repositorio(publicar: bool = False, db: Session = Depends(obtener_db), usuario: Usuario = Depends(editor)):
     """Registra en Oracle las prácticas de practices/blender/ (botón del panel)."""
@@ -889,7 +927,7 @@ def descargar(sistema: str, request: Request, db: Session = Depends(obtener_db),
     if sistema not in SISTEMAS:
         raise HTTPException(status_code=404, detail=f"Elige uno de: {', '.join(SISTEMAS)}.")
     servidor, plataforma = url_api(request), url_pwa(request)
-    nombre = f"Amatista-{motor.VERSION_ADDON}-{sistema}.zip"
+    nombre = motor.construir.nombre_descarga(sistema)
     if usuario is None:
         return _zip(_paquete_publico(sistema, servidor, plataforma), nombre, privado=False)
     fila, secreto = crear_vinculo(db, f"{PREFIJO_DISPOSITIVO} · paquete {sistema}", ahora(),
