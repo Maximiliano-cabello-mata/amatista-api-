@@ -224,3 +224,11 @@ def test_con_sqlite_avisa_que_es_para_oracle(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'diagnostico.db'}")
     assert diagnostico_oracle.main() == 1
     assert "es para Oracle" in capsys.readouterr().out
+
+
+def test_base_con_010_pide_011_sin_recrear_tablas():
+    real = esquema_correcto()
+    del real['ADDON_ENLACES']['DETALLE']
+    assert 'Falta la columna ADDON_ENLACES.DETALLE.' in comparar(real)
+    assert '011_detalle_instructor.sql' in ' '.join(solucion(real))
+    assert '001_esquema' not in ' '.join(solucion(real))

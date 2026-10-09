@@ -187,3 +187,11 @@ Guía completa para la base real, paso a paso:
   Guía: docs/base-de-datos/03_migracion.md. "exportar" también sirve como
   respaldo antes de ejecutar cualquier script.
 =============================================================================
+
+011_detalle_instructor.sql (Motor 3.5.1)
+  Ejecutar después de 010 y ANTES del backend 3.5.1, como ADMIN con F5.
+  Agrega ADDON_ENLACES.DETALLE (CLOB JSON, anulable). Siguen siendo 20
+  tablas; ADDON_ENLACES tiene 12 columnas. No borra usuarios ni progreso.
+  Los permisos de tabla existentes también cubren la nueva columna.
+  Diagnóstico vigente: python diagnostico_oracle.py. Las consultas de
+  conteo de columnas en scripts anteriores describen su versión histórica.

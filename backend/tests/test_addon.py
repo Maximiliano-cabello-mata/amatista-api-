@@ -313,13 +313,13 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 def test_la_descarga_es_amatista_motor_3_5_con_todo_lo_nuevo(cliente):
     """La plataforma entrega la versión del repositorio, con las 18 prácticas y las temáticas."""
     estado = cliente.get(f"{API}/estado").json()
-    assert estado["nombre"] == "Amatista Motor 3.5" and estado["version_addon"] == "3.5.0"
+    assert estado["nombre"] == "Amatista Motor 3.5" and estado["version_addon"] == "3.5.1"
     respuesta = cliente.get(f"{API}/descargas/macos")
     assert 'filename="Amatista-Motor-3.5-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
     assert "Amatista Motor 3.5/LEEME.txt" in paquete.namelist()
     assert paquete.read("Amatista Motor 3.5/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 3.5 PARA BLENDER")
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.5/amatista-3.5.0.zip")))
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.5/amatista-3.5.1.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
     assert "practicas/temas.json" in nombres and "temas.py" in nombres

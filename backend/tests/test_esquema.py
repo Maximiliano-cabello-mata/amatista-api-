@@ -261,9 +261,9 @@ def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
 
 
 def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas():
-    """El último script con verificación (010) la trae vigente para todas las tablas."""
+    """El último script con verificación (011) la trae vigente para todas las tablas."""
     esperadas = dict(
-        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("010"), re.I)
+        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("011"), re.I)
     )
     assert {tabla: int(n) for tabla, n in esperadas.items()} == {
         nombre: len(tabla.columns) for nombre, tabla in TABLAS.items()

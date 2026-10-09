@@ -213,3 +213,72 @@ def test_empezar_de_nuevo_pide_confirmacion(cliente, crear_cuenta):
     assert r.status_code == 200 and r.json()["entregada"]
     assert latir(cliente, blender, practica_id="blender.bp.m2.espada")["orden"]["tipo"] == "reiniciar"
     assert cliente.post(f"{API}/ordenes", json={"tipo": "borrar_todo"}, headers=alumno).status_code == 422
+
+
+def test_detalle_visible_desde_otro_proceso(cliente, crear_cuenta):
+    """Una API nueva lee el latido de la anterior desde la base, sin memoria compartida."""
+    import json
+    import subprocess
+    import sys
+
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id='espada', detalle=DETALLE)
+    codigo = '''
+import json, sys
+from fastapi.testclient import TestClient
+from main import app
+with TestClient(app) as c:
+    r = c.get('/api/addon/v1/enlace', headers=json.loads(sys.stdin.read()))
+    assert r.status_code == 200, r.text
+    print(json.dumps(r.json()))
+'''
+    proceso = subprocess.run([sys.executable, '-c', codigo], input=json.dumps(alumno),
+                             text=True, capture_output=True, timeout=30)
+    assert proceso.returncode == 0, proceso.stderr
+    datos = json.loads(proceso.stdout.strip().splitlines()[-1])
+    assert datos['blender'][0]['detalle']['mensaje'] == DETALLE['mensaje']
+
+
+def test_detalle_cambia_sin_cambiar_paso_y_caduca(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    _, otro = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id='espada', detalle=DETALLE)
+    latir(cliente, blender, practica_id='espada', detalle={**DETALLE, 'mensaje': 'Ahora falta la punta'})
+    assert cliente.get(f'{API}/enlace', headers=alumno).json()['blender'][0]['detalle']['mensaje'] == 'Ahora falta la punta'
+    assert cliente.get(f'{API}/enlace', headers=otro).json()['blender'] == []
+    with Session(conexion.motor()) as db:
+        fila = db.query(AddonEnlace).one()
+        fila.visto_en = ahora() - timedelta(seconds=26)
+        db.commit()
+    assert cliente.get(f'{API}/enlace', headers=alumno).json()['blender'][0]['detalle'] is None
+
+
+def test_detalle_no_se_arrastra_a_otra_practica(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id='espada', detalle=DETALLE)
+    latir(cliente, blender, practica_id='tren')
+    assert cliente.get(f'{API}/enlace', headers=alumno).json()['blender'][0]['detalle'] is None
+
+
+def test_detalle_igual_no_escribe_cada_latido(cliente, crear_cuenta):
+    from unittest.mock import patch
+    from api.enlace import Latido, latido
+    from database.modelos import Sesion, Usuario
+    from starlette.requests import Request
+
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id='espada', detalle=DETALLE)
+    # Aislar el enlace de las escrituras de autenticación.
+    with Session(conexion.motor()) as db:
+        fila = db.query(AddonEnlace).one()
+        request = Request({'type': 'http'})
+        request.state.sesion_id = fila.sesion_id
+        usuario = db.get(Usuario, db.get(Sesion, fila.sesion_id).usuario_id)
+        cuerpo = Latido(practica_id='espada', version_addon='3.4.0', version_blender='5.0.1', detalle=DETALLE)
+        with patch.object(db, 'commit', wraps=db.commit) as commit:
+            latido(cuerpo, request, db, usuario)
+            commit.assert_not_called()

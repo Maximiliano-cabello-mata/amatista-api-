@@ -504,6 +504,8 @@ class AddonEnlace(Base):
     # Orden pendiente para este Blender: {"id", "tipo", "datos"}; se borra al entregarla.
     orden: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(1000))
     orden_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    # sql/011: compartido entre procesos; se sobrescribe, no acumula historial.
+    detalle: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class AddonAjustes(Base):

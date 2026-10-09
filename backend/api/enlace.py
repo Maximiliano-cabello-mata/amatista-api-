@@ -58,12 +58,6 @@ AJUSTES_POR_DEFECTO: Dict[str, Any] = {
 ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            # Motor 3.5: la plataforma maneja la práctica en Blender.
            "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica")
-# Lo que Blender está mostrando ahora (paso, mensaje del instructor, lista de la figura). Vive en la
-# memoria del proceso: cambia cada pocos segundos y no vale la pena escribirlo en Oracle. Con dos
-# procesos de uvicorn (T-081) habría que compartirlo; hoy el servicio corre con uno.
-VIVO: Dict[str, Dict[str, Any]] = {}
-MAX_VIVO = 2000
-
 LIMITE_LATIDO = limitar(40, por="cuenta")  # 12 por minuto con el intervalo normal
 LIMITE_ORDENES = limitar(30, por="cuenta")
 
@@ -101,10 +95,7 @@ def _sin_tablas(error: SQLAlchemyError) -> bool:
 
 
 def _enlace_publico(fila: AddonEnlace, momento, titulos: Dict[str, str]) -> Dict[str, Any]:
-    vivo = VIVO.get(fila.sesion_id)
-    detalle = None
-    if vivo and momento - vivo["en"] <= EN_LINEA and vivo.get("practica_id") == fila.practica_id:
-        detalle = vivo["detalle"]
+    detalle = _leer(fila.detalle) if momento - fila.visto_en <= EN_LINEA else None
     return {
         "id": fila.sesion_id[:16],
         "en_linea": momento - fila.visto_en <= EN_LINEA,
@@ -211,6 +202,9 @@ def latido(cuerpo: Latido, request: Request, db: Session = Depends(obtener_db),
             fila.orden, fila.orden_en, orden = None, None, None
         elif orden and fila.orden_en and momento - fila.orden_en > VIDA_ORDEN:
             fila.orden, fila.orden_en, orden = None, None, None
+        detalle = _compactar(cuerpo.detalle.model_dump()) if cuerpo.detalle and cuerpo.practica_id else None
+        if fila.detalle != detalle:
+            fila.detalle = detalle
         cambio = nuevo or estado != antes or db.is_modified(fila)
         if cambio or momento - fila.visto_en > REESCRIBIR:
             (fila.practica_id, fila.paso, fila.progreso, fila.enfocado, fila.version_addon,
@@ -223,18 +217,7 @@ def latido(cuerpo: Latido, request: Request, db: Session = Depends(obtener_db),
         if _sin_tablas(error):
             return {"enlace": False, "intervalo": 60, "orden": None, "ajustes": dict(AJUSTES_POR_DEFECTO)}
         raise error_bd(error, "/api/addon/v1/enlace")
-    _guardar_vivo(sesion.id, cuerpo, momento)
     return {"enlace": True, "intervalo": INTERVALO, "orden": orden, "ajustes": ajustes}
-
-
-def _guardar_vivo(sesion_id: str, cuerpo: Latido, momento) -> None:
-    if cuerpo.detalle is None or not cuerpo.practica_id:
-        VIVO.pop(sesion_id, None)
-        return
-    if sesion_id not in VIVO and len(VIVO) >= MAX_VIVO:  # nunca crece sin límite: se van los más viejos
-        for clave in sorted(VIVO, key=lambda k: VIVO[k]["en"])[: MAX_VIVO // 10]:
-            VIVO.pop(clave, None)
-    VIVO[sesion_id] = {"en": momento, "practica_id": cuerpo.practica_id, "detalle": cuerpo.detalle.model_dump()}
 
 
 # --- La plataforma ------------------------------------------------------------------
