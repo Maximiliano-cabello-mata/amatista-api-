@@ -315,14 +315,29 @@ def resumen_definicion(db: Session, practica: Practica, version: int) -> Dict[st
         "level": definicion.get("level"),
         "estimatedMinutes": definicion.get("estimatedMinutes"),
         "targets": [
-            {"id": t.get("id"), "title": t.get("title"), "optional": t.get("optional")}
+            {"id": t.get("id"), "title": t.get("title"), "optional": t.get("optional"), "validator": t.get("validator"),
+             "params": {"aspects": (t.get("params") or {}).get("aspects")}}
             for t in definicion.get("targets", []) if isinstance(t, dict)
         ],
+        "example": bool(definicion.get("example")),
     }
     if len(_RESUMENES_DEF) > 1000:
         _RESUMENES_DEF.clear()
     _RESUMENES_DEF[clave] = resumen
     return resumen
+
+
+def pasos_de(definicion: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Los pasos de la ruta; con ejemplo resuelto (motor 3.5) el último es «coincide con el ejemplo»."""
+    objetivos = [t for t in definicion.get("targets", []) if isinstance(t, dict)]
+    pasos = [{"id": t.get("id"), "titulo": t.get("title")} for t in objetivos if not t.get("optional")]
+    revisa_todo = any(t.get("validator") == "example.matches" and not (t.get("params") or {}).get("aspects")
+                      for t in objetivos)
+    if definicion.get("example") and not revisa_todo:
+        ids = {p["id"] for p in pasos}
+        pasos.append({"id": "ejemplo" if "ejemplo" not in ids else "coincide-con-el-ejemplo",
+                      "titulo": "Tu práctica coincide con el ejemplo"})
+    return pasos
 
 
 def practica_meta(practica: Practica, definicion: Dict[str, Any], version: int,
@@ -336,8 +351,7 @@ def practica_meta(practica: Practica, definicion: Dict[str, Any], version: int,
         "version": version,
         "curso_id": practica.curso_id,
         "leccion_id": practica.leccion_id,
-        "pasos": [{"id": t.get("id"), "titulo": t.get("title")} for t in definicion.get("targets", [])
-                  if isinstance(t, dict) and not t.get("optional")],
+        "pasos": pasos_de(definicion),
         "mi_progreso": progreso_meta(progreso),
     }
     if equipo:
@@ -556,6 +570,7 @@ def leer_practica(practica_id: str, version: Optional[int] = None, db: Session =
     progreso = db.get(ProgresoPractica, (usuario.id, practica.id)) if usuario else None
     return {
         **practica_meta(practica, definicion, elegida, progreso, es_equipo(usuario)),
+        "ejemplo": motor.ejemplo_de(definicion),  # motor 3.5: lo que espera la práctica, paso a paso y en código
         "definicion": definicion,
     }
 

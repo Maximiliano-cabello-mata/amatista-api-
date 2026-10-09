@@ -57,7 +57,7 @@ AJUSTES_POR_DEFECTO: Dict[str, Any] = {
 }
 ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            # Motor 3.5: la plataforma maneja la práctica en Blender.
-           "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar")
+           "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica")
 # Lo que Blender está mostrando ahora (paso, mensaje del instructor, lista de la figura). Vive en la
 # memoria del proceso: cambia cada pocos segundos y no vale la pena escribirlo en Oracle. Con dos
 # procesos de uvicorn (T-081) habría que compartirlo; hoy el servicio corre con uno.
@@ -162,6 +162,7 @@ class ItemLista(BaseModel):
     ok: bool = False
     estado: str = Field(default="", max_length=20)
     consejo: str = Field(default="", max_length=400)
+    aspecto: str = Field(default="", max_length=40)  # la figura, materiales, luces… (el ejemplo resuelto)
 
 
 class Detalle(BaseModel):
@@ -265,7 +266,7 @@ def ver_enlace(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usu
 
 class Orden(BaseModel):
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
-                  "guardar", "reiniciar"]
+                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
     confirmar: bool = False  # «reiniciar» lo exige: la plataforma pregunta antes
 
