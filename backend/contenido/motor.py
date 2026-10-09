@@ -36,7 +36,7 @@ BLENDER_MINIMO = construir.leer_manifiesto()["blender_version_min"]
 
 __all__ = [
     "MOTOR", "VERSION_MOTOR", "VERSION_ADDON", "BLENDER_MINIMO", "InvalidPracticeError",
-    "compilar", "huella", "evaluar", "practicas_del_repositorio", "construir", "pedagogy",
+    "compilar", "huella", "evaluar", "ejemplo_de", "practicas_del_repositorio", "construir", "pedagogy",
 ]
 
 
@@ -65,6 +65,41 @@ def evaluar(definicion: Dict[str, Any], escena: Dict[str, Any], pistas: Dict[str
     reporte = MOTOR.evaluate(practica, estado)
     autonomia = pedagogy.classify(reporte.completed, pistas, correcciones)
     return practica, reporte, autonomia
+
+
+_EJEMPLOS: Dict[str, Any] = {}
+
+
+def ejemplo_de(definicion: Dict[str, Any]):
+    """El ejemplo resuelto para la lección (motor 3.5): pasos en palabras, en código y qué revisa. None si no hay."""
+    if not isinstance(definicion, dict) or not isinstance(definicion.get("example"), dict):
+        return None
+    clave = huella(definicion)
+    if clave in _EJEMPLOS:
+        return _EJEMPLOS[clave]
+    from amatista_engine.ejemplo import ASPECTOS, aspectos_del_ejemplo, describir, escena_esperada, lo_que_pide
+    from amatista_engine.practice.loader import pieza_como_dict
+
+    try:
+        practica = parse_practice(definicion)
+    except InvalidPracticeError:
+        return None
+    if practica.example is None:
+        return None
+    pasos = list(practica.example.steps)
+    partes = [pieza_como_dict(p) for p in practica.reference.compared] if practica.reference else []
+    aspectos = list(practica.example.check) or aspectos_del_ejemplo(escena_esperada(pasos, partes), lo_que_pide(pasos))
+    salida = {
+        "titulo": practica.example.title or practica.title,
+        "descripcion": practica.example.description,
+        "pasos": describir(pasos, partes),
+        "revisa": [ASPECTOS[a] for a in aspectos],
+        "codigo": pasos,
+    }
+    if len(_EJEMPLOS) > 200:
+        _EJEMPLOS.clear()
+    _EJEMPLOS[clave] = salida
+    return salida
 
 
 def practicas_del_repositorio() -> List[Tuple[Path, Dict[str, Any]]]:

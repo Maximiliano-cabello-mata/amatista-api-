@@ -8,7 +8,10 @@ un Blender conectado. Ahora:
   práctica abierta, el paso, el progreso y si está en modo enfocado. La
   respuesta trae la **orden pendiente** y los **ajustes** del alumno.
 - La plataforma ve sus Blender en vivo (GET /enlace) y les deja órdenes
-  (POST /ordenes): abrir una práctica, enfocar Blender o mostrar todo.
+  (POST /ordenes): abrir una práctica, enfocar Blender o mostrar todo y,
+  desde el motor 3.5, comprobar, pedir pista, «Hazlo conmigo», guardar y
+  empezar de nuevo. El latido trae también lo que muestra el instructor
+  (paso, mensaje y la lista de la figura): la lección lo muestra en vivo.
 - «Mi Blender» guarda cómo se ve Blender para el alumno (GET/PUT /ajustes):
   modo enfocado, acompañamiento, avisos. El add-on los aplica solo.
 
@@ -52,7 +55,14 @@ AJUSTES_POR_DEFECTO: Dict[str, Any] = {
     "avisos_herramientas": True,
     "tarjeta_3d": True,
 }
-ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar")
+ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
+           # Motor 3.5: la plataforma maneja la práctica en Blender.
+           "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica")
+# Lo que Blender está mostrando ahora (paso, mensaje del instructor, lista de la figura). Vive en la
+# memoria del proceso: cambia cada pocos segundos y no vale la pena escribirlo en Oracle. Con dos
+# procesos de uvicorn (T-081) habría que compartirlo; hoy el servicio corre con uno.
+VIVO: Dict[str, Dict[str, Any]] = {}
+MAX_VIVO = 2000
 
 LIMITE_LATIDO = limitar(40, por="cuenta")  # 12 por minuto con el intervalo normal
 LIMITE_ORDENES = limitar(30, por="cuenta")
@@ -91,6 +101,10 @@ def _sin_tablas(error: SQLAlchemyError) -> bool:
 
 
 def _enlace_publico(fila: AddonEnlace, momento, titulos: Dict[str, str]) -> Dict[str, Any]:
+    vivo = VIVO.get(fila.sesion_id)
+    detalle = None
+    if vivo and momento - vivo["en"] <= EN_LINEA and vivo.get("practica_id") == fila.practica_id:
+        detalle = vivo["detalle"]
     return {
         "id": fila.sesion_id[:16],
         "en_linea": momento - fila.visto_en <= EN_LINEA,
@@ -103,6 +117,7 @@ def _enlace_publico(fila: AddonEnlace, momento, titulos: Dict[str, str]) -> Dict
         "version_addon": fila.version_addon,
         "version_blender": fila.version_blender,
         "orden_pendiente": (_leer(fila.orden) or {}).get("tipo"),
+        "detalle": detalle,
     }
 
 
@@ -142,6 +157,29 @@ def ordenar_abrir(db: Session, usuario_id: str, practica_id: str) -> int:
 # --- El add-on -------------------------------------------------------------------
 
 
+class ItemLista(BaseModel):
+    texto: str = Field(max_length=60)
+    ok: bool = False
+    estado: str = Field(default="", max_length=20)
+    consejo: str = Field(default="", max_length=400)
+    aspecto: str = Field(default="", max_length=40)  # la figura, materiales, luces… (el ejemplo resuelto)
+
+
+class Detalle(BaseModel):
+    """Lo que el instructor muestra en Blender ahora (motor 3.5)."""
+
+    titulo: str = Field(default="", max_length=120)  # el paso actual
+    mensaje: str = Field(default="", max_length=500)  # lo que dice el instructor
+    numero: int = Field(default=0, ge=0, le=99)
+    total: int = Field(default=0, ge=0, le=99)
+    figura: str = Field(default="", max_length=120)  # título de la lista («Forja la silueta…»)
+    lista: List[ItemLista] = Field(default_factory=list, max_length=16)
+    modo: str = Field(default="", max_length=20)  # OBJECT, EDIT_MESH…
+    pistas: int = Field(default=0, ge=0, le=9)  # pistas que quedan en el paso
+    accion: str = Field(default="", max_length=80)  # el texto del «Hazlo conmigo» si hay
+    completada: bool = False
+
+
 class Latido(BaseModel):
     practica_id: Optional[str] = Field(default=None, max_length=80)
     paso: Optional[str] = Field(default=None, max_length=80)
@@ -150,6 +188,7 @@ class Latido(BaseModel):
     version_addon: Optional[str] = Field(default=None, max_length=20)
     version_blender: Optional[str] = Field(default=None, max_length=20)
     orden_hecha: Optional[str] = Field(default=None, max_length=12)  # id de la orden que ya cumplió
+    detalle: Optional[Detalle] = None  # motor 3.5: lo que muestra el instructor
 
 
 @router.post("/enlace", dependencies=[Depends(LIMITE_LATIDO)])
@@ -184,7 +223,18 @@ def latido(cuerpo: Latido, request: Request, db: Session = Depends(obtener_db),
         if _sin_tablas(error):
             return {"enlace": False, "intervalo": 60, "orden": None, "ajustes": dict(AJUSTES_POR_DEFECTO)}
         raise error_bd(error, "/api/addon/v1/enlace")
+    _guardar_vivo(sesion.id, cuerpo, momento)
     return {"enlace": True, "intervalo": INTERVALO, "orden": orden, "ajustes": ajustes}
+
+
+def _guardar_vivo(sesion_id: str, cuerpo: Latido, momento) -> None:
+    if cuerpo.detalle is None or not cuerpo.practica_id:
+        VIVO.pop(sesion_id, None)
+        return
+    if sesion_id not in VIVO and len(VIVO) >= MAX_VIVO:  # nunca crece sin límite: se van los más viejos
+        for clave in sorted(VIVO, key=lambda k: VIVO[k]["en"])[: MAX_VIVO // 10]:
+            VIVO.pop(clave, None)
+    VIVO[sesion_id] = {"en": momento, "practica_id": cuerpo.practica_id, "detalle": cuerpo.detalle.model_dump()}
 
 
 # --- La plataforma ------------------------------------------------------------------
@@ -215,14 +265,20 @@ def ver_enlace(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usu
 
 
 class Orden(BaseModel):
-    tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar"]
+    tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
+                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
+    confirmar: bool = False  # «reiniciar» lo exige: la plataforma pregunta antes
 
 
 @router.post("/ordenes", dependencies=[Depends(LIMITE_ORDENES)])
 def nueva_orden(cuerpo: Orden, db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
     """La plataforma le pide algo al Blender abierto del alumno."""
     datos: Dict[str, Any] = {}
+    if cuerpo.tipo == "reiniciar" and not cuerpo.confirmar:
+        raise HTTPException(status_code=400, detail="Empezar de nuevo necesita confirmación.")
+    if cuerpo.practica_id and cuerpo.tipo != "abrir_practica":
+        datos["practica_id"] = cuerpo.practica_id  # Blender solo la cumple si sigue en esa práctica
     if cuerpo.tipo == "abrir_practica":
         practica = db.get(Practica, cuerpo.practica_id or "")
         if practica is None:

@@ -157,3 +157,59 @@ def test_sin_010_todo_sigue_funcionando(cliente, crear_cuenta, sembrar):  # noqa
     progreso = cliente.get(f"{API}/mi-progreso?practica_id=blender.n1.mesa", headers=alumno).json()
     assert progreso["practicas"] and progreso["practicas"][0]["practica_id"] == "blender.n1.mesa"
     assert cliente.put(f"{API}/ajustes", json={"enfoque": "nunca"}, headers=alumno).status_code == 503
+
+
+# --- Motor 3.5: el instructor en vivo y más órdenes ---------------------------------------
+
+DETALLE = {
+    "titulo": "Forja la silueta: guarda, hoja y punta", "mensaje": "Falta la parte «Guarda»: …", "numero": 3,
+    "total": 5, "figura": "Forja la silueta", "modo": "EDIT_MESH", "pistas": 2, "accion": "Entrar a Edición conmigo",
+    "lista": [{"texto": "Mango", "ok": True, "estado": "Bien"},
+              {"texto": "Guarda", "ok": False, "estado": "Falta", "consejo": "Con Ctrl + R haz un corte…"}],
+}
+
+
+def test_la_leccion_ve_lo_que_dice_el_instructor(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id="blender.bp.m2.espada", paso="silueta", progreso=25, detalle=DETALLE)
+    (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
+    assert b["detalle"]["titulo"].startswith("Forja") and b["detalle"]["lista"][1]["estado"] == "Falta"
+    assert b["detalle"]["modo"] == "EDIT_MESH" and b["detalle"]["pistas"] == 2
+    # Sin práctica abierta (o con un add-on 3.4 que no lo manda) no queda un detalle viejo.
+    latir(cliente, blender)
+    (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
+    assert b["detalle"] is None
+
+
+def test_el_detalle_tiene_limites(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    largo = {**DETALLE, "mensaje": "x" * 600}
+    respuesta = cliente.post(f"{API}/enlace", json={"practica_id": "p", "detalle": largo}, headers=blender)
+    assert respuesta.status_code == 422
+    muchos = {**DETALLE, "lista": [{"texto": "a"}] * 17}
+    assert cliente.post(f"{API}/enlace", json={"practica_id": "p", "detalle": muchos}, headers=blender).status_code == 422
+
+
+def test_la_plataforma_maneja_la_practica(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id="blender.bp.m2.espada")
+    for tipo in ("comprobar", "pista", "hazlo_conmigo", "guardar"):
+        r = cliente.post(f"{API}/ordenes", json={"tipo": tipo, "practica_id": "blender.bp.m2.espada"}, headers=alumno)
+        assert r.status_code == 200 and r.json()["entregada"], r.text
+        orden = latir(cliente, blender, practica_id="blender.bp.m2.espada")["orden"]
+        assert orden["tipo"] == tipo and orden["datos"] == {"practica_id": "blender.bp.m2.espada"}
+        latir(cliente, blender, practica_id="blender.bp.m2.espada", orden_hecha=orden["id"])
+
+
+def test_empezar_de_nuevo_pide_confirmacion(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id="blender.bp.m2.espada")
+    assert cliente.post(f"{API}/ordenes", json={"tipo": "reiniciar"}, headers=alumno).status_code == 400
+    r = cliente.post(f"{API}/ordenes", json={"tipo": "reiniciar", "confirmar": True}, headers=alumno)
+    assert r.status_code == 200 and r.json()["entregada"]
+    assert latir(cliente, blender, practica_id="blender.bp.m2.espada")["orden"]["tipo"] == "reiniciar"
+    assert cliente.post(f"{API}/ordenes", json={"tipo": "borrar_todo"}, headers=alumno).status_code == 422
