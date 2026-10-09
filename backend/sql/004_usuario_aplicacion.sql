@@ -3,7 +3,7 @@
 -- (Oracle Autonomous Database ATP 26ai)
 --
 -- Crea AMATISTA_APP para que el backend NO se conecte como ADMIN. Si alguien
--- obtiene backend/.env, solo puede leer y escribir filas de las 18 tablas de
+-- obtiene backend/.env, solo puede leer y escribir filas de las 20 tablas de
 -- Amatista: no puede borrar tablas, crear usuarios ni tocar otros esquemas.
 --
 -- Permisos mínimos:
@@ -65,9 +65,12 @@ DECLARE
                 'NIVELES', 'HABILIDADES', 'HABILIDADES_ALUMNO', 'EVALUACIONES_RUBRICA',
                 'VERSIONES_BLENDER', 'VERIFICACIONES_BLENDER',
                 -- 007 (motor de prácticas de Blender)
-                'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS');
+                'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
+                -- 010 (enlace en vivo con Blender)
+                'ADDON_ENLACES', 'ADDON_AJUSTES');
   v_opcional  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
-                'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS');
+                'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
+                'ADDON_ENLACES', 'ADDON_AJUSTES');
 
   FUNCTION existe(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
     v_n PLS_INTEGER;
@@ -114,7 +117,7 @@ BEGIN
     IF existe(v_tablas(i)) THEN
       EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ' || v_tablas(i) || ' TO amatista_app';
     ELSE
-      DBMS_OUTPUT.PUT_LINE('Sin ' || v_tablas(i) || ' todavía: 007 le dará los permisos al crearla.');
+      DBMS_OUTPUT.PUT_LINE('Sin ' || v_tablas(i) || ' todavía: 007 o 010 le darán los permisos al crearla.');
     END IF;
   END LOOP;
   DBMS_OUTPUT.PUT_LINE('Permisos listos. Configura DB_USER=AMATISTA_APP y DB_ESQUEMA='
@@ -122,7 +125,7 @@ BEGIN
 END;
 /
 
--- Verificar: CREATE SESSION y 4 permisos por cada una de las 18 tablas (72 filas).
+-- Verificar: CREATE SESSION y 4 permisos por cada una de las 20 tablas (80 filas).
 SELECT privilege
   FROM dba_sys_privs
  WHERE grantee = 'AMATISTA_APP';

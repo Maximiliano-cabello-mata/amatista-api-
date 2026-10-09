@@ -310,19 +310,22 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 # --- Descargas ------------------------------------------------------------------
 
 
-def test_la_descarga_es_amatista_motor_3_3_con_todo_lo_nuevo(cliente):
+def test_la_descarga_es_amatista_motor_3_4_con_todo_lo_nuevo(cliente):
     """La plataforma entrega la versión del repositorio, con las 18 prácticas y las temáticas."""
     estado = cliente.get(f"{API}/estado").json()
-    assert estado["nombre"] == "Amatista Motor 3.3" and estado["version_addon"] == "3.3.0"
+    assert estado["nombre"] == "Amatista Motor 3.4" and estado["version_addon"] == "3.4.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-3.3-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-3.4-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 3.3/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 3.3/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 3.3 PARA BLENDER")
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.3/amatista-3.3.0.zip")))
+    assert "Amatista Motor 3.4/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 3.4/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 3.4 PARA BLENDER")
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.4/amatista-3.4.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
     assert "practicas/temas.json" in nombres and "temas.py" in nombres
+    # Motor 3.4: modo enfocado, enlace en vivo y el reconocedor de figuras con su biblioteca.
+    assert {"enfoque.py", "enlace.py", "interfaz/herramientas.py"} <= set(nombres)
+    assert "amatista_engine/figures/biblioteca.json" in nombres
     assert sum(1 for n in nombres if n.endswith("/practica.json")) == 18
     # Motor 3.3: cada práctica de modelado trae la imagen y el plano de su modelo de referencia.
     assert "practicas/principiante/m1-tren/referencia.jpg" in nombres

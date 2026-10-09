@@ -810,7 +810,7 @@ class Apertura(BaseModel):
 @router.post("/practicas/{practica_id}/abrir")
 def abrir_practica(practica_id: str, cuerpo: Optional[Apertura] = None, db: Session = Depends(obtener_db),
                    usuario: Usuario = Depends(usuario_requerido)):
-    """La práctica pasa a ser la «actual»: Blender la abre sola al conectarse."""
+    """La práctica pasa a ser la «actual»: Blender la abre al conectarse o, si ya está abierto, al instante."""
     practica = obtener_practica(db, practica_id, usuario)
     momento = ahora()
     fila = db.get(ProgresoPractica, (usuario.id, practica.id))
@@ -823,7 +823,16 @@ def abrir_practica(practica_id: str, cuerpo: Optional[Apertura] = None, db: Sess
     fila.abierta_en = fila.abierta_en or momento
     fila.actualizado_en = momento
     confirmar(db, f"/api/addon/v1/practicas/{practica_id}/abrir")
-    return progreso_meta(fila)
+    respuesta = {**progreso_meta(fila), "abierta_en_blender": False}
+    # Motor 3.4: si el alumno tiene Blender abierto, la práctica se abre ahí sola (sql/010).
+    # Va después de guardar el avance: sin 010, ordenar_abrir deshace su transacción.
+    if cuerpo is None or cuerpo.origen == "plataforma":
+        from api.enlace import ordenar_abrir
+
+        if ordenar_abrir(db, usuario.id, practica.id):
+            confirmar(db, f"/api/addon/v1/practicas/{practica_id}/abrir")
+            respuesta["abierta_en_blender"] = True
+    return respuesta
 
 
 @router.get("/practica-actual")

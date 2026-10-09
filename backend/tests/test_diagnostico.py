@@ -43,7 +43,7 @@ def test_esquema_correcto_no_tiene_problemas():
     assert comparar(real) == []
 
 
-def test_esperado_incluye_las_dieciocho_tablas():
+def test_esperado_incluye_las_veinte_tablas():
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -63,6 +63,8 @@ def test_esperado_incluye_las_dieciocho_tablas():
         "PRACTICAS",
         "PRACTICA_VERSIONES",
         "PROGRESO_PRACTICAS",
+        "ADDON_ENLACES",
+        "ADDON_AJUSTES",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
     assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"
@@ -121,6 +123,16 @@ def test_base_con_007_pide_solo_008():
     recomendacion = " ".join(solucion(real))
     assert "008_cursos_por_ruta.sql" in recomendacion
     assert "007_motor" not in recomendacion
+    assert "NO ejecutes 001" in recomendacion
+
+
+def test_base_con_009_pide_solo_010():
+    """Producción con todo hasta 009: falta solo el enlace en vivo con Blender (motor 3.4)."""
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_010}
+    assert "Falta la tabla ADDON_ENLACES." in comparar(real)
+    recomendacion = " ".join(solucion(real))
+    assert "010_enlace_blender.sql" in recomendacion
+    assert "007_motor" not in recomendacion and "008_" not in recomendacion
     assert "NO ejecutes 001" in recomendacion
 
 

@@ -18,7 +18,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import addon, admin, auth, blender, contenido, eventos, niveles, progreso, sesiones
+from api import addon, admin, auth, blender, contenido, enlace, eventos, niveles, progreso, sesiones
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
@@ -144,6 +144,7 @@ app.include_router(contenido.router)
 app.include_router(niveles.router)  # reestructuración v3: niveles y mapa del curso
 app.include_router(blender.router)  # versiones de Blender y matriz de compatibilidad
 app.include_router(addon.router)  # add-on de Blender y motor de prácticas (sql/007)
+app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/010, motor 3.4)
 
 
 @app.get("/")

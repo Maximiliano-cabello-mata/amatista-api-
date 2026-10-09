@@ -472,3 +472,50 @@ class ProgresoPractica(Base):
     abierta_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
     completada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+# --- Enlace en vivo plataforma ↔ Blender (sql/010, motor 3.4) -------------------
+
+
+class AddonEnlace(Base):
+    """Un Blender abierto y conectado: su último latido y la orden pendiente.
+
+    Una fila por sesión del add-on (SESIONES.DISPOSITIVO «blender-addon …»).
+    El add-on manda un latido cada pocos segundos con la práctica abierta, el
+    paso y si está en modo enfocado; la plataforma lo muestra en vivo y deja
+    aquí una orden («abrir esta práctica», «enfoca Blender») que el add-on
+    recoge en su siguiente latido. visto_en solo se reescribe cada 15 s o al
+    cambiar algo: la tabla no crece y Oracle casi no escribe.
+    """
+
+    __tablename__ = "addon_enlaces"
+    __table_args__ = (Index("ix_addon_enlaces_usuario", "usuario_id"),)
+
+    # ON DELETE CASCADE: la purga de sesiones (sql/003) se lleva su enlace.
+    sesion_id: Mapped[str] = mapped_column(String(64), ForeignKey("sesiones.id", ondelete="CASCADE"), primary_key=True)
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    visto_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    practica_id: Mapped[Optional[str]] = mapped_column(String(80))
+    paso: Mapped[Optional[str]] = mapped_column(String(80))
+    progreso: Mapped[Optional[int]] = mapped_column(Integer)
+    enfocado: Mapped[int] = mapped_column(Integer, default=0)
+    version_addon: Mapped[Optional[str]] = mapped_column(String(20))
+    version_blender: Mapped[Optional[str]] = mapped_column(String(20))
+    # Orden pendiente para este Blender: {"id", "tipo", "datos"}; se borra al entregarla.
+    orden: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(1000))
+    orden_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+
+
+class AddonAjustes(Base):
+    """Cómo se ve Blender para un alumno, decidido desde la plataforma (Mi Blender).
+
+    datos: {"enfoque": "auto|siempre|nunca", "acompanamiento": "acompanado|tarjeta|silencioso",
+    "avisos_herramientas": bool, "tarjeta_3d": bool}. El add-on los aplica en cada latido;
+    sus preferencias locales quedan como respaldo sin conexión.
+    """
+
+    __tablename__ = "addon_ajustes"
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    datos: Mapped[str] = mapped_column(TextoJSONCorto(1000))
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

@@ -243,6 +243,24 @@ ESPERADO = {
         "COMPLETADA_EN": "TIMESTAMP",
         "ACTUALIZADO_EN": "TIMESTAMP",
     },
+    "ADDON_ENLACES": {
+        "SESION_ID": "VARCHAR2",
+        "USUARIO_ID": "VARCHAR2",
+        "VISTO_EN": "TIMESTAMP",
+        "PRACTICA_ID": "VARCHAR2",
+        "PASO": "VARCHAR2",
+        "PROGRESO": "NUMBER",
+        "ENFOCADO": "NUMBER",
+        "VERSION_ADDON": "VARCHAR2",
+        "VERSION_BLENDER": "VARCHAR2",
+        "ORDEN": "VARCHAR2",
+        "ORDEN_EN": "TIMESTAMP",
+    },
+    "ADDON_AJUSTES": {
+        "USUARIO_ID": "VARCHAR2",
+        "DATOS": "VARCHAR2",
+        "ACTUALIZADO_EN": "TIMESTAMP",
+    },
 }
 
 # Las tablas que crea 001; las demás llegan con 002, 005 y 007 (008 solo agrega columnas).
@@ -255,6 +273,8 @@ TABLAS_005 = (
 COLUMNAS_005 = {("MODULOS", "NIVEL_ID")}
 # Lo que agrega 007 (motor de prácticas de Blender): solo tablas nuevas.
 TABLAS_007 = ("ADDON_VINCULOS", "PRACTICAS", "PRACTICA_VERSIONES", "PROGRESO_PRACTICAS")
+# Lo que agrega 010 (enlace en vivo plataforma ↔ Blender, motor 3.4).
+TABLAS_010 = ("ADDON_ENLACES", "ADDON_AJUSTES")
 # Lo que agrega 008 (cursos por ruta del motor v3): solo columnas.
 COLUMNAS_008 = {("CURSOS", "RUTA"), ("CURSOS", "REQUISITO_ID")}
 
@@ -282,6 +302,7 @@ SCRIPT_005 = "sql/005_niveles_habilidades_versiones.sql"
 SCRIPT_006 = "sql/006_herramientas_autor.sql"
 SCRIPT_007 = "sql/007_motor_practicas.sql"
 SCRIPT_008 = "sql/008_cursos_por_ruta.sql"
+SCRIPT_010 = "sql/010_enlace_blender.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -398,17 +419,22 @@ def _completo_salvo(real, tablas, columnas_extra=frozenset()):
 
 def solo_falta_005(real):
     """True si lo de 002 está completo y lo único que falta es de 005 (y 007, 008)."""
-    return _completo_salvo(real, TABLAS_005 + TABLAS_007, COLUMNAS_005 | COLUMNAS_008)
+    return _completo_salvo(real, TABLAS_005 + TABLAS_007 + TABLAS_010, COLUMNAS_005 | COLUMNAS_008)
 
 
 def solo_falta_007(real):
     """True si todo hasta 005 está y solo faltan las tablas del motor (007) y quizá 008."""
-    return _completo_salvo(real, TABLAS_007, COLUMNAS_008)
+    return _completo_salvo(real, TABLAS_007 + TABLAS_010, COLUMNAS_008)
 
 
 def solo_falta_008(real):
-    """True si todo hasta 007 está y solo faltan las columnas de cursos por ruta (008)."""
-    return _completo_salvo(real, (), COLUMNAS_008)
+    """True si todo hasta 007 está y solo faltan las columnas de cursos por ruta (008) y quizá 010."""
+    return _completo_salvo(real, TABLAS_010, COLUMNAS_008)
+
+
+def solo_falta_010(real):
+    """True si todo hasta 009 está y solo faltan las tablas del enlace en vivo con Blender (010)."""
+    return _completo_salvo(real, TABLAS_010)
 
 
 def solucion(real, otros_esquemas=()):
@@ -423,7 +449,7 @@ def solucion(real, otros_esquemas=()):
             ]
         return [
             "Base vacía: en Database Actions > SQL ejecuta con «Ejecutar script» (F5), en orden,",
-            f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005}, {SCRIPT_006}, {SCRIPT_007} y {SCRIPT_008} "
+            f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005}, {SCRIPT_006}, {SCRIPT_007}, {SCRIPT_008} y {SCRIPT_010} "
             "(ver sql/LEEME.txt).",
         ]
     numericos = ids_numericos(real)
@@ -433,21 +459,27 @@ def solucion(real, otros_esquemas=()):
             "Sin alumnos reales: ejecuta 001 y luego 002 y 003. Con alumnos reales: respalda antes",
             "y sigue sql/LEEME.txt, sección «Base del diseño anterior».",
         ]
+    if solo_falta_010(real) and any(t not in real for t in TABLAS_010):
+        return [
+            f"Falta el enlace en vivo con Blender (motor 3.4): ejecuta {SCRIPT_010} en Database Actions > SQL",
+            "con «Ejecutar script» (F5). Solo crea dos tablas nuevas y se puede repetir. Sin él, Blender",
+            "sigue funcionando pero la plataforma no lo ve en vivo. NO ejecutes 001: borraría a los alumnos.",
+        ]
     if solo_falta_008(real):
         return [
-            f"Faltan las columnas de cursos por ruta (motor v3): ejecuta {SCRIPT_008} en Database Actions > SQL",
+            f"Faltan las columnas de cursos por ruta (motor v3): ejecuta {SCRIPT_008} (y luego {SCRIPT_010}) en Database Actions > SQL",
             "con «Ejecutar script» (F5). Solo agrega dos columnas a CURSOS y se puede repetir",
             "(guía: docs/base-de-datos/02_manual_008_009.md). NO ejecutes 001: borraría a los alumnos.",
         ]
     if solo_falta_007(real):
         return [
-            f"Falta el motor de prácticas de Blender: ejecuta {SCRIPT_007} y luego {SCRIPT_008} en Database Actions > SQL",
+            f"Falta el motor de prácticas de Blender: ejecuta {SCRIPT_007}, {SCRIPT_008} y {SCRIPT_010} en Database Actions > SQL",
             "con «Ejecutar script» (F5). Solo crea tablas nuevas, no borra datos y se puede repetir",
             "(guía: docs/reestructuracion/02_manual_oracle.md, sección 7). NO ejecutes 001: borraría a los alumnos.",
         ]
     if solo_falta_005(real):
         return [
-            f"Falta la reestructuración por niveles: ejecuta {SCRIPT_005}, {SCRIPT_006}, {SCRIPT_007} y {SCRIPT_008}",
+            f"Falta la reestructuración por niveles: ejecuta {SCRIPT_005}, {SCRIPT_006}, {SCRIPT_007}, {SCRIPT_008} y {SCRIPT_010}",
             "en Database Actions > SQL con «Ejecutar script» (F5). Solo agregan, no borran datos y se pueden",
             "repetir (guía: docs/reestructuracion/02_manual_oracle.md). NO ejecutes 001: borraría a los alumnos.",
         ]

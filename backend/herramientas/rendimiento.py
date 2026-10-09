@@ -109,11 +109,13 @@ def limpiar() -> None:
 
     from database.conexion import motor
     from database.modelos import (
-        AddonVinculo, EventoAprendizaje, HabilidadAlumno, Logro, ProgresoLeccion, ProgresoPractica, Sesion, Usuario,
+        AddonAjustes, AddonEnlace, AddonVinculo, EventoAprendizaje, HabilidadAlumno, Logro, ProgresoLeccion,
+        ProgresoPractica, Sesion, Usuario,
     )
 
     with Session(motor()) as db:
-        for tabla in (EventoAprendizaje, ProgresoLeccion, ProgresoPractica, HabilidadAlumno, Logro, Sesion):
+        for tabla in (EventoAprendizaje, ProgresoLeccion, ProgresoPractica, HabilidadAlumno, Logro, AddonEnlace,
+                      AddonAjustes, Sesion):
             db.execute(delete(tabla).where(tabla.usuario_id.like(f"{PREFIJO}%")))
         db.execute(delete(AddonVinculo).where(AddonVinculo.usuario_id.like(f"{PREFIJO}%")))
         db.execute(delete(Usuario).where(Usuario.id.like(f"{PREFIJO}%")))

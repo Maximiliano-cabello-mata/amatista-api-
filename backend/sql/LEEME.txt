@@ -52,26 +52,36 @@ Guía completa para la base real, paso a paso:
                                         Va DESPUÉS de importar los cursos
                                         nuevos. Guía de 008 y 009:
                                         docs/base-de-datos/02_manual_008_009.md
+  010_enlace_blender.sql .............. Incremental (motor 3.4, enlace en
+                                        vivo plataforma ↔ Blender):
+                                        ADDON_ENLACES (una fila por Blender
+                                        abierto, se borra con su sesión) y
+                                        ADDON_AJUSTES (cómo se ve Blender,
+                                        por alumno). Trae la verificación
+                                        vigente de las 20 tablas. No borra
+                                        datos. Sin 010 el backend sigue
+                                        funcionando (sin enlace en vivo).
 
-  002 a 009 son idempotentes: se pueden ejecutar varias veces sin error y
+  002 a 010 son idempotentes: se pueden ejecutar varias veces sin error y
   sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 004 (opcional)
       (009 solo si hay datos de la v2 que archivar)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 004 (opcional) -> 009
+      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 004 (opcional) -> 009
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
   Producción (03/10/2026) ya tiene 002, 003, 005 y 006 (14 tablas; bitácora
   docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22).
   Falta 007, que se ejecuta después del piloto y ANTES de actualizar el
   backend al código del motor de prácticas (T-055), y luego 008 y 009 (motor
-  v3; docs/base-de-datos/02_manual_008_009.md). 004 sigue opcional: la
+  v3; docs/base-de-datos/02_manual_008_009.md) y 010 (motor 3.4, enlace en
+  vivo; T-087). 004 sigue opcional: la
   base de producción todavía usa ADMIN (T-004).
 
   ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
