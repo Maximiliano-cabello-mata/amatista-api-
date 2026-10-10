@@ -23,6 +23,7 @@ Los errores siempre responden `{"detail": "mensaje en español"}`.
 | Niveles (`api/niveles.py`) | `GET/POST /api/contenido/niveles` · `PUT /niveles/{id}` · `POST /niveles/sembrar` · `GET /api/contenido/mapa/{curso_id}` | Niveles del curso (v3) y mapa de fichas pendientes (profesor lee, admin modifica) |
 | Blender (`api/blender.py`) | `GET /api/blender/versiones` (público) · `PUT /versiones/{v}` · `POST /verificaciones` · `GET /compatibilidad` | Versiones de Blender verificadas y matriz de compatibilidad |
 | Add-on de Blender (`api/addon.py`) | `/api/addon/v1`: `estado`, `vinculos` (código y confirmar), `yo`, `salir`, `dispositivos`, `practicas` (listar, registrar, publicar, archivar, versiones, sincronizar, abrir), `practica-actual`, `intentos`, `mi-progreso`, `descargas/{sistema}`, `extension.zip`, `extensiones/index.json` | El add-on y la PWA: vincular Blender, prácticas del motor y su progreso ([docs/motor/referencia/05_api.md](../docs/motor/referencia/05_api.md)) |
+| Enlace en vivo (`api/enlace.py`) | `/api/addon/v1`: `POST/GET /enlace`, `POST /ordenes`, `GET/PUT /ajustes` | El latido de Blender con lo que muestra el instructor, las órdenes que manda la lección (abrir la práctica, comprobar, pista, «Hazlo conmigo», guardar, empezar de nuevo, ver el ejemplo) y los ajustes de «Mi Blender». Necesita `sql/010` y `sql/011`; sin 010 responde `enlace: false` ([12_plataforma_y_blender.md](../docs/motor/referencia/12_plataforma_y_blender.md)) |
 | Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas del lanzamiento y gestión de usuarios (profesor lee, admin modifica) |
 
 Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
@@ -69,9 +70,9 @@ estos pasos se hacen ahí.
 4. **Actualizar las tablas:** abre Database Actions → SQL y ejecuta con
    **Ejecutar script (F5)**, en orden, los scripts de `sql/` (detalle en
    [`sql/LEEME.txt`](sql/LEEME.txt)):
-   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → `007` → (opcional) `004`.
-     **Nunca `001`**: borra las tablas. Producción ya tiene `002`, `003`, `005` y `006` (3 oct): falta `007`, después del piloto (T-055).
-   - Base vacía: `001` → `002` → `003` → `005` → `006` → `007` → (opcional) `004`.
+   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → `007` → `008` → `010` → `011` → (opcional) `004` → `009`.
+     **Nunca `001`**: borra las tablas. Producción ya tiene `002`, `003`, `005` y `006` (3 oct): faltan `007` a `011`, después del piloto (T-055, T-064 y T-087).
+   - Base vacía: `001` → `002` → `003` → `005` → `006` → `007` → `008` → `010` → `011` → (opcional) `004`; `009` solo si hay datos de la v2.
    - Manual completo de la v3 (verificación y recetas para crear lecciones desde Oracle):
      [`docs/reestructuracion/02_manual_oracle.md`](../docs/reestructuracion/02_manual_oracle.md).
 5. **Verificar:** `python diagnostico_oracle.py`. Debe terminar con
