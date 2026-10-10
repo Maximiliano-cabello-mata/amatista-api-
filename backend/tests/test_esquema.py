@@ -286,7 +286,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 # --- Sintaxis y reglas de los scripts ----------------------------------------
 
 
-@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010"])
+@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):

@@ -61,28 +61,47 @@ Guía completa para la base real, paso a paso:
                                         vigente de las 20 tablas. No borra
                                         datos. Sin 010 el backend sigue
                                         funcionando (sin enlace en vivo).
+  011_detalle_instructor.sql .......... Incremental (motor 3.5.1, detalle
+                                        del instructor): ADDON_ENLACES.DETALLE
+                                        (CLOB JSON, anulable). Siguen siendo
+                                        20 tablas; ADDON_ENLACES tiene 12
+                                        columnas. Va después de 010 y ANTES
+                                        del backend 3.5.1. Los permisos de
+                                        tabla existentes cubren la columna
+                                        nueva. No borra datos. Las consultas
+                                        de conteo de columnas de los scripts
+                                        anteriores describen su versión
+                                        histórica; el diagnóstico vigente es
+                                        python diagnostico_oracle.py.
 
-  002 a 010 son idempotentes: se pueden ejecutar varias veces sin error y
+  Nota sobre 004: el comentario de su encabezado lista las tablas de 005 y
+  «las 4 de 007», pero el script ya da permisos también a ADDON_ENLACES y
+  ADDON_AJUSTES (010). El comentario quedó atrasado; el archivo no se edita
+  porque los scripts de esta carpeta nunca se tocan (sección 6, regla 1).
+
+  002 a 011 son idempotentes: se pueden ejecutar varias veces sin error y
   sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 004 (opcional)
       (009 solo si hay datos de la v2 que archivar)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 004 (opcional) -> 009
+      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 004 (opcional) -> 009
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
-  Producción (03/10/2026) ya tiene 002, 003, 005 y 006 (14 tablas; bitácora
-  docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22).
-  Falta 007, que se ejecuta después del piloto y ANTES de actualizar el
-  backend al código del motor de prácticas (T-055), y luego 008 y 009 (motor
-  v3; docs/base-de-datos/02_manual_008_009.md) y 010 (motor 3.4, enlace en
-  vivo; T-087). 004 sigue opcional: la
-  base de producción todavía usa ADMIN (T-004).
+  Producción tiene 002, 003, 005 y 006 (14 tablas; bitácora
+  docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22)
+  y le faltan 007, 008, 009, 010 y 011. El piloto del 8 de octubre ya se hizo;
+  la actualización sigue docs/despliegue/2026-10-05_plan_de_despliegue.md:
+  cada script va ANTES de subir el backend que lo necesita (007: T-055;
+  008 y 009: docs/base-de-datos/02_manual_008_009.md; 010: T-087; 011:
+  T-094). despliegue/actualizar.sh corre diagnostico_oracle.py antes de
+  reiniciar y se detiene si falta alguno. 004 sigue opcional: la base de
+  producción todavía usa ADMIN (T-004).
 
   ¿No sabes en cuál caso estás? Ejecuta primero el diagnóstico (sección 4):
   te dice qué script falta.
@@ -135,9 +154,9 @@ Guía completa para la base real, paso a paso:
     esquema limpio y copia los datos convirtiendo los ids a texto. No
     ejecutes 001 sobre la base con los datos originales.
 
-6. REGLAS PARA LOS SCRIPTS FUTUROS (005, 006, ...)
+6. REGLAS PARA LOS SCRIPTS FUTUROS (siguiente libre: 012)
 -----------------------------------------------------------------------------
-  1. Numerados y en orden: 005_<qué_hace>.sql. Nunca se edita un script que
+  1. Numerados y en orden: 012_<qué_hace>.sql. Nunca se edita un script que
      ya se ejecutó en producción; el cambio va en el siguiente número.
   2. Solo agregan: ALTER TABLE ... ADD (columnas, restricciones), CREATE
      TABLE, CREATE INDEX. Prohibido DROP TABLE, TRUNCATE o DELETE de datos
@@ -187,11 +206,3 @@ Guía completa para la base real, paso a paso:
   Guía: docs/base-de-datos/03_migracion.md. "exportar" también sirve como
   respaldo antes de ejecutar cualquier script.
 =============================================================================
-
-011_detalle_instructor.sql (Motor 3.5.1)
-  Ejecutar después de 010 y ANTES del backend 3.5.1, como ADMIN con F5.
-  Agrega ADDON_ENLACES.DETALLE (CLOB JSON, anulable). Siguen siendo 20
-  tablas; ADDON_ENLACES tiene 12 columnas. No borra usuarios ni progreso.
-  Los permisos de tabla existentes también cubren la nueva columna.
-  Diagnóstico vigente: python diagnostico_oracle.py. Las consultas de
-  conteo de columnas en scripts anteriores describen su versión histórica.

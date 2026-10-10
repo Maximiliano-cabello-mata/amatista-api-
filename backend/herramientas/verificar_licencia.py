@@ -2,7 +2,7 @@
 
 Uso, desde backend/ en el servidor (necesita AMATISTA_SECRETO_FIRMA del .env):
 
-    python herramientas/verificar_licencia.py Amatista-Motor-3.3-windows.zip
+    python herramientas/verificar_licencia.py Amatista-Motor-3.5-windows.zip
     python herramientas/verificar_licencia.py "carpeta/del/addon/instalado"
 
 Lee licencia.json (la marca de agua que el servidor firma en cada descarga
