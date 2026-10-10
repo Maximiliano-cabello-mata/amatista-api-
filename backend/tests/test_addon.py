@@ -310,16 +310,16 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 # --- Descargas ------------------------------------------------------------------
 
 
-def test_la_descarga_es_amatista_motor_3_5_con_todo_lo_nuevo(cliente):
+def test_la_descarga_es_amatista_motor_4_con_todo_lo_nuevo(cliente):
     """La plataforma entrega la versión del repositorio, con las 18 prácticas y las temáticas."""
     estado = cliente.get(f"{API}/estado").json()
-    assert estado["nombre"] == "Amatista Motor 3.5" and estado["version_addon"] == "3.5.1"
+    assert estado["nombre"] == "Amatista Motor 4.0" and estado["version_addon"] == "4.0.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-3.5-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-4.0-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 3.5/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 3.5/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 3.5 PARA BLENDER")
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 3.5/amatista-3.5.1.zip")))
+    assert "Amatista Motor 4.0/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 4.0/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 4.0 PARA BLENDER")
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 4.0/amatista-4.0.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
     assert "practicas/temas.json" in nombres and "temas.py" in nombres
@@ -328,6 +328,8 @@ def test_la_descarga_es_amatista_motor_3_5_con_todo_lo_nuevo(cliente):
     assert "amatista_engine/figures/biblioteca.json" in nombres
     # Motor 3.5: la silueta de una malla (la espada) y su validador.
     assert {"amatista_engine/figures/silueta.py", "amatista_engine/validators/silhouette.py"} <= set(nombres)
+    # Motor 4: la ruta de misiones, las medidas amables y la tarjeta de la misión.
+    assert {"mision.py", "amatista_engine/ruta/mision.py", "amatista_engine/ruta/medidas.py"} <= set(nombres)
     assert sum(1 for n in nombres if n.endswith("/practica.json")) == 18
     # Motor 3.3: cada práctica de modelado trae la imagen y el plano de su modelo de referencia.
     assert "practicas/principiante/m1-tren/referencia.jpg" in nombres

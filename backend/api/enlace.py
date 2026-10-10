@@ -206,8 +206,15 @@ class ItemLista(BaseModel):
     aspecto: str = Field(default="", max_length=40)  # la figura, materiales, luces… (el ejemplo resuelto)
 
 
+class PasoMision(BaseModel):
+    """Un micro paso de la misión de ahora (motor 4): texto y sus teclas."""
+
+    texto: str = Field(default="", max_length=160)
+    teclas: List[str] = Field(default_factory=list, max_length=6)
+
+
 class Detalle(BaseModel):
-    """Lo que el instructor muestra en Blender ahora (motor 3.5)."""
+    """Lo que el instructor muestra en Blender ahora (motor 3.5; motor 4: la misión de la ruta)."""
 
     titulo: str = Field(default="", max_length=120)  # el paso actual
     mensaje: str = Field(default="", max_length=500)  # lo que dice el instructor
@@ -219,6 +226,11 @@ class Detalle(BaseModel):
     pistas: int = Field(default=0, ge=0, le=9)  # pistas que quedan en el paso
     accion: str = Field(default="", max_length=80)  # el texto del «Hazlo conmigo» si hay
     completada: bool = False
+    # Motor 4: la ruta del alumno (la misma misión que ve en Blender).
+    parte: str = Field(default="", max_length=60)  # «Las ruedas»
+    hechas: int = Field(default=0, ge=0, le=99)  # misiones cumplidas
+    objetivo: str = Field(default="", max_length=300)  # qué hacer, en una frase
+    pasos: List[PasoMision] = Field(default_factory=list, max_length=3)
 
 
 class Latido(BaseModel):
