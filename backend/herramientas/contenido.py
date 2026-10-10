@@ -4,11 +4,11 @@ Uso, desde backend/ (importar y exportar usan la base de backend/.env):
 
     python herramientas/contenido.py validar                 # ../frontend/src/data/modulos/*.json
     python herramientas/contenido.py validar archivo.json otro.json
-    python herramientas/contenido.py importar [archivos...]   # upsert; crea los cursos blender y aframe si faltan
+    python herramientas/contenido.py importar [archivos...]   # upsert; crea los cursos que falten (blender_principiante, ...; «blender» es el v2 archivado)
     python herramientas/contenido.py exportar mod_teoria_001 [salida.json] [--borradores]
-    python herramientas/contenido.py nuevo-modulo blender 2 "Interfaz y navegación" --insignia "Navegante" --nivel blender-n1
-    python herramientas/contenido.py nueva-leccion ../frontend/src/data/modulos/blender-modulo-2.json les_n1_mesa "Construir una mesa" --objetivo "..."
-    python herramientas/contenido.py mapa [blender]          # curso > nivel > módulo > lección desde los archivos
+    python herramientas/contenido.py nuevo-modulo blender_principiante 4 "Materiales y color" --insignia "Pintor 3D"
+    python herramientas/contenido.py nueva-leccion ../frontend/src/data/modulos/blender_principiante-modulo-1.json bp1_repaso "Repaso del módulo" --objetivo "..."
+    python herramientas/contenido.py mapa [blender_principiante]  # curso > nivel > módulo > lección desde los archivos
     python herramientas/contenido.py sembrar-niveles          # crea en la base los 5 niveles de Blender que falten
     python herramientas/contenido.py practicas [--publicar]   # registra en la base las prácticas de practices/blender/ (sql/007)
     python herramientas/contenido.py practicas --revisar      # dice cuáles faltan en la base o están sin publicar
@@ -36,7 +36,13 @@ MODULOS = REPO / "frontend" / "src" / "data" / "modulos"
 # (y que "contenido" sea el paquete backend/contenido, no este archivo).
 sys.path.insert(0, str(BACKEND))
 
-from contenido.plantillas import CURSOS_BASE, NIVELES_BLENDER, leccion_estructurada, modulo_esqueleto  # noqa: E402
+from contenido.plantillas import (  # noqa: E402
+    CURSOS_BASE,
+    NIVELES_BLENDER,
+    es_curso_blender,
+    leccion_estructurada,
+    modulo_esqueleto,
+)
 from contenido.validacion import (  # noqa: E402
     MAX_TITULO,
     PATRON_ID,
@@ -378,7 +384,7 @@ def comando_mapa(curso: Optional[str], carpeta: Optional[str]) -> int:
                 for leccion in modulo.get("lessons") or []:
                     if not isinstance(leccion, dict):
                         continue
-                    faltan = pendientes_ficha(leccion, curso_id == "blender")
+                    faltan = pendientes_ficha(leccion, es_curso_blender(curso_id))
                     total += 1
                     completas += not faltan
                     marca = "✓" if not faltan else "·"
@@ -502,10 +508,10 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     nuevo.add_argument("--insignia", default=None, help="nombre de la insignia que desbloquea el examen final")
     nuevo.add_argument("--destino", default=None, help="carpeta de salida (por defecto ../frontend/src/data/modulos)")
     nuevo.add_argument("--forzar", action="store_true", help="sobrescribe el archivo si ya existe")
-    nuevo.add_argument("--nivel", default=None, help="nivel del módulo, por ejemplo blender-n1")
+    nuevo.add_argument("--nivel", default=None, help="nivel del módulo (solo el curso «blender» v2 archivado, por ejemplo blender-n1)")
 
     leccion = comandos.add_parser("nueva-leccion", help="agrega a un módulo una lección de 10 pasos con su ficha")
-    leccion.add_argument("archivo", help="archivo del módulo, por ejemplo ../frontend/src/data/modulos/blender-modulo-2.json")
+    leccion.add_argument("archivo", help="archivo del módulo, por ejemplo ../frontend/src/data/modulos/blender_principiante-modulo-1.json")
     leccion.add_argument("leccion_id", help="id nuevo de la lección (no se reutilizan)")
     leccion.add_argument("titulo", help="título de la lección")
     leccion.add_argument("--objetivo", default=None, help="objetivo observable (una frase)")

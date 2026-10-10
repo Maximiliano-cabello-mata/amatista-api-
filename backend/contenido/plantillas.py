@@ -281,6 +281,13 @@ def _bloque(tipo: str, **cambios) -> dict:
 # --- Una lección de ejemplo por paso de la fórmula ----------------------------
 
 
+def es_curso_blender(curso_id: Optional[str]) -> bool:
+    """Cursos que se trabajan en Blender: los tres vigentes (blender_principiante,
+    blender_principiante_intermedio, blender_intermedio) y el «blender» archivado (009)."""
+    return bool(curso_id) and curso_id.startswith("blender")
+
+
+
 def _gancho(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
     return "theory_interactive", 180, [
         _bloque(
@@ -305,7 +312,7 @@ def _explora(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _practica(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
-    if curso_id == "blender":
+    if es_curso_blender(curso_id):
         return "theory_interactive", 480, [
             _bloque("markdown_text", body=f"### {REEMPLAZA}\nRepasa el paso a paso antes de abrir Blender."),
             _bloque("ordering"),
@@ -327,7 +334,7 @@ def _practica(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _reto(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
-    if curso_id == "blender":
+    if es_curso_blender(curso_id):
         return "theory_interactive", 720, [
             _bloque(
                 "markdown_text",
@@ -435,8 +442,9 @@ def leccion_plantilla(
 ) -> dict:
     """Lección de ejemplo del paso de la fórmula (copia nueva en cada llamada).
 
-    curso_id="blender" usa práctica y reto con instrucciones de Blender; los
-    demás cursos, retos de código con A-Frame.
+    Los cursos de Blender (curso_id que empieza con «blender», por ejemplo
+    blender_principiante) usan práctica y reto con instrucciones de Blender;
+    los demás cursos, retos de código con A-Frame.
     """
     if paso not in PASOS_FORMULA:
         raise ValueError(f"Paso desconocido: {paso!r} (usa: {', '.join(PASOS_FORMULA)})")

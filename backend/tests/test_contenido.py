@@ -13,6 +13,7 @@ from contenido.plantillas import (
     EJEMPLOS_BLOQUES,
     FORMULA,
     LECCIONES_PLANTILLA,
+    es_curso_blender,
     generar_esqueleto,
     modulo_esqueleto,
     siguiente_numeracion,
@@ -217,6 +218,22 @@ def test_generar_esqueleto(curso):
     # Cada llamada devuelve copias: editar una no cambia las plantillas.
     lecciones[0]["contentBlocks"][0]["body"] = "cambiado"
     assert LECCIONES_PLANTILLA["gancho"]["contentBlocks"][0]["body"] != "cambiado"
+
+
+@pytest.mark.parametrize("curso", ["blender_principiante", "blender_principiante_intermedio", "blender_intermedio", "blender"])
+def test_plantillas_de_blender_para_los_cursos_vigentes(curso):
+    # Los cursos v3 (blender_*) usan la práctica y el reto de Blender, no los retos de código de A-Frame.
+    assert es_curso_blender(curso)
+    tipos = {
+        x["formula"]: (x["type"], [b["type"] for b in x.get("contentBlocks", [])])
+        for x in generar_esqueleto(curso, f"mod_{curso}_004", "les_", 1)
+    }
+    for paso in ("practica", "reto"):
+        tipo, bloques = tipos[paso]
+        assert tipo == "theory_interactive", (curso, paso)
+        assert "code_challenge" not in bloques and "code_interactive" not in bloques
+    assert not es_curso_blender("aframe") and not es_curso_blender(None)
+    assert generar_esqueleto("aframe", "mod_aframe_004", "les_", 1)[2]["type"] == "code_interactive"
 
 
 def test_siguiente_numeracion_respeta_prefijos():
