@@ -1,6 +1,8 @@
 """Panel de administración: métricas del lanzamiento, usuarios y mantenimiento.
 
 Profesores y administradores leen; solo los administradores modifican.
+La auditoría (/auditoria, al final) reúne lo que conviene revisar de la
+plataforma.
 
 Métricas (plan de lanzamiento, sec. 9). Cuentan solo alumnos reales: se
 excluyen las cuentas de prueba (es_prueba = 1), los roles profesor y admin y
@@ -48,6 +50,7 @@ from database.modelos import (
     Curso,
     EventoAprendizaje,
     Leccion,
+    Modulo,
     ProgresoLeccion,
     Sesion,
     Usuario,
@@ -591,3 +594,160 @@ def salud_detallada(request: Request, _: Usuario = Depends(administradores), db:
             db.rollback()
             tablas[tabla.name] = None
     return {"motor": db.get_bind().dialect.name, "tablas": tablas, "version_api": request.app.version}
+
+
+# --- Auditoría -----------------------------------------------------------------
+#
+# Revisión de la plataforma para profesores y administradores: quién tiene
+# permisos, cuentas que requieren atención, contenido sin publicar o cambiado
+# hace poco y lecciones donde los alumnos se atascan (las abren y no las
+# terminan). Solo lee: no cambia el progreso de nadie. Las revisiones del
+# contenido que viaja en la app (bloques, exámenes, prácticas) las hace la
+# página de auditoría con el catálogo vigente.
+
+DIAS_SIN_CONFIRMAR = timedelta(days=7)
+LIMITE_LISTAS = 30
+MINIMO_ATASCO = 2  # alumnos que abrieron la lección para considerarla
+
+
+def ficha_contenido(leccion: Leccion) -> dict:
+    return {
+        "curso_id": leccion.curso_id,
+        "leccion_id": leccion.id,
+        "titulo": leccion.titulo,
+        "tipo": leccion.tipo,
+        "estado": leccion.estado,
+        "actualizado_en": iso(leccion.actualizado_en),
+    }
+
+
+@router.get("/auditoria")
+def auditoria(
+    dias: int = Query(30, ge=1, le=90),
+    _: Usuario = Depends(lectores),
+    db: Session = Depends(obtener_db),
+):
+    momento = ahora()
+    desde = momento - timedelta(days=dias)
+    try:
+        personal = db.execute(
+            select(Usuario)
+            .where(Usuario.rol.in_(("profesor", "admin")), Usuario.fusionado_en.is_(None))
+            .order_by(Usuario.rol, Usuario.email)
+        ).scalars().all()
+        sesiones = dict(
+            db.execute(
+                select(Sesion.usuario_id, func.count())
+                .where(
+                    Sesion.usuario_id.in_([u.id for u in personal] or [""]),
+                    Sesion.activa == 1,
+                    or_(Sesion.expira_en.is_(None), Sesion.expira_en >= momento),
+                )
+                .group_by(Sesion.usuario_id)
+            ).all()
+        )
+        bloqueadas = db.scalar(
+            select(func.count()).select_from(Usuario).where(Usuario.bloqueado_hasta > momento)
+        )
+        sin_confirmar = db.scalar(
+            select(func.count())
+            .select_from(Usuario)
+            .where(
+                Usuario.password_hash.is_not(None),
+                Usuario.correo_confirmado == 0,
+                Usuario.creado_en < momento - DIAS_SIN_CONFIRMAR,
+                Usuario.fusionado_en.is_(None),
+            )
+        )
+        de_prueba = db.scalar(select(func.count()).select_from(Usuario).where(Usuario.es_prueba == 1))
+
+        lecciones_por_estado = {
+            estado or "sin estado": cantidad
+            for estado, cantidad in db.execute(select(Leccion.estado, func.count()).group_by(Leccion.estado)).all()
+        }
+        modulos_por_estado = {
+            estado or "sin estado": cantidad
+            for estado, cantidad in db.execute(select(Modulo.estado, func.count()).group_by(Modulo.estado)).all()
+        }
+        borradores = db.execute(
+            select(Leccion)
+            .where(Leccion.estado != "publicado")
+            .order_by(Leccion.actualizado_en.desc())
+            .limit(LIMITE_LISTAS)
+        ).scalars().all()
+        recientes = db.execute(
+            select(Leccion)
+            .where(Leccion.actualizado_en >= desde)
+            .order_by(Leccion.actualizado_en.desc())
+            .limit(LIMITE_LISTAS)
+        ).scalars().all()
+
+        abiertas = db.execute(
+            select(EventoAprendizaje.curso_id, EventoAprendizaje.leccion_id, EventoAprendizaje.usuario_id)
+            .join(Usuario, Usuario.id == EventoAprendizaje.usuario_id)
+            .where(
+                alumnos_reales(),
+                EventoAprendizaje.tipo == "learning_session_started",
+                EventoAprendizaje.ocurrido_en >= desde,
+                EventoAprendizaje.leccion_id.is_not(None),
+            )
+            .distinct()
+        ).all()
+        terminadas = set(
+            db.execute(
+                select(ProgresoLeccion.curso_id, ProgresoLeccion.leccion_id, ProgresoLeccion.usuario_id)
+                .join(Usuario, Usuario.id == ProgresoLeccion.usuario_id)
+                .where(alumnos_reales(), ProgresoLeccion.completada == 1)
+            ).all()
+        )
+    except SQLAlchemyError as error:
+        raise error_bd(error, "/api/admin/auditoria")
+
+    conteo: Dict[tuple, List[int]] = defaultdict(lambda: [0, 0])
+    for curso_id, leccion_id, usuario_id in abiertas:
+        par = conteo[(curso_id, leccion_id)]
+        par[0] += 1
+        if (curso_id, leccion_id, usuario_id) in terminadas:
+            par[1] += 1
+    atascos = [
+        {
+            "curso_id": curso_id,
+            "leccion_id": leccion_id,
+            "abrieron": abrieron,
+            "terminaron": terminaron,
+            "sin_terminar": abrieron - terminaron,
+            "porcentaje_terminan": round(terminaron * 100 / abrieron, 1),
+        }
+        for (curso_id, leccion_id), (abrieron, terminaron) in conteo.items()
+        if abrieron >= MINIMO_ATASCO and terminaron < abrieron
+    ]
+    atascos.sort(key=lambda a: (a["porcentaje_terminan"], -a["abrieron"], a["curso_id"], a["leccion_id"]))
+
+    return {
+        "generado_en": iso(momento),
+        "periodo": {"desde": iso(desde), "hasta": iso(momento), "dias": dias},
+        "personal": [
+            {
+                "id": u.id,
+                "nombre": u.nombre,
+                "email": u.email,
+                "rol": u.rol,
+                "correo_confirmado": bool(u.correo_confirmado),
+                "ultimo_acceso": iso(u.ultimo_acceso),
+                "sesiones_activas": sesiones.get(u.id, 0),
+            }
+            for u in personal
+        ],
+        "cuentas": {
+            "bloqueadas": bloqueadas or 0,
+            "sin_confirmar_7_dias": sin_confirmar or 0,
+            "de_prueba": de_prueba or 0,
+        },
+        "contenido": {
+            "lecciones_por_estado": lecciones_por_estado,
+            "modulos_por_estado": modulos_por_estado,
+            "sin_publicar": [ficha_contenido(leccion) for leccion in borradores],
+            "cambios_recientes": [ficha_contenido(leccion) for leccion in recientes],
+        },
+        "atascos": atascos[:LIMITE_LISTAS],
+    }

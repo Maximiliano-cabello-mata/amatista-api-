@@ -562,3 +562,87 @@ def test_salud_detallada(cliente, crear_cuenta):
     assert set(datos["tablas"]) >= {
         "usuarios", "sesiones", "progreso_lecciones", "logros", "eventos_aprendizaje", "cursos", "modulos", "lecciones",
     }
+
+
+# --- Auditoría ----------------------------------------------------------------
+
+
+def test_auditoria_permisos(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    _, profesor = crear_cuenta(rol="profesor")
+    assert cliente.get("/api/admin/auditoria").status_code == 401
+    assert cliente.get("/api/admin/auditoria", headers=alumno).status_code == 403
+    assert cliente.get("/api/admin/auditoria", headers=profesor).status_code == 200
+
+
+def test_auditoria_personal_cuentas_y_atascos(cliente, crear_cuenta):
+    _, admin = crear_cuenta(rol="admin")
+    momento = ahora()
+    crear_usuario("sin-confirmar", momento - timedelta(days=10), confirmado=False)
+    crear_usuario("reciente", momento - timedelta(days=1), confirmado=False)
+    crear_usuario("bloqueada", momento - timedelta(days=3), bloqueado_hasta=momento + timedelta(hours=1))
+    # Tres alumnos abren la lección y solo uno la termina; el profesor no cuenta.
+    for alumno_id in ("a1", "a2", "a3"):
+        crear_usuario(alumno_id, momento - timedelta(days=5))
+        agregar_eventos(alumno_id, ("learning_session_started", momento - timedelta(days=2)))
+    agregar_progreso("a1", "blender", "les_001", completada_en=momento - timedelta(days=1))
+    crear_usuario("profe", momento - timedelta(days=5), rol="profesor")
+    agregar_eventos("profe", ("learning_session_started", momento - timedelta(days=2)))
+    # Otra lección: un solo alumno la abrió, no alcanza el mínimo.
+    with Session(conexion.motor()) as db:
+        db.add(
+            EventoAprendizaje(
+                id=str(uuid.uuid4()),
+                usuario_id="a2",
+                tipo="learning_session_started",
+                curso_id="blender",
+                leccion_id="les_002",
+                ocurrido_en=momento - timedelta(days=1),
+            )
+        )
+        db.commit()
+
+    datos = cliente.get("/api/admin/auditoria", headers=admin).json()
+
+    roles = sorted(p["rol"] for p in datos["personal"])
+    assert roles == ["admin", "profesor"]
+    assert all(p["sesiones_activas"] >= 0 for p in datos["personal"])
+    assert datos["cuentas"]["sin_confirmar_7_dias"] == 1
+    assert datos["cuentas"]["bloqueadas"] == 1
+    assert datos["atascos"] == [
+        {
+            "curso_id": "blender",
+            "leccion_id": "les_001",
+            "abrieron": 3,
+            "terminaron": 1,
+            "sin_terminar": 2,
+            "porcentaje_terminan": 33.3,
+        }
+    ]
+
+
+def test_auditoria_contenido(cliente, crear_cuenta):
+    _, admin = crear_cuenta(rol="admin")
+    momento = ahora()
+    with Session(conexion.motor()) as db:
+        if not db.get(Curso, "blender"):
+            db.add(Curso(id="blender", titulo="Blender"))
+        db.add(Modulo(id="mod_aud", curso_id="blender", numero=99, titulo="Auditoría", estado="borrador"))
+        db.flush()
+        db.add(
+            Leccion(curso_id="blender", id="aud_1", modulo_id="mod_aud", orden=1, titulo="Borrador",
+                    tipo="theory", contenido="{}", estado="borrador", actualizado_en=momento)
+        )
+        db.add(
+            Leccion(curso_id="blender", id="aud_2", modulo_id="mod_aud", orden=2, titulo="Vieja",
+                    tipo="theory", contenido="{}", estado="publicado", actualizado_en=momento - timedelta(days=60))
+        )
+        db.commit()
+
+    contenido = cliente.get("/api/admin/auditoria", headers=admin).json()["contenido"]
+
+    assert [l["leccion_id"] for l in contenido["sin_publicar"] if l["curso_id"] == "blender"][:1] == ["aud_1"]
+    recientes = {l["leccion_id"] for l in contenido["cambios_recientes"]}
+    assert "aud_1" in recientes and "aud_2" not in recientes
+    assert contenido["lecciones_por_estado"].get("borrador", 0) >= 1
+    assert contenido["modulos_por_estado"].get("borrador", 0) >= 1
