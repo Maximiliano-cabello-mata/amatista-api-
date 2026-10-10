@@ -213,12 +213,10 @@ def test_sincronizar_el_plan_de_estudios_v3(cliente, crear_cuenta):
     assert {p["id"] for p in resumen["practicas"]} == {
         "blender.bp.m1.tren", "blender.bp.m2.espada", "blender.bp.m3.nave",
         "blender.bpi.m1.pinta-nave", "blender.bpi.m2.tres-puntos", "blender.bpi.m3.pelota",
-        # Exploraciones a mitad de cada módulo: teoría y Blender se intercalan.
-        "blender.bp.m1.explora", "blender.bp.m2.explora", "blender.bp.m3.explora",
-        "blender.bpi.m1.explora", "blender.bpi.m2.explora", "blender.bpi.m3.explora",
         # Nivel Intermedio (v3.2).
-        "blender.bi.m1.explora", "blender.bi.m1.puente", "blender.bi.m2.explora", "blender.bi.m2.aldea",
-        "blender.bi.m3.explora", "blender.bi.m3.diorama",
+        "blender.bi.m1.puente", "blender.bi.m2.aldea", "blender.bi.m3.diorama",
+        # Motor 5: las exploraciones a mitad de módulo son ahora el taller de habilidades
+        # (practices/blender/habilidades.json); quedan en practices/archivo/.
     }
 
 
@@ -310,16 +308,16 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 # --- Descargas ------------------------------------------------------------------
 
 
-def test_la_descarga_es_amatista_motor_4_con_todo_lo_nuevo(cliente):
-    """La plataforma entrega la versión del repositorio, con las 18 prácticas y las temáticas."""
+def test_la_descarga_es_amatista_motor_5_con_todo_lo_nuevo(cliente):
+    """La plataforma entrega la versión del repositorio, con los 9 proyectos, el taller y las temáticas."""
     estado = cliente.get(f"{API}/estado").json()
-    assert estado["nombre"] == "Amatista Motor 4.0" and estado["version_addon"] == "4.0.0"
+    assert estado["nombre"] == "Amatista Motor 5.0" and estado["version_addon"] == "5.0.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-4.0-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-5.0-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 4.0/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 4.0/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 4.0 PARA BLENDER")
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 4.0/amatista-4.0.0.zip")))
+    assert "Amatista Motor 5.0/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 5.0/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 5.0 PARA BLENDER")
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 5.0/amatista-5.0.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
     assert "practicas/temas.json" in nombres and "temas.py" in nombres
@@ -330,7 +328,10 @@ def test_la_descarga_es_amatista_motor_4_con_todo_lo_nuevo(cliente):
     assert {"amatista_engine/figures/silueta.py", "amatista_engine/validators/silhouette.py"} <= set(nombres)
     # Motor 4: la ruta de misiones, las medidas amables y la tarjeta de la misión.
     assert {"mision.py", "amatista_engine/ruta/mision.py", "amatista_engine/ruta/medidas.py"} <= set(nombres)
-    assert sum(1 for n in nombres if n.endswith("/practica.json")) == 18
+    # Motor 5: Amatista Taller (el modelo del alumno, el molde y el catálogo de habilidades).
+    assert {"taller/sesion.py", "taller/vista/molde.py", "practicas/habilidades.json",
+            "amatista_engine/taller/modelo.py", "amatista_engine/validators/taller.py"} <= set(nombres)
+    assert sum(1 for n in nombres if n.endswith("/practica.json")) == 9
     # Motor 3.3: cada práctica de modelado trae la imagen y el plano de su modelo de referencia.
     assert "practicas/principiante/m1-tren/referencia.jpg" in nombres
     assert "practicas/principiante/m1-tren/plano.svg" in nombres
@@ -382,13 +383,13 @@ def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
             importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))
         db.commit()
     resumen = cliente.post(f"{API}/practicas/sincronizar?publicar=true", headers=admin).json()
-    # Nueve módulos con dos prácticas cada uno: exploración y cierre.
-    assert resumen["errores"] == [] and resumen["lecciones_enlazadas"] == 18
+    # Nueve módulos con su proyecto (la exploración de antes es ahora el taller de habilidades).
+    assert resumen["errores"] == [] and resumen["lecciones_enlazadas"] == 9
     with Session(conexion.motor()) as db:
         enlaces = {p.id: (p.curso_id, p.leccion_id) for p in db.query(Practica).all()}
     assert enlaces["blender.bp.m1.tren"] == ("blender_principiante", "bp1_practica")
     assert enlaces["blender.bpi.m3.pelota"] == ("blender_principiante_intermedio", "bpi3_practica")
-    assert enlaces["blender.bp.m1.explora"] == ("blender_principiante", "bp1_blender")
+    assert "blender.bp.m1.explora" not in enlaces
 
 
 def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):

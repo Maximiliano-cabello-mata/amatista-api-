@@ -51,6 +51,10 @@ BLOQUES_INTERACTIVOS = (
     # Práctica del motor dentro de Blender (docs/motor/): se resuelve cuando el
     # servidor registra la práctica completada desde el add-on.
     "blender_practice",
+    # Amatista Taller (motor 5): las habilidades del módulo en Blender
+    # (practices/blender/habilidades.json). Se resuelve cuando se abre el
+    # proyecto; con «vista»: «proyecto» es la tarjeta del proyecto y la isla.
+    "blender_taller",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -734,6 +738,24 @@ def _blender_practice(c: _Contexto, b: dict) -> None:
     c.booleano(b, "allowManual")
 
 
+VISTAS_TALLER = ("taller", "proyecto")  # taller (por defecto): las habilidades; proyecto: la tarjeta de la isla
+
+
+def _blender_taller(c: _Contexto, b: dict) -> None:
+    taller = c.texto(b, "taller", maximo=60)
+    if taller is not None and not PATRON_PRACTICA.match(taller):
+        c.error(f"«taller» = «{taller}» debe ser un id de taller como blender.bp.m1 (minúsculas, números, punto, guion)")
+    elif taller is not None:
+        from contenido.taller import ids_de_talleres
+
+        conocidos = ids_de_talleres()
+        if conocidos and taller not in conocidos:
+            c.error(f"«taller» = «{taller}» no está en practices/blender/habilidades.json (hay: {', '.join(conocidos)})")
+    c.opcion(b, "vista", VISTAS_TALLER, obligatorio=False)
+    c.texto(b, "title", maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=2000)
+
+
 REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "markdown_text": _markdown_text,
     "image": _image,
@@ -757,6 +779,7 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "scene_explorer": _scene_explorer,
     "code_challenge": _code_challenge,
     "blender_practice": _blender_practice,
+    "blender_taller": _blender_taller,
 }
 
 
@@ -974,11 +997,16 @@ def validar_modulo(datos: Any) -> List[str]:
     return errores
 
 
+def _es_taller(bloque: Any) -> bool:
+    """Un bloque blender_taller de habilidades (la vista «proyecto» es solo la tarjeta del proyecto)."""
+    return isinstance(bloque, dict) and bloque.get("type") == "blender_taller" and bloque.get("vista") != "proyecto"
+
+
 def es_practica_blender(leccion: Any) -> bool:
-    """Lección que contiene un bloque blender_practice (la práctica del módulo)."""
+    """Lección que se hace en Blender: un bloque blender_practice (el proyecto) o el taller del módulo (motor 5)."""
     bloques = leccion.get("contentBlocks") if isinstance(leccion, dict) else None
     return isinstance(bloques, list) and any(
-        isinstance(b, dict) and b.get("type") == "blender_practice" for b in bloques
+        (isinstance(b, dict) and b.get("type") == "blender_practice") or _es_taller(b) for b in bloques
     )
 
 
@@ -991,15 +1019,24 @@ def practicas_de_leccion(leccion: Any) -> List[str]:
     ]
 
 
+def talleres_de_leccion(leccion: Any) -> List[str]:
+    """Ids de taller de los bloques blender_taller de habilidades de una lección."""
+    bloques = leccion.get("contentBlocks") if isinstance(leccion, dict) else None
+    return [b["taller"] for b in (bloques if isinstance(bloques, list) else [])
+            if _es_taller(b) and isinstance(b.get("taller"), str)]
+
+
 def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
     """Teoría y Blender se intercalan (v3.2, docs/plataforma/02).
 
     Un módulo puede tener varias prácticas en Blender en cualquier lugar: una
     exploración corta entre dos lecciones de teoría y la práctica de cierre.
     Lo único que no se permite es repetir la misma práctica en el módulo: el
-    motor registra un avance por práctica.
+    motor registra un avance por práctica. Lo mismo con el taller de
+    habilidades (motor 5): una lección por taller.
     """
     vistas: Dict[str, int] = {}
+    talleres: Dict[str, int] = {}
     for i, leccion in enumerate(lecciones):
         for practica in practicas_de_leccion(leccion):
             if practica in vistas:
@@ -1008,3 +1045,10 @@ def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
                 )
             else:
                 vistas[practica] = i
+        for taller in talleres_de_leccion(leccion):
+            if taller in talleres:
+                _Contexto(errores, f"lessons[{i}]").error(
+                    f"el taller «{taller}» ya está en lessons[{talleres[taller]}]: cada taller va una sola vez por módulo"
+                )
+            else:
+                talleres[taller] = i

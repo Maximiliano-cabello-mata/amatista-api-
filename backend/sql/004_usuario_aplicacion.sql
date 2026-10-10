@@ -67,10 +67,12 @@ DECLARE
                 -- 007 (motor de prácticas de Blender)
                 'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
                 -- 010 (enlace en vivo con Blender)
-                'ADDON_ENLACES', 'ADDON_AJUSTES');
+                'ADDON_ENLACES', 'ADDON_AJUSTES',
+                -- 012 (Amatista Taller)
+                'TALLERES_ALUMNO');
   v_opcional  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
                 'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
-                'ADDON_ENLACES', 'ADDON_AJUSTES');
+                'ADDON_ENLACES', 'ADDON_AJUSTES', 'TALLERES_ALUMNO');
 
   FUNCTION existe(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
     v_n PLS_INTEGER;
@@ -117,7 +119,7 @@ BEGIN
     IF existe(v_tablas(i)) THEN
       EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ' || v_tablas(i) || ' TO amatista_app';
     ELSE
-      DBMS_OUTPUT.PUT_LINE('Sin ' || v_tablas(i) || ' todavía: 007 o 010 le darán los permisos al crearla.');
+      DBMS_OUTPUT.PUT_LINE('Sin ' || v_tablas(i) || ' todavía: 007, 010 o 012 le darán los permisos al crearla.');
     END IF;
   END LOOP;
   DBMS_OUTPUT.PUT_LINE('Permisos listos. Configura DB_USER=AMATISTA_APP y DB_ESQUEMA='

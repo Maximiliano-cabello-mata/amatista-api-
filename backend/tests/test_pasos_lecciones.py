@@ -28,7 +28,7 @@ DEFINICIONES = {definicion["id"]: definicion for _, definicion in practicas_del_
 
 
 def test_hay_practicas_en_las_lecciones():
-    assert len(list(bloques_practica())) >= 18
+    assert len(list(bloques_practica())) >= 9  # el proyecto de cada módulo (motor 5: el taller va aparte)
 
 
 @pytest.mark.parametrize("bloque", list(bloques_practica()))

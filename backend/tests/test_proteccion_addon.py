@@ -75,7 +75,7 @@ def test_intento_de_copia_no_verificada(cliente, crear_cuenta, monkeypatch):
     _, admin = crear_cuenta(rol="admin")
     _, alumno = crear_cuenta()
     cliente.post(f"{API}/practicas/sincronizar?publicar=true", headers=admin)
-    practica = "blender.bp.m1.explora"
+    practica = "blender.bp.m1.tren"
     cuerpo = {"practica_id": practica, "escena": {"objetos": []}}
     oficial = {**alumno, "X-Amatista-Integridad": "oficial", "X-Amatista-Huella": motor.construir.huella_oficial()}
 

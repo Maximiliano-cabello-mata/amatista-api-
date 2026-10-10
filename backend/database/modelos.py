@@ -1,8 +1,9 @@
 """Tablas de Amatista.
 
 Deben coincidir con los scripts de backend/sql/ (001 crea la base, 002 la
-amplía sin borrar datos, 005 agrega la reestructuración por niveles y 007 el
-motor de prácticas de Blender). Todos los identificadores son texto (VARCHAR2):
+amplía sin borrar datos, 005 agrega la reestructuración por niveles, 007 el
+motor de prácticas de Blender, 010 y 011 el enlace en vivo y 012 el modelo
+del alumno de Amatista Taller). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
@@ -14,7 +15,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import TIMESTAMP, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Float, ForeignKey, ForeignKeyConstraint, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -307,7 +308,19 @@ class Habilidad(Base):
 
 
 class HabilidadAlumno(Base):
-    """Estado de una habilidad para un alumno: una fila por par (upsert)."""
+    """Estado de una habilidad para un alumno: una fila por par (upsert).
+
+    Desde sql/012 (motor 5, Amatista Taller) la fila guarda además el modelo
+    del alumno de engine/amatista_engine/taller/modelo.py (BKT con olvido y
+    cajas de Leitner): dominio es P(L) después del último intento y ultimo y
+    proximo son epoch en segundos. Todas anulables: dominio NULL = la fila es
+    de antes del taller (solo estado). estado lo sigue escribiendo el backend
+    a partir de la fase, para las pantallas de antes.
+
+    Las columnas de 012 solo las leen y escriben api/taller.py (que tolera
+    que falten) y las pruebas: lo demás usa sentencias con las columnas de 005
+    (api/addon.py, subir_habilidades), así el backend funciona sin 012.
+    """
 
     __tablename__ = "habilidades_alumno"
 
@@ -315,6 +328,34 @@ class HabilidadAlumno(Base):
     habilidad_id: Mapped[str] = mapped_column(String(50), ForeignKey("habilidades.id"), primary_key=True)
     estado: Mapped[str] = mapped_column(String(14), default="sin_practicar")
     evidencia: Mapped[Optional[str]] = mapped_column(String(300))  # enlace o nota, nunca un binario
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    # sql/012: el modelo del alumno (Dominio.a_dict() del motor).
+    dominio: Mapped[Optional[float]] = mapped_column(Float)  # P(L), 0 a 1
+    intentos: Mapped[Optional[int]] = mapped_column(Integer)
+    aciertos: Mapped[Optional[int]] = mapped_column(Integer)
+    sin_ayuda: Mapped[Optional[int]] = mapped_column(Integer)  # aciertos sin molde ni pistas
+    ultimo: Mapped[Optional[float]] = mapped_column(Float)  # epoch del último intento
+    caja: Mapped[Optional[int]] = mapped_column(Integer)  # 0 = todavía no entra al repaso; 1 a 5
+    proximo: Mapped[Optional[float]] = mapped_column(Float)  # epoch del próximo repaso (0 = ninguno)
+    pruebas: Mapped[Optional[int]] = mapped_column(Integer)  # retos del camino rápido sin ayuda
+    vio_demo: Mapped[Optional[int]] = mapped_column(Integer)  # 0 | 1
+    ayuda_max: Mapped[Optional[int]] = mapped_column(Integer)  # ayuda más alta del último intento (0 a 4)
+
+
+class TallerAlumno(Base):
+    """Un taller (módulo con la forma del ciclo) para un alumno (sql/012, motor 5).
+
+    El avance de cada habilidad vive en HABILIDADES_ALUMNO y el del proyecto
+    en PROGRESO_PRACTICAS; aquí solo lo que es del taller: si ya hizo el reto
+    final y lo que eligió para su pieza de la isla (JSON corto: lugar, color…).
+    """
+
+    __tablename__ = "talleres_alumno"
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    taller_id: Mapped[str] = mapped_column(String(60), primary_key=True)  # 'blender.bp.m1'
+    reto_hecho: Mapped[int] = mapped_column(Integer, default=0)  # nunca vuelve de 1 a 0
+    isla: Mapped[Optional[str]] = mapped_column(TextoJSON())  # CLOB con JSON (IS JSON en Oracle)
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
 
 

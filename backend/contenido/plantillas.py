@@ -306,6 +306,13 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
         "steps": ["Crea la cubierta", "Agrega cuatro patas", "Guarda el archivo"],
         "allowManual": False,
     },
+    "blender_taller": {
+        "type": "blender_taller",
+        "id": "taller_1",
+        "taller": "blender.bp.m1",
+        "title": f"{REEMPLAZA}: taller en Blender",
+        "text": "Cada habilidad del módulo en Blender: la miras, la haces con ayuda y la haces sola.",
+    },
 }
 
 
