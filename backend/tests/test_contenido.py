@@ -142,6 +142,45 @@ def test_errores_dicen_donde_esta_el_problema():
         ({**EJEMPLOS_BLOQUES["shortcuts"], "items": [{"action": "Mover"}]}, "falta «items[0].keys»"),
         ({**EJEMPLOS_BLOQUES["compare"], "mode": "slider"}, "necesita «before.image»"),
         ({**EJEMPLOS_BLOQUES["compare"], "after": {"label": "Después"}}, "«after» necesita «image» o «text»"),
+        ({**EJEMPLOS_BLOQUES["mesh_viewer"], "shape": "monkey"}, "«shape» = «monkey» no es válido"),
+        ({**EJEMPLOS_BLOQUES["mesh_viewer"], "segments": 200}, "«segments» debe estar entre 3 y 64"),
+        ({**EJEMPLOS_BLOQUES["mesh_viewer"], "shape": "custom"}, "necesita «mesh»"),
+        (
+            {
+                **EJEMPLOS_BLOQUES["mesh_viewer"],
+                "shape": "custom",
+                "mesh": {"vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]], "faces": [[0, 1, 7]]},
+            },
+            "«mesh.faces[0]» debe tener 3 o más índices",
+        ),
+        (
+            {**EJEMPLOS_BLOQUES["node_graph"], "links": [{"from": "ruido.color", "to": "bsdf.nada"}]},
+            "«links[0].to» = «bsdf.nada» no es una entrada",
+        ),
+        (
+            {
+                **EJEMPLOS_BLOQUES["node_graph"],
+                "links": [{"from": "ruido.color", "to": "bsdf.base"}, {"from": "ruido.color", "to": "bsdf.base"}],
+            },
+            "ya recibe un enlace",
+        ),
+        (
+            {
+                **EJEMPLOS_BLOQUES["node_graph"],
+                "nodes": [
+                    {
+                        "id": "a",
+                        "kind": "converter",
+                        "title": "Math",
+                        "inputs": [{"id": "x", "label": "Valor", "socket": "float"}],
+                        "outputs": [{"id": "y", "label": "Valor", "socket": "float"}],
+                    }
+                ],
+                "links": [{"from": "a.y", "to": "a.x"}],
+            },
+            "forman un ciclo",
+        ),
+        ({**EJEMPLOS_BLOQUES["node_graph"], "nodes": [{"id": "a", "kind": "rara", "title": "X"}], "links": []}, "«nodes[0].kind»"),
     ],
 )
 def test_errores_de_bloques(bloque, esperado):
@@ -151,7 +190,7 @@ def test_errores_de_bloques(bloque, esperado):
 
 
 def test_herramientas_nuevas_validan():
-    for tipo in ("step_by_step", "shortcuts", "compare"):
+    for tipo in ("step_by_step", "shortcuts", "compare", "mesh_viewer", "node_graph"):
         assert tipo in TIPOS_BLOQUE and tipo not in BLOQUES_INTERACTIVOS
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
 

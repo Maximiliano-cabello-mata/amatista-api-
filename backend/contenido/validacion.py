@@ -34,6 +34,9 @@ BLOQUES_CONTENIDO = (
     "step_by_step",
     "shortcuts",
     "compare",
+    # Herramientas gráficas v3.6 (docs/plataforma/07_herramientas_graficas.md): SVG propio, sin librerías.
+    "mesh_viewer",
+    "node_graph",
 )
 # Llevan id único en la lección y "required" (por defecto true): la lección
 # se completa cuando todos los requeridos están resueltos.
@@ -54,6 +57,16 @@ TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 VARIANTES_AVISO = ("dato", "reto")
 MODOS_COMPARAR = ("columns", "slider")
 MAX_TECLAS = 6
+# Visor de malla (frontend/src/components/graficas/malla.js).
+FORMAS_MALLA = ("cube", "plane", "cylinder", "cone", "uv_sphere", "ico_sphere", "torus", "custom")
+MODOS_MALLA = ("vertex", "edge", "face")
+MAX_CARAS_MALLA = 600
+MAX_VERTICES_MALLA = 400
+# Diagrama de nodos (frontend/src/components/graficas/nodos.js).
+CLASES_NODO = ("input", "output", "shader", "texture", "color", "vector", "converter", "geometry", "group", "layout")
+CONECTORES_NODO = ("float", "int", "boolean", "vector", "color", "shader", "geometry", "string", "object", "material")
+MAX_NODOS = 12
+MAX_ENLACES = 24
 PRIMITIVAS = ("sphere", "box", "cylinder", "cone", "torus", "icosahedron")
 PARAMETROS_ESCENA = ("segments", "color", "wireframe", "metalness", "roughness", "scale", "rotationSpeed")
 TIPOS_CONTROL = ("range", "color", "toggle")
@@ -392,6 +405,125 @@ def _compare(c: _Contexto, b: dict) -> None:
     c.texto(b, "caption", obligatorio=False)
 
 
+def _mesh_viewer(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False)
+    forma = c.opcion(b, "shape", FORMAS_MALLA)
+    c.entero(b, "segments", obligatorio=False, minimo=3, maximo=64)
+    c.entero(b, "rings", obligatorio=False, minimo=3, maximo=24)
+    c.entero(b, "subdivisions", obligatorio=False, minimo=1, maximo=3)
+    c.opcion(b, "mode", MODOS_MALLA, obligatorio=False)
+    c.booleano(b, "wireframe")
+    c.texto(b, "caption", obligatorio=False)
+    if forma != "custom":
+        return
+    malla = _valor(b, "mesh")
+    if not isinstance(malla, dict):
+        c.error("«shape» = «custom» necesita «mesh»: {vertices: [[x, y, z], …], faces: [[0, 1, 2], …]}")
+        return
+    vertices = malla.get("vertices")
+    caras = malla.get("faces")
+    if not isinstance(vertices, list) or not 3 <= len(vertices) <= MAX_VERTICES_MALLA or not all(
+        isinstance(v, list) and len(v) == 3 and all(_es_numero(x) for x in v) for v in vertices
+    ):
+        c.error(f"«mesh.vertices» debe ser una lista de 3 a {MAX_VERTICES_MALLA} puntos [x, y, z]")
+        return
+    if not isinstance(caras, list) or not 1 <= len(caras) <= MAX_CARAS_MALLA:
+        c.error(f"«mesh.faces» debe ser una lista de 1 a {MAX_CARAS_MALLA} caras")
+        return
+    for i, cara in enumerate(caras):
+        if not isinstance(cara, list) or len(cara) < 3 or not all(
+            _es_entero(v) and 0 <= v < len(vertices) for v in cara
+        ):
+            c.error(f"«mesh.faces[{i}]» debe tener 3 o más índices de «mesh.vertices» (0 a {len(vertices) - 1})")
+
+
+def _conectores(c: _Contexto, nodo: dict, campo: str, prefijo: str, entradas: bool) -> set:
+    valor = _valor(nodo, campo)
+    if valor is _FALTA:
+        return set()
+    if not isinstance(valor, list) or len(valor) > 8:
+        c.error(f"«{prefijo}{campo}» debe ser una lista de hasta 8 conectores")
+        return set()
+    ids = set()
+    for i, conector in enumerate(valor):
+        p = f"{prefijo}{campo}[{i}]."
+        if not isinstance(conector, dict):
+            c.error(f"«{prefijo}{campo}[{i}]» debe ser un objeto {{id, label, socket}}")
+            continue
+        ident = c.identificador(conector, "id", p)
+        c.texto(conector, "label", p, maximo=30)
+        c.opcion(conector, "socket", CONECTORES_NODO, p)
+        if entradas and "value" in conector and conector["value"] is not None:
+            v = conector["value"]
+            if not (_es_numero(v) or (isinstance(v, str) and len(v) <= 16)):
+                c.error(f"«{p}value» debe ser un número o un texto corto")
+        if ident in ids:
+            c.error(f"«{p}id» = «{ident}» se repite en el nodo")
+        if ident:
+            ids.add(ident)
+    return ids
+
+
+def _node_graph(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False)
+    nodos = c.objetos(b, "nodes", 1, MAX_NODOS)
+    salidas: Dict[str, str] = {}
+    entradas: Dict[str, str] = {}
+    previos: Dict[str, List[str]] = {}
+    for i, nodo in nodos:
+        p = f"nodes[{i}]."
+        ident = c.identificador(nodo, "id", p)
+        c.texto(nodo, "title", p, maximo=28)
+        c.opcion(nodo, "kind", CLASES_NODO, p)
+        c.entero(nodo, "col", p, obligatorio=False, minimo=0, maximo=6)
+        c.texto(nodo, "note", p, obligatorio=False, maximo=300)
+        nombres_salida = _conectores(c, nodo, "outputs", p, False)
+        nombres_entrada = _conectores(c, nodo, "inputs", p, True)
+        if not ident:
+            continue
+        salidas.update({f"{ident}.{s}": ident for s in nombres_salida})
+        entradas.update({f"{ident}.{e}": ident for e in nombres_entrada})
+        previos[ident] = []
+    c.ids_unicos(nodos, "nodes")
+    valor = _valor(b, "links")
+    if valor is _FALTA:
+        enlaces: List[Tuple[int, dict]] = []
+    else:
+        enlaces = c.objetos(b, "links", 0, MAX_ENLACES)
+    usadas: Dict[str, int] = {}
+    for i, enlace in enlaces:
+        p = f"links[{i}]."
+        desde = c.texto(enlace, "from", p)
+        hasta = c.texto(enlace, "to", p)
+        if desde is not None and desde not in salidas:
+            c.error(f"«{p}from» = «{desde}» no es una salida («nodo.salida») de ningún nodo")
+        if hasta is not None and hasta not in entradas:
+            c.error(f"«{p}to» = «{hasta}» no es una entrada («nodo.entrada») de ningún nodo")
+        if hasta in usadas:
+            c.error(f"«{p}to» = «{hasta}» ya recibe un enlace (links[{usadas[hasta]}]): una entrada admite uno solo")
+        elif hasta is not None:
+            usadas[hasta] = i
+        if desde in salidas and hasta in entradas:
+            previos[entradas[hasta]].append(salidas[desde])
+    # Sin ciclos: el diagrama se acomoda de las entradas a la salida.
+    estado: Dict[str, int] = {}
+
+    def ciclo(nodo: str) -> bool:
+        if estado.get(nodo) == 1:
+            return True
+        if estado.get(nodo) == 2:
+            return False
+        estado[nodo] = 1
+        if any(ciclo(p) for p in previos.get(nodo, [])):
+            return True
+        estado[nodo] = 2
+        return False
+
+    if any(ciclo(n) for n in previos):
+        c.error("los enlaces forman un ciclo: un nodo no puede alimentarse a sí mismo")
+    c.texto(b, "caption", obligatorio=False)
+
+
 def _opciones(c: _Contexto, b: dict, minimo: int, maximo: int, campo: str = "options") -> None:
     opciones = c.objetos(b, campo, minimo, maximo)
     for i, opcion in opciones:
@@ -615,6 +747,8 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "step_by_step": _step_by_step,
     "shortcuts": _shortcuts,
     "compare": _compare,
+    "mesh_viewer": _mesh_viewer,
+    "node_graph": _node_graph,
     "quiz_inline": _quiz_inline,
     "ordering": _ordering,
     "matching": _matching,

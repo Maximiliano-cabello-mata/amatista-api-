@@ -176,6 +176,48 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
         "after": {"label": "Después", "text": "La cubierta: ancha y delgada (2 × 1 × 0.1)."},
         "mode": "columns",
     },
+    "mesh_viewer": {
+        "type": "mesh_viewer",
+        "title": f"{REEMPLAZA}: vértices, aristas y caras",
+        "shape": "cube",
+        "mode": "vertex",
+        "caption": "Gira el cubo y cuenta: 8 vértices, 12 aristas y 6 caras.",
+    },
+    "node_graph": {
+        "type": "node_graph",
+        "title": f"{REEMPLAZA}: un material con textura",
+        "nodes": [
+            {
+                "id": "ruido",
+                "kind": "texture",
+                "title": "Noise Texture",
+                "outputs": [{"id": "color", "label": "Color", "socket": "color"}],
+                "note": "Genera manchas de color que no se repiten.",
+            },
+            {
+                "id": "bsdf",
+                "kind": "shader",
+                "title": "Principled BSDF",
+                "outputs": [{"id": "bsdf", "label": "BSDF", "socket": "shader"}],
+                "inputs": [
+                    {"id": "base", "label": "Base Color", "socket": "color"},
+                    {"id": "rough", "label": "Roughness", "socket": "float", "value": 0.5},
+                ],
+                "note": "Decide cómo responde la superficie a la luz.",
+            },
+            {
+                "id": "salida",
+                "kind": "output",
+                "title": "Material Output",
+                "inputs": [{"id": "surface", "label": "Surface", "socket": "shader"}],
+                "note": "Lo que llega aquí es lo que se ve en el render.",
+            },
+        ],
+        "links": [
+            {"from": "ruido.color", "to": "bsdf.base"},
+            {"from": "bsdf.bsdf", "to": "salida.surface"},
+        ],
+    },
     "quiz_inline": {
         "type": "quiz_inline",
         "id": "quiz_1",
