@@ -3,13 +3,14 @@
 El add-on manda latidos; la plataforma ve el Blender en vivo, le deja
 órdenes (abrir una práctica, enfocar) y decide cómo se ve Blender.
 """
+import json
 from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from database import conexion
 from database.modelos import AddonEnlace, ahora
-from tests.test_addon import API, sembrar, vincular  # noqa: F401  (fixture sembrar)
+from tests.test_addon import API, MESA, sembrar, vincular  # noqa: F401  (fixture sembrar)
 
 
 def latir(cliente, blender, **cuerpo):
@@ -214,6 +215,92 @@ def test_empezar_de_nuevo_pide_confirmacion(cliente, crear_cuenta):
     assert latir(cliente, blender, practica_id="blender.bp.m2.espada")["orden"]["tipo"] == "reiniciar"
     assert cliente.post(f"{API}/ordenes", json={"tipo": "borrar_todo"}, headers=alumno).status_code == 422
 
+
+# --- Auditoría del add-on 3.5 ----------------------------------------------------------
+
+
+def test_una_orden_nueva_no_pisa_la_pendiente(cliente, crear_cuenta, sembrar):  # noqa: F811
+    """«Abrir en Blender» y enseguida un cambio en «Mi Blender»: Blender recibe las dos, en orden."""
+    _, admin = crear_cuenta(rol="admin")
+    sembrar(cliente, admin)
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender)
+    cliente.post(f"{API}/ordenes", json={"tipo": "abrir_practica", "practica_id": "blender.n1.mesa"}, headers=alumno)
+    cliente.put(f"{API}/ajustes", json={"enfoque": "nunca"}, headers=alumno)
+    cliente.put(f"{API}/ajustes", json={"enfoque": "siempre"}, headers=alumno)  # «actualizar» no se repite
+    primera = latir(cliente, blender)["orden"]
+    assert primera["tipo"] == "abrir_practica"
+    assert cliente.get(f"{API}/enlace", headers=alumno).json()["blender"][0]["orden_pendiente"] == "abrir_practica"
+    segunda = latir(cliente, blender, orden_hecha=primera["id"])["orden"]
+    assert segunda["tipo"] == "actualizar"
+    assert latir(cliente, blender, orden_hecha=segunda["id"])["orden"] is None
+
+
+def test_la_cola_de_ordenes_tiene_tope_y_abrir_manda(cliente, crear_cuenta, sembrar):  # noqa: F811
+    _, admin = crear_cuenta(rol="admin")
+    sembrar(cliente, admin)
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, practica_id="blender.n1.mesa")
+    cliente.post(f"{API}/ordenes", json={"tipo": "abrir_practica", "practica_id": "blender.n1.mesa"}, headers=alumno)
+    for _ in range(8):
+        cliente.post(f"{API}/ordenes", json={"tipo": "pista", "practica_id": "blender.n1.mesa"}, headers=alumno)
+    with Session(conexion.motor()) as db:
+        fila = db.query(AddonEnlace).one()
+        cola = json.loads(fila.orden)
+        assert len(cola) == 5 and len(fila.orden) <= 1000
+        assert cola[0]["tipo"] == "abrir_practica"
+
+
+def test_una_orden_guardada_por_una_version_anterior_se_lee(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender)
+    with Session(conexion.motor()) as db:
+        fila = db.query(AddonEnlace).one()
+        fila.orden = json.dumps({"id": "abc123", "tipo": "enfocar", "datos": {}})
+        fila.orden_en = ahora()
+        db.commit()
+    assert latir(cliente, blender)["orden"]["id"] == "abc123"
+    assert latir(cliente, blender, orden_hecha="abc123")["orden"] is None
+
+
+def test_el_latido_solo_manda_los_ajustes_elegidos(cliente, crear_cuenta):
+    """Lo que el alumno nunca eligió en «Mi Blender» no pisa las preferencias de Blender."""
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    assert latir(cliente, blender)["ajustes"] == {}
+    cliente.put(f"{API}/ajustes", json={"enfoque": "nunca"}, headers=alumno)
+    assert latir(cliente, blender)["ajustes"] == {"enfoque": "nunca"}
+    cliente.put(f"{API}/ajustes", json={"tarjeta_3d": False}, headers=alumno)
+    assert latir(cliente, blender)["ajustes"] == {"enfoque": "nunca", "tarjeta_3d": False}
+    # La plataforma sigue viendo todos (con los valores por defecto en lo no elegido).
+    assert cliente.get(f"{API}/ajustes", headers=alumno).json()["ajustes"] == {
+        "enfoque": "nunca", "acompanamiento": "acompanado", "avisos_herramientas": True, "tarjeta_3d": False}
+
+
+def test_el_token_del_add_on_no_da_ordenes(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender)
+    r = cliente.post(f"{API}/ordenes", json={"tipo": "reiniciar", "confirmar": True}, headers=blender)
+    assert r.status_code == 403
+    assert latir(cliente, blender)["orden"] is None
+
+
+def test_abrir_un_borrador_desde_la_plataforma_no_existe(cliente, crear_cuenta, sembrar):  # noqa: F811
+    _, admin = crear_cuenta(rol="admin")
+    _, profesor = crear_cuenta(rol="profesor")
+    sembrar(cliente, admin)
+    secreta = {**json.loads(json.dumps(MESA)), "id": "blender.secreta.borrador"}
+    assert cliente.post(f"{API}/practicas", json={"definicion": secreta}, headers=profesor).status_code == 201
+    _, alumno = crear_cuenta()
+    r = cliente.post(f"{API}/ordenes", json={"tipo": "abrir_practica", "practica_id": "blender.secreta.borrador"},
+                     headers=alumno)
+    assert r.status_code == 404
+    assert cliente.post(f"{API}/ordenes", json={"tipo": "abrir_practica", "practica_id": "blender.secreta.borrador"},
+                        headers=profesor).status_code == 200
 
 def test_detalle_visible_desde_otro_proceso(cliente, crear_cuenta):
     """Una API nueva lee el latido de la anterior desde la base, sin memoria compartida."""

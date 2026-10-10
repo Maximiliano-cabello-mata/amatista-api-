@@ -137,3 +137,22 @@ def test_limite_por_cuenta_no_frena_a_un_aula(cliente, crear_cuenta, monkeypatch
         verificar(Peticion(luis))  # misma IP, otra cuenta: pasa
     finally:
         limites.reiniciar_limites()
+
+
+def test_cuerpo_demasiado_grande_sin_content_length(cliente):
+    """Un cuerpo «chunked» (sin Content-Length) también se corta al pasar el límite, sin leerlo entero."""
+    enorme = b'{"dispositivo":"' + b"a" * (3 * 1024 * 1024) + b'"}'
+
+    def partes():
+        for i in range(0, len(enorme), 64 * 1024):
+            yield enorme[i:i + 64 * 1024]
+
+    respuesta = cliente.post("/api/addon/v1/vinculos", content=partes(), headers={"Content-Type": "application/json"})
+    assert respuesta.status_code == 413
+
+    def chico():
+        yield b'{"dispositivo":'
+        yield b'"Blender"}'
+
+    assert cliente.post("/api/addon/v1/vinculos", content=chico(),
+                        headers={"Content-Type": "application/json"}).status_code == 201

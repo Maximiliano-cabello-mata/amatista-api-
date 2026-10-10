@@ -78,7 +78,8 @@ app = FastAPI(
 )
 
 # Tamaño máximo de un cuerpo (por defecto 2 MB): la escena más grande del
-# add-on pesa unos cientos de KB. Lo mismo hace Caddy con request_body.
+# add-on pesa unos cientos de KB. Caddy también limita con request_body (1 MB),
+# pero la API puede quedar expuesta sin proxy: el límite se cumple aquí también.
 MAX_CUERPO = int(os.getenv("AMATISTA_MAX_CUERPO", 2 * 1024 * 1024))
 
 # Cabeceras de seguridad (las mismas que pone Caddy): si la API queda expuesta
@@ -96,15 +97,65 @@ RUTAS_PRIVADAS = ("/api/auth/", "/api/progreso", "/api/admin/", "/api/addon/v1/y
 
 @app.middleware("http")
 async def proteger(request: Request, siguiente):
-    largo = request.headers.get("content-length")
-    if largo and largo.isdigit() and int(largo) > MAX_CUERPO:
-        return JSONResponse({"detail": "La petición es demasiado grande."}, status_code=413)
     respuesta = await siguiente(request)
     for nombre, valor in CABECERAS_SEGURAS.items():
         respuesta.headers.setdefault(nombre, valor)
     if request.url.path.startswith(RUTAS_PRIVADAS):
         respuesta.headers.setdefault("Cache-Control", "no-store")
     return respuesta
+
+
+class LimitarCuerpo:
+    """Rechaza con 413 los cuerpos de más de MAX_CUERPO bytes.
+
+    Con Content-Length se decide antes de leer nada. Sin él (Transfer-Encoding:
+    chunked) el cuerpo se lee contando bytes y se corta en cuanto pasa el
+    límite: nunca se carga ni se valida un cuerpo enorme.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        largo = dict(scope.get("headers") or ()).get(b"content-length")
+        if largo is not None:
+            if not largo.isdigit() or int(largo) > MAX_CUERPO:
+                await self._demasiado(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+        partes, total = [], 0
+        while True:
+            mensaje = await receive()
+            if mensaje["type"] != "http.request":
+                return  # el cliente se desconectó
+            partes.append(mensaje.get("body", b""))
+            total += len(partes[-1])
+            if total > MAX_CUERPO:
+                await self._demasiado(scope, receive, send)
+                return
+            if not mensaje.get("more_body"):
+                break
+        entregado = False
+
+        async def recibir():
+            nonlocal entregado
+            if not entregado:
+                entregado = True
+                return {"type": "http.request", "body": b"".join(partes), "more_body": False}
+            return await receive()
+
+        await self.app(scope, recibir, send)
+
+    @staticmethod
+    async def _demasiado(scope, receive, send):
+        await JSONResponse({"detail": "La petición es demasiado grande."}, status_code=413)(scope, receive, send)
+
+
+app.add_middleware(LimitarCuerpo)
 
 
 class ComprimirJSON(GZipMiddleware):

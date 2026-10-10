@@ -17,7 +17,9 @@ Prácticas (tabla PRACTICAS, historial en PRACTICA_VERSIONES):
 
 Progreso (PROGRESO_PRACTICAS):
 - POST /practicas/{id}/abrir: la plataforma (o Blender) marca la práctica
-  como la actual; el add-on la abre sola con GET /practica-actual.
+  como la actual; un Blender abierto la recibe al momento como orden del
+  enlace en vivo (api/enlace.py) y uno que arranca la abre con
+  GET /practica-actual.
 - POST /intentos: el add-on manda la foto de la escena; el servidor la
   evalúa con el mismo motor y guarda el mejor resultado. Al completarla
   marca la lección, sube las habilidades (como mucho a «con_pistas»: la
@@ -501,12 +503,13 @@ def dispositivos(db: Session = Depends(obtener_db), usuario: Usuario = Depends(u
 
 @router.delete("/dispositivos/{dispositivo_id}")
 def desconectar(dispositivo_id: str, db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
-    if len(dispositivo_id) != 16:
+    if not re.fullmatch(r"[0-9a-f]{16}", dispositivo_id):
         raise HTTPException(status_code=404, detail="No existe ese dispositivo.")
     filas = db.scalars(
         select(Sesion).where(
             Sesion.usuario_id == usuario.id,
-            Sesion.id.like(f"{dispositivo_id}%"),
+            # Comparación exacta del comienzo del id: con LIKE, «_» o «%» en la ruta valdrían por cualquier carácter.
+            func.substr(Sesion.id, 1, 16) == dispositivo_id,
             Sesion.dispositivo.like(f"{PREFIJO_DISPOSITIVO}%"),
         )
     ).all()
@@ -913,8 +916,9 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
     practica = obtener_practica(db, cuerpo.practica_id, usuario)
     version = version_para(practica, usuario)
     if cuerpo.version and cuerpo.version != version:
-        # Una versión anterior que el alumno tenía en caché sigue valiendo.
-        if cuerpo.version <= practica.version and db.get(PracticaVersion, (practica.id, cuerpo.version)) is not None:
+        # Una versión anterior que el alumno tenía en caché sigue valiendo; una más nueva que la
+        # suya (para un alumno, un borrador sin publicar) no: se evalúa con la que le toca.
+        if cuerpo.version < version and db.get(PracticaVersion, (practica.id, cuerpo.version)) is not None:
             version = cuerpo.version
     definicion = definicion_de(db, practica, version)
     pistas = {str(k)[:80]: max(0, min(int(v), 20)) for k, v in cuerpo.pistas.items()}

@@ -403,3 +403,36 @@ def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_c
         assert resumen["estado"] == "archivado"  # curso v2 archivado en el motor v3: no llega a los alumnos
         practica = db.get(Practica, "blender.n1.mesa")
         assert (practica.curso_id, practica.leccion_id) == ("blender", "les_103")
+
+
+# --- Auditoría del add-on 3.5 ----------------------------------------------------------
+
+
+def test_el_alumno_no_se_evalua_con_un_borrador(cliente, crear_cuenta, sembrar):
+    """Un alumno que manda la versión de un borrador se evalúa con la publicada (nunca con lo no publicado)."""
+    _, admin = crear_cuenta(rol="admin")
+    _, profesor = crear_cuenta(rol="profesor")
+    sembrar(cliente, admin)
+    borrador = copy.deepcopy(MESA)
+    borrador["title"] = "Mesa en borrador"
+    assert cliente.post(f"{API}/practicas", json={"definicion": borrador}, headers=profesor).json()["version"] == 2
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    intento = cliente.post(f"{API}/intentos", json={"practica_id": MESA["id"], "version": 2, "escena": escena_mesa()},
+                           headers=blender)
+    assert intento.status_code == 200 and intento.json()["version"] == 1
+    # El equipo sí prueba el borrador.
+    equipo, _ = vincular(cliente, profesor)
+    probado = cliente.post(f"{API}/intentos", json={"practica_id": MESA["id"], "version": 2, "escena": escena_mesa()},
+                           headers=equipo)
+    assert probado.status_code == 200 and probado.json()["version"] == 2
+
+
+def test_desconectar_no_acepta_comodines(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    uno, _ = vincular(cliente, alumno)
+    otro, _ = vincular(cliente, alumno)
+    for comodin in ("_" * 16, "%" * 16, "0000000000000%%%"):
+        assert cliente.delete(f"{API}/dispositivos/{comodin}", headers=alumno).status_code == 404
+    assert cliente.get(f"{API}/yo", headers=uno).status_code == 200
+    assert cliente.get(f"{API}/yo", headers=otro).status_code == 200
