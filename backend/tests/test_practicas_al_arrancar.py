@@ -25,7 +25,7 @@ def arrancar(tmp_path, monkeypatch):
 def test_al_arrancar_registra_y_publica_todas_las_del_repositorio(tmp_path, monkeypatch):
     del_repo = {datos["id"] for _, datos in motor_practicas.practicas_del_repositorio()}
     filas = arrancar(tmp_path, monkeypatch)
-    assert len(del_repo) == 18
+    assert len(del_repo) == 9  # los proyectos; las exploraciones de antes quedan en practices/archivo/
     assert set(filas) == del_repo
     assert all(estado == "publicado" and publicada == version and origen == "repositorio"
                for estado, version, publicada, origen in filas.values())

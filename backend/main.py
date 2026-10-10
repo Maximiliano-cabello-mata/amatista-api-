@@ -18,7 +18,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import addon, admin, auth, blender, contenido, enlace, eventos, niveles, progreso, sesiones
+from api import addon, admin, auth, blender, contenido, enlace, eventos, niveles, progreso, sesiones, taller
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
@@ -34,6 +34,7 @@ async def ciclo_de_vida(app: FastAPI):
     if motor().dialect.name == "sqlite":
         Base.metadata.create_all(motor())
     registrar_practicas_del_repositorio()
+    registrar_habilidades_del_taller()
     yield
 
 
@@ -59,6 +60,27 @@ def registrar_practicas_del_repositorio():
     )
     for error in resumen["errores"]:
         registro.warning("Práctica sin registrar: %s", error)
+
+
+def registrar_habilidades_del_taller():
+    """Registra en HABILIDADES las habilidades de practices/blender/habilidades.json (Amatista Taller).
+
+    HABILIDADES_ALUMNO tiene una llave foránea hacia HABILIDADES. Si la base
+    no responde o le faltan tablas, solo avisa en el log: la API arranca igual
+    y POST /api/addon/v1/habilidades/intentos vuelve a intentarlo.
+    """
+    if os.getenv("AMATISTA_SINCRONIZAR_PRACTICAS", "1").strip().lower() in ("0", "no", "false"):
+        return
+    registro = logging.getLogger("amatista.taller")
+    with Session(motor()) as db:
+        try:
+            resumen = taller.sincronizar_al_arrancar(db)
+        except SQLAlchemyError as error:
+            db.rollback()
+            registro.warning("No se registraron las habilidades del taller: %s", error.__class__.__name__)
+            return
+    registro.info("Habilidades del taller: %d nuevas, %d actualizadas, %d sin su curso en la base",
+                  len(resumen["nuevas"]), len(resumen["actualizadas"]), len(resumen["sin_curso"]))
 
 
 def apagado(nombre: str) -> bool:
@@ -196,6 +218,7 @@ app.include_router(niveles.router)  # reestructuración v3: niveles y mapa del c
 app.include_router(blender.router)  # versiones de Blender y matriz de compatibilidad
 app.include_router(addon.router)  # add-on de Blender y motor de prácticas (sql/007)
 app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/010, motor 3.4)
+app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por habilidad (sql/012, motor 5)
 
 
 @app.get("/")

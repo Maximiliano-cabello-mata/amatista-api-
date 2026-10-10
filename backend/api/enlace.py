@@ -14,6 +14,11 @@ un Blender conectado. Ahora:
   esperan en una cola corta (una orden nueva no pisa la pendiente). El
   latido trae también lo que muestra el instructor (paso, mensaje y la
   lista de la figura): la lección lo muestra en vivo.
+- Motor 5 (Amatista Taller): la lección maneja el taller en Blender
+  (taller_abrir, taller_continuar, taller_pausa, taller_pista,
+  taller_mirame, taller_probar, taller_repaso e isla) y el latido trae
+  detalle.taller: la actividad de ahora, la pieza del molde, la pista y la
+  fase de cada habilidad.
 - «Mi Blender» guarda cómo se ve Blender para el alumno (GET/PUT /ajustes):
   modo enfocado, acompañamiento, avisos. El add-on aplica solo los que el
   alumno eligió; lo que nunca tocó sigue como esté en Blender.
@@ -63,7 +68,13 @@ AJUSTES_POR_DEFECTO: Dict[str, Any] = {
 }
 ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            # Motor 3.5: la plataforma maneja la práctica en Blender.
-           "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica")
+           "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
+           # Motor 5: la plataforma maneja el taller (addon/amatista_blender/taller/sesion.py, ORDENES).
+           "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame", "taller_probar",
+           "taller_repaso", "isla")
+# Las órdenes del taller que necesitan saber de qué taller (y de qué habilidad) hablan.
+ORDENES_CON_TALLER = ("taller_abrir", "taller_probar", "taller_repaso")
+ORDENES_CON_HABILIDAD = ("taller_probar", "taller_repaso")
 LIMITE_LATIDO = limitar(40, por="cuenta")  # 12 por minuto con el intervalo normal
 LIMITE_ORDENES = limitar(30, por="cuenta")
 
@@ -213,8 +224,59 @@ class PasoMision(BaseModel):
     teclas: List[str] = Field(default_factory=list, max_length=6)
 
 
+class ActividadVivo(BaseModel):
+    """La actividad del taller que el alumno tiene abierta (motor 5)."""
+
+    id: str = Field(default="", max_length=120)  # «conmigo:bl-mover:baja»
+    tipo: str = Field(default="", max_length=12)  # mira | conmigo | tu | prueba | repaso | proyecto | reto
+    nombre_tipo: str = Field(default="", max_length=30)  # «Hazlo conmigo»
+    titulo: str = Field(default="", max_length=80)
+    pide: str = Field(default="", max_length=300)
+    habilidad: str = Field(default="", max_length=60)
+    numero: int = Field(default=0, ge=0, le=99)
+    de: int = Field(default=0, ge=0, le=99)
+    dibujo: str = Field(default="", max_length=10)  # molde | marca | libre
+    molde: bool = False
+
+
+class PiezaVivo(BaseModel):
+    nombre: str = Field(default="", max_length=60)
+    estado: str = Field(default="", max_length=12)  # falta | cerca | lista
+    mensaje: str = Field(default="", max_length=200)
+
+
+class PistaVivo(BaseModel):
+    nivel: int = Field(default=0, ge=0, le=9)  # 1 qué falta · 2 con qué · 3 cómo · 4 mírame
+    titulo: str = Field(default="", max_length=40)
+    texto: str = Field(default="", max_length=300)
+    teclas: List[str] = Field(default_factory=list, max_length=6)
+
+
+class HabilidadVivo(BaseModel):
+    id: str = Field(default="", max_length=60)
+    titulo: str = Field(default="", max_length=60)
+    p: float = Field(default=0.0, ge=0.0, le=1.0)  # dominio
+    fase: str = Field(default="", max_length=12)  # nueva | acompanada | sola | dominada
+
+
+class TallerVivo(BaseModel):
+    """detalle.taller del latido (motor 5): lo que la lección muestra del taller en vivo."""
+
+    taller: str = Field(default="", max_length=60)
+    actividad: ActividadVivo = Field(default_factory=ActividadVivo)
+    pieza: Optional[PiezaVivo] = None  # la pieza del molde que toca
+    llenas: int = Field(default=0, ge=0, le=99)
+    total: int = Field(default=0, ge=0, le=99)
+    mensaje: str = Field(default="", max_length=300)
+    pista: Optional[PistaVivo] = None
+    estado: str = Field(default="", max_length=12)  # mirando | trabajando | lograda | pausa
+    habilidades: List[HabilidadVivo] = Field(default_factory=list, max_length=12)
+    proyecto_abierto: bool = False
+    repasos: List[str] = Field(default_factory=list, max_length=12)
+
+
 class Detalle(BaseModel):
-    """Lo que el instructor muestra en Blender ahora (motor 3.5; motor 4: la misión de la ruta)."""
+    """Lo que el instructor muestra en Blender ahora (motor 3.5; motor 4: la misión de la ruta; motor 5: el taller)."""
 
     titulo: str = Field(default="", max_length=120)  # el paso actual
     mensaje: str = Field(default="", max_length=500)  # lo que dice el instructor
@@ -231,6 +293,7 @@ class Detalle(BaseModel):
     hechas: int = Field(default=0, ge=0, le=99)  # misiones cumplidas
     objetivo: str = Field(default="", max_length=300)  # qué hacer, en una frase
     pasos: List[PasoMision] = Field(default_factory=list, max_length=3)
+    taller: Optional[TallerVivo] = None  # motor 5: la actividad del taller (sin práctica de antes)
 
 
 class Latido(BaseModel):
@@ -315,9 +378,38 @@ def ver_enlace(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usu
 
 class Orden(BaseModel):
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
-                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica"]
+                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
+                  "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame",
+                  "taller_probar", "taller_repaso", "isla"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
     confirmar: bool = False  # «reiniciar» lo exige: la plataforma pregunta antes
+    # Motor 5: de qué taller, actividad o habilidad habla una orden del taller.
+    taller: Optional[str] = Field(default=None, max_length=60)
+    actividad: Optional[str] = Field(default=None, max_length=120)
+    habilidad: Optional[str] = Field(default=None, max_length=60)
+
+
+def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
+    """Los datos de una orden del taller, revisados contra el catálogo (practices/blender/habilidades.json)."""
+    from contenido.taller import catalogo
+
+    datos: Dict[str, Any] = {}
+    if cuerpo.tipo not in ORDENES_CON_TALLER:
+        return datos
+    cat = catalogo()
+    taller = cat.taller(cuerpo.taller or "") if cat else None
+    if taller is None:
+        raise HTTPException(status_code=404, detail=f"No existe el taller «{(cuerpo.taller or '')[:60]}».")
+    datos["taller"] = taller.id
+    if cuerpo.tipo in ORDENES_CON_HABILIDAD:
+        visibles = set(taller.habilidades) | set(taller.repasa)
+        if (cuerpo.habilidad or "") not in visibles:
+            raise HTTPException(status_code=404,
+                                detail=f"La habilidad «{(cuerpo.habilidad or '')[:60]}» no es de este taller.")
+        datos["habilidad"] = cuerpo.habilidad
+    if cuerpo.tipo == "taller_abrir" and cuerpo.actividad:
+        datos["actividad"] = cuerpo.actividad  # Blender la vuelve a armar y, si no existe, abre lo que toca
+    return datos
 
 
 def _rechazar_addon(request: Request, db: Session, mensaje: str) -> None:
@@ -341,6 +433,7 @@ def nueva_orden(cuerpo: Orden, request: Request, db: Session = Depends(obtener_d
         # Como al descargarla: un alumno solo puede abrir prácticas publicadas.
         practica = obtener_practica(db, cuerpo.practica_id or "", usuario)
         datos["practica_id"] = practica.id
+    datos.update(_datos_taller(cuerpo))
     try:
         entregadas = dejar_orden(db, usuario.id, cuerpo.tipo, datos)
         db.commit()

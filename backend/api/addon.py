@@ -42,11 +42,11 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
@@ -724,13 +724,38 @@ def versiones_practica(practica_id: str, db: Session = Depends(obtener_db),
 
 
 def practicas_en_lecciones(db: Session) -> Dict[str, tuple]:
-    """{practica_id: (curso_id, leccion_id)} según los bloques blender_practice."""
-    vinculos = {}
+    """{practica_id: (curso_id, leccion_id)} según los bloques blender_practice.
+
+    Motor 5: un bloque blender_taller enlaza también el proyecto de su taller
+    (practices/blender/habilidades.json) con la lección, pero solo si ningún
+    blender_practice lo nombra; entre bloques de taller manda el de
+    «vista»: «proyecto».
+    """
+    vinculos: Dict[str, tuple] = {}
+    de_talleres: Dict[str, Tuple[int, tuple]] = {}
+    talleres = None
     for leccion in db.scalars(select(Leccion).where(Leccion.estado != "archivado").order_by(Leccion.curso_id, Leccion.id)):
         contenido = leer(leccion.contenido) if isinstance(leccion.contenido, str) else leccion.contenido
         for bloque in (contenido or {}).get("contentBlocks") or []:
-            if isinstance(bloque, dict) and bloque.get("type") == "blender_practice" and bloque.get("practica"):
+            if not isinstance(bloque, dict):
+                continue
+            if bloque.get("type") == "blender_practice" and bloque.get("practica"):
                 vinculos.setdefault(bloque["practica"], (leccion.curso_id, leccion.id))
+            elif bloque.get("type") == "blender_taller" and isinstance(bloque.get("taller"), str):
+                if talleres is None:
+                    from contenido.taller import catalogo
+
+                    cat = catalogo()
+                    talleres = {t.id: t for t in cat.talleres} if cat else {}
+                taller = talleres.get(bloque["taller"])
+                if taller is None or not taller.proyecto:
+                    continue
+                prioridad = 0 if bloque.get("vista") == "proyecto" else 1
+                anterior = de_talleres.get(taller.proyecto)
+                if anterior is None or prioridad < anterior[0]:
+                    de_talleres[taller.proyecto] = (prioridad, (leccion.curso_id, leccion.id))
+    for practica_id, (_, lugar) in de_talleres.items():
+        vinculos.setdefault(practica_id, lugar)
     return vinculos
 
 
@@ -889,18 +914,30 @@ def subir_habilidades(db: Session, usuario: Usuario, habilidades, autonomia: str
     estado = next(e for e, n in ORDEN_AUTONOMIA.items() if n == tope)
     subidas = []
     existentes = set(db.scalars(select(Habilidad.id).where(Habilidad.id.in_(list(habilidades))))) if habilidades else set()
+    if not existentes:
+        return subidas
+    # Solo las columnas de sql/005: sin 012 (el modelo del alumno de Amatista
+    # Taller, api/taller.py) esto sigue funcionando igual que antes.
+    tabla = HabilidadAlumno.__table__
+    actuales = dict(db.execute(
+        select(tabla.c.habilidad_id, tabla.c.estado).where(
+            tabla.c.usuario_id == usuario.id, tabla.c.habilidad_id.in_(sorted(existentes)))
+    ).all())
     for habilidad_id in habilidades:
         if habilidad_id not in existentes:
             continue
-        fila = db.get(HabilidadAlumno, (usuario.id, habilidad_id))
-        if fila is None:
-            fila = HabilidadAlumno(usuario_id=usuario.id, habilidad_id=habilidad_id, estado="sin_practicar")
-            db.add(fila)
-        if ORDEN_AUTONOMIA.get(fila.estado, 0) < tope:
-            fila.estado = estado
-            fila.evidencia = f"Práctica {practica_id} v{version} (Blender)"[:300]
-            fila.actualizado_en = momento
-            subidas.append(habilidad_id)
+        actual = actuales.get(habilidad_id)
+        if ORDEN_AUTONOMIA.get(actual or "sin_practicar", 0) >= tope:
+            continue
+        valores = {"estado": estado, "evidencia": f"Práctica {practica_id} v{version} (Blender)"[:300],
+                   "actualizado_en": momento}
+        if actual is None:
+            db.execute(insert(tabla).values(usuario_id=usuario.id, habilidad_id=habilidad_id, **valores))
+        else:
+            db.execute(update(tabla).where(tabla.c.usuario_id == usuario.id, tabla.c.habilidad_id == habilidad_id)
+                       .values(**valores))
+        actuales[habilidad_id] = estado
+        subidas.append(habilidad_id)
     return subidas
 
 
