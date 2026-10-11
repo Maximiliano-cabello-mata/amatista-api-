@@ -660,24 +660,8 @@ def modulo_esqueleto(
 # cursos en la base si faltan (no sobrescribe lo que se editó en el panel).
 
 CURSOS_BASE: Dict[str, dict] = {
-    # v3.7: la introducción a la plataforma y al add-on, antes de Principiante (nivel 0 de la ruta).
-    "primeros_pasos": {
-        "id": "primeros_pasos",
-        "numero": "00",
-        "titulo": "Primeros pasos con Amatista",
-        "subtitulo": "Cómo trabajan juntos la plataforma y tu Blender",
-        "descripcion": (
-            "Antes del primer taller: recorres la plataforma y una lección, instalas Amatista Motor, vinculas "
-            "tu cuenta y das tus primeros pasos en Blender mientras la lección te ve en vivo."
-        ),
-        "nivel": "Primeros pasos",
-        "acento": "blender",
-        "recurso_texto": "Descarga Blender gratis",
-        "recurso_url": "https://www.blender.org/download/",
-        "orden": 0,
-        "ruta": "blender",
-        "requisito_id": None,
-    },
+    # «primeros_pasos» (v3.7) se retiró el 11 de octubre: lo reemplazan el recorrido por la plataforma y las
+    # tres prácticas del add-on (#/blender). Su módulo quedó en frontend/src/data/modulos/archivo/.
     # Ruta de Blender del motor v3 (practices/blender/cursos.json).
     "blender_principiante": {
         "id": "blender_principiante",

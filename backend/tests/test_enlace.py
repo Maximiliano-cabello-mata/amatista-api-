@@ -374,6 +374,7 @@ def test_detalle_igual_no_escribe_cada_latido(cliente, crear_cuenta):
 # --- Add-on 5.1: los primeros pasos en Blender ------------------------------------------
 
 RECORRIDO = {
+    "id": "vista", "nombre": "Muévete y usa tus herramientas", "hechos": ["pestana"],
     "activo": True, "hecho": False, "paso": 3, "total": 10, "titulo": "Mira alrededor",
     "texto": "Orbitar es girar la vista.", "hacer": "Arrastra con el botón central.", "teclas": ["Botón central"],
     "pasos": [{"titulo": f"Parada {i}", "ok": i < 3} for i in range(10)],
@@ -388,6 +389,7 @@ def test_la_leccion_ve_los_primeros_pasos_sin_practica_abierta(cliente, crear_cu
     assert b["practica_id"] is None
     assert b["detalle"]["recorrido"]["titulo"] == "Mira alrededor" and b["detalle"]["recorrido"]["paso"] == 3
     assert [p["ok"] for p in b["detalle"]["recorrido"]["pasos"]][:4] == [True, True, True, False]
+    assert b["detalle"]["recorrido"]["id"] == "vista" and b["detalle"]["recorrido"]["hechos"] == ["pestana"]
     # Un add-on anterior al 5.1 no lo manda: sin práctica no queda detalle.
     latir(cliente, blender)
     (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
@@ -399,6 +401,11 @@ def test_los_primeros_pasos_tienen_limites(cliente, crear_cuenta):
     blender, _ = vincular(cliente, alumno)
     largo = {**RECORRIDO, "pasos": [{"titulo": "x"}] * 13}
     assert cliente.post(f"{API}/enlace", json={"detalle": {"recorrido": largo}}, headers=blender).status_code == 422
+    raro = {**RECORRIDO, "hechos": ["otra"]}
+    assert cliente.post(f"{API}/enlace", json={"detalle": {"recorrido": raro}}, headers=blender).status_code == 422
+    # El add-on 5.1 no mandaba id ni hechos: sigue valiendo.
+    viejo = {k: v for k, v in RECORRIDO.items() if k not in ("id", "nombre", "hechos")}
+    assert cliente.post(f"{API}/enlace", json={"detalle": {"recorrido": viejo}}, headers=blender).status_code == 200
 
 
 def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
@@ -413,6 +420,13 @@ def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
         latir(cliente, blender, orden_hecha=orden["id"])
     # Sin acción, empieza; una acción desconocida no pasa.
     cliente.post(f"{API}/ordenes", json={"tipo": "recorrido"}, headers=alumno)
-    assert latir(cliente, blender)["orden"]["datos"] == {"accion": "empezar"}
+    orden = latir(cliente, blender)["orden"]
+    assert orden["datos"] == {"accion": "empezar"}
+    latir(cliente, blender, orden_hecha=orden["id"])
     malo = cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "accion": "borrar"}, headers=alumno)
     assert malo.status_code == 422
+    # Add-on 5.2: la orden dice de qué práctica habla; una que no existe no pasa.
+    cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "accion": "empezar", "recorrido": "taller"}, headers=alumno)
+    assert latir(cliente, blender)["orden"]["datos"] == {"accion": "empezar", "recorrido": "taller"}
+    otra = cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "recorrido": "nada"}, headers=alumno)
+    assert otra.status_code == 422

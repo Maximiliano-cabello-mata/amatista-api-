@@ -246,13 +246,16 @@ def test_resumen_por_curso(cliente, escenario):
     with Session(conexion.motor()) as db:
         db.add_all([Curso(id="blender", titulo="Blender", orden=1), Curso(id="aframe", titulo="A-Frame", orden=2)])
         db.add(Modulo(id="mod_teoria_001", curso_id="blender", numero=1, titulo="Teoría"))
+        # Un módulo archivado (como «Primeros pasos», retirado): sus lecciones no cuentan.
+        db.add(Modulo(id="mod_viejo_001", curso_id="blender", numero=2, titulo="Viejo", estado="archivado"))
         db.flush()
-        for leccion_id, estado in (("les_001", "publicado"), ("les_002", "publicado"), ("les_003", "borrador")):
+        for leccion_id, estado, modulo_id in (("les_001", "publicado", "mod_teoria_001"), ("les_002", "publicado", "mod_teoria_001"),
+                                              ("les_003", "borrador", "mod_teoria_001"), ("les_004", "publicado", "mod_viejo_001")):
             db.add(
                 Leccion(
                     curso_id="blender",
                     id=leccion_id,
-                    modulo_id="mod_teoria_001",
+                    modulo_id=modulo_id,
                     orden=1,
                     titulo=leccion_id,
                     tipo="theory_reading",
