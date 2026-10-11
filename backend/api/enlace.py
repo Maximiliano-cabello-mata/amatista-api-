@@ -19,11 +19,12 @@ un Blender conectado. Ahora:
   taller_mirame, taller_probar, taller_repaso e isla) y el latido trae
   detalle.taller: la actividad de ahora, la pieza del molde, la pista y la
   fase de cada habilidad.
-- Add-on 5.1: los primeros pasos dentro de Blender. El latido trae siempre
-  detalle.recorrido (en qué parada va o si ya se hicieron) y la lección del
-  curso «Primeros pasos» deja la orden «recorrido» con su acción (empezar,
-  siguiente, anterior, salir). Con un recorrido el detalle se guarda aunque
-  no haya práctica abierta.
+- Add-on 5.2: «Conoce Amatista Motor», tres prácticas que explican el add-on
+  (en el 5.1 era un solo recorrido). El latido trae siempre detalle.recorrido
+  (cuál va, en qué parada y cuáles se terminaron) y la página Blender de la
+  plataforma deja la orden «recorrido» con su acción (empezar, siguiente,
+  anterior, salir) y la práctica (pestana, vista, taller). Con un recorrido el
+  detalle se guarda aunque no haya práctica abierta.
 - «Mi Blender» guarda cómo se ve Blender para el alumno (GET/PUT /ajustes):
   modo enfocado, acompañamiento, avisos. El add-on aplica solo los que el
   alumno eligió; lo que nunca tocó sigue como esté en Blender.
@@ -287,9 +288,16 @@ class ParadaVivo(BaseModel):
     ok: bool = False
 
 
-class RecorridoVivo(BaseModel):
-    """detalle.recorrido del latido (add-on 5.1): los primeros pasos en Blender."""
+RECORRIDOS = ("pestana", "vista", "taller")  # addon/amatista_blender/recorrido_pasos.py › ORDEN
 
+
+class RecorridoVivo(BaseModel):
+    """detalle.recorrido del latido: desde el add-on 5.2, las tres prácticas de «Conoce Amatista Motor»
+    (cuál va, en qué parada y cuáles se terminaron). El 5.1 mandaba un solo recorrido sin id."""
+
+    id: str = Field(default="", max_length=20)
+    nombre: str = Field(default="", max_length=60)
+    hechos: List[Literal["pestana", "vista", "taller"]] = Field(default_factory=list, max_length=3)
     activo: bool = False
     hecho: bool = False
     paso: int = Field(default=0, ge=0, le=20)
@@ -415,8 +423,10 @@ class Orden(BaseModel):
     taller: Optional[str] = Field(default=None, max_length=60)
     actividad: Optional[str] = Field(default=None, max_length=120)
     habilidad: Optional[str] = Field(default=None, max_length=60)
-    # Add-on 5.1: qué hacer con los primeros pasos (orden «recorrido»).
+    # Add-on 5.1: qué hacer con los primeros pasos (orden «recorrido»); desde el 5.2, de qué práctica de
+    # «Conoce Amatista Motor» habla (sin ella, «empezar» abre la primera sin terminar).
     accion: Optional[Literal["empezar", "siguiente", "anterior", "salir"]] = None
+    recorrido: Optional[Literal["pestana", "vista", "taller"]] = None
 
 
 def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
@@ -466,6 +476,8 @@ def nueva_orden(cuerpo: Orden, request: Request, db: Session = Depends(obtener_d
     datos.update(_datos_taller(cuerpo))
     if cuerpo.tipo == "recorrido":
         datos["accion"] = cuerpo.accion or "empezar"
+        if cuerpo.recorrido:
+            datos["recorrido"] = cuerpo.recorrido
     try:
         entregadas = dejar_orden(db, usuario.id, cuerpo.tipo, datos)
         db.commit()
