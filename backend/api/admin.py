@@ -143,12 +143,16 @@ def por_curso(db: Session) -> List[dict]:
     alumnos = {curso_id: (cantidad, completadas or 0) for curso_id, cantidad, completadas in filas}
 
     # Lecciones publicadas por curso, solo si la tabla de contenido tiene filas
-    # (antes de importar el contenido el dato no existe: null).
+    # (antes de importar el contenido el dato no existe: null). Las de módulos archivados
+    # no cuentan: el alumno no las ve (auditoría 2026-10-11, curso «Primeros pasos» retirado).
     publicadas: Optional[Dict[str, int]] = None
     if db.scalar(select(func.count()).select_from(Leccion)):
         publicadas = dict(
             db.execute(
-                select(Leccion.curso_id, func.count()).where(Leccion.estado == "publicado").group_by(Leccion.curso_id)
+                select(Leccion.curso_id, func.count())
+                .join(Modulo, Modulo.id == Leccion.modulo_id)
+                .where(Leccion.estado == "publicado", Modulo.estado != "archivado")
+                .group_by(Leccion.curso_id)
             ).all()
         )
     orden = dict(db.execute(select(Curso.id, Curso.orden)).all())
