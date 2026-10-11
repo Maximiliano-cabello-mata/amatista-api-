@@ -313,6 +313,58 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
         "title": f"{REEMPLAZA}: taller en Blender",
         "text": "Cada habilidad del módulo en Blender: la miras, la haces con ayuda y la haces sola.",
     },
+    # Recursos gráficos v3.7.
+    "ui_tour": {
+        "type": "ui_tour",
+        "screen": "blender",
+        "title": f"{REEMPLAZA}: Blender con Amatista",
+        "stops": [
+            {"area": "vista3d", "title": "La vista 3D", "text": "Aquí ves y mueves tus objetos."},
+            {"area": "barra_n", "title": "La pestaña Amatista", "text": "Pulsa N: ahí está tu taller."},
+        ],
+    },
+    "connection_flow": {
+        "type": "connection_flow",
+        "title": f"{REEMPLAZA}: así se hablan",
+        "nodes": [
+            {"id": "plataforma", "label": "Plataforma", "icon": "plataforma"},
+            {"id": "servidor", "label": "Servidor", "icon": "servidor"},
+            {"id": "blender", "label": "Blender", "icon": "blender"},
+        ],
+        "messages": [
+            {"from": "blender", "to": "servidor", "label": "Latido", "text": "Cada 5 segundos Blender cuenta qué hace."},
+            {"from": "plataforma", "to": "servidor", "label": "Orden", "text": "La lección deja una orden para Blender."},
+        ],
+    },
+    "axis_gizmo": {"type": "axis_gizmo", "title": f"{REEMPLAZA}: gira los ejes"},
+    "param_demo": {"type": "param_demo", "demo": "bevel", "caption": "Mueve el control como en el panel del modificador."},
+    "classify": {
+        "type": "classify",
+        "id": "clasifica_1",
+        "question": f"{REEMPLAZA}: ¿dónde pasa cada cosa?",
+        "groups": [{"id": "plataforma", "label": "Plataforma"}, {"id": "blender", "label": "Blender"}],
+        "items": [
+            {"text": "Leer la teoría", "group": "plataforma"},
+            {"text": "Mover el cubo con G", "group": "blender"},
+            {"text": "Vencer al jefe final", "group": "plataforma"},
+        ],
+        "explanation": "La teoría y los exámenes están en la plataforma; el modelado, en Blender.",
+    },
+    "true_false": {
+        "type": "true_false",
+        "id": "verdad_1",
+        "statements": [
+            {"text": f"{REEMPLAZA}: en Blender, Z es la altura.", "answer": True, "explanation": "Z apunta al cielo."},
+            {"text": "G sirve para girar.", "answer": False, "explanation": "G mueve (grab); R rota."},
+        ],
+    },
+    "blender_tour": {
+        "type": "blender_tour",
+        "id": "recorrido_1",
+        "title": f"{REEMPLAZA}: primeros pasos en Blender",
+        "text": "Abre Blender: la pestaña Amatista te muestra dónde está cada cosa.",
+        "allowManual": True,
+    },
 }
 
 
@@ -608,6 +660,24 @@ def modulo_esqueleto(
 # cursos en la base si faltan (no sobrescribe lo que se editó en el panel).
 
 CURSOS_BASE: Dict[str, dict] = {
+    # v3.7: la introducción a la plataforma y al add-on, antes de Principiante (nivel 0 de la ruta).
+    "primeros_pasos": {
+        "id": "primeros_pasos",
+        "numero": "00",
+        "titulo": "Primeros pasos con Amatista",
+        "subtitulo": "Cómo trabajan juntos la plataforma y tu Blender",
+        "descripcion": (
+            "Antes del primer taller: recorres la plataforma y una lección, instalas Amatista Motor, vinculas "
+            "tu cuenta y das tus primeros pasos en Blender mientras la lección te ve en vivo."
+        ),
+        "nivel": "Primeros pasos",
+        "acento": "blender",
+        "recurso_texto": "Descarga Blender gratis",
+        "recurso_url": "https://www.blender.org/download/",
+        "orden": 0,
+        "ruta": "blender",
+        "requisito_id": None,
+    },
     # Ruta de Blender del motor v3 (practices/blender/cursos.json).
     "blender_principiante": {
         "id": "blender_principiante",

@@ -19,6 +19,11 @@ un Blender conectado. Ahora:
   taller_mirame, taller_probar, taller_repaso e isla) y el latido trae
   detalle.taller: la actividad de ahora, la pieza del molde, la pista y la
   fase de cada habilidad.
+- Add-on 5.1: los primeros pasos dentro de Blender. El latido trae siempre
+  detalle.recorrido (en qué parada va o si ya se hicieron) y la lección del
+  curso «Primeros pasos» deja la orden «recorrido» con su acción (empezar,
+  siguiente, anterior, salir). Con un recorrido el detalle se guarda aunque
+  no haya práctica abierta.
 - «Mi Blender» guarda cómo se ve Blender para el alumno (GET/PUT /ajustes):
   modo enfocado, acompañamiento, avisos. El add-on aplica solo los que el
   alumno eligió; lo que nunca tocó sigue como esté en Blender.
@@ -71,7 +76,9 @@ ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
            # Motor 5: la plataforma maneja el taller (addon/amatista_blender/taller/sesion.py, ORDENES).
            "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame", "taller_probar",
-           "taller_repaso", "isla")
+           "taller_repaso", "isla",
+           # Add-on 5.1: los primeros pasos en Blender (addon/amatista_blender/recorrido.py).
+           "recorrido")
 # Las órdenes del taller que necesitan saber de qué taller (y de qué habilidad) hablan.
 ORDENES_CON_TALLER = ("taller_abrir", "taller_probar", "taller_repaso")
 ORDENES_CON_HABILIDAD = ("taller_probar", "taller_repaso")
@@ -275,6 +282,25 @@ class TallerVivo(BaseModel):
     repasos: List[str] = Field(default_factory=list, max_length=12)
 
 
+class ParadaVivo(BaseModel):
+    titulo: str = Field(default="", max_length=60)
+    ok: bool = False
+
+
+class RecorridoVivo(BaseModel):
+    """detalle.recorrido del latido (add-on 5.1): los primeros pasos en Blender."""
+
+    activo: bool = False
+    hecho: bool = False
+    paso: int = Field(default=0, ge=0, le=20)
+    total: int = Field(default=0, ge=0, le=20)
+    titulo: str = Field(default="", max_length=80)
+    texto: str = Field(default="", max_length=300)
+    hacer: str = Field(default="", max_length=160)
+    teclas: List[str] = Field(default_factory=list, max_length=6)
+    pasos: List[ParadaVivo] = Field(default_factory=list, max_length=12)
+
+
 class Detalle(BaseModel):
     """Lo que el instructor muestra en Blender ahora (motor 3.5; motor 4: la misión de la ruta; motor 5: el taller)."""
 
@@ -294,6 +320,7 @@ class Detalle(BaseModel):
     objetivo: str = Field(default="", max_length=300)  # qué hacer, en una frase
     pasos: List[PasoMision] = Field(default_factory=list, max_length=3)
     taller: Optional[TallerVivo] = None  # motor 5: la actividad del taller (sin práctica de antes)
+    recorrido: Optional[RecorridoVivo] = None  # add-on 5.1: los primeros pasos
 
 
 class Latido(BaseModel):
@@ -330,7 +357,8 @@ def latido(cuerpo: Latido, request: Request, db: Session = Depends(obtener_db),
         if cola != cola_de(fila):
             _guardar_cola(fila, cola, momento, True)
         orden = cola[0] if cola else None
-        detalle = _compactar(cuerpo.detalle.model_dump()) if cuerpo.detalle and cuerpo.practica_id else None
+        guardar = cuerpo.detalle is not None and (cuerpo.practica_id or cuerpo.detalle.recorrido is not None)
+        detalle = _compactar(cuerpo.detalle.model_dump()) if guardar else None
         if fila.detalle != detalle:
             fila.detalle = detalle
         cambio = nuevo or estado != antes or db.is_modified(fila)
@@ -380,13 +408,15 @@ class Orden(BaseModel):
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
                   "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
                   "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame",
-                  "taller_probar", "taller_repaso", "isla"]
+                  "taller_probar", "taller_repaso", "isla", "recorrido"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
     confirmar: bool = False  # «reiniciar» lo exige: la plataforma pregunta antes
     # Motor 5: de qué taller, actividad o habilidad habla una orden del taller.
     taller: Optional[str] = Field(default=None, max_length=60)
     actividad: Optional[str] = Field(default=None, max_length=120)
     habilidad: Optional[str] = Field(default=None, max_length=60)
+    # Add-on 5.1: qué hacer con los primeros pasos (orden «recorrido»).
+    accion: Optional[Literal["empezar", "siguiente", "anterior", "salir"]] = None
 
 
 def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
@@ -434,6 +464,8 @@ def nueva_orden(cuerpo: Orden, request: Request, db: Session = Depends(obtener_d
         practica = obtener_practica(db, cuerpo.practica_id or "", usuario)
         datos["practica_id"] = practica.id
     datos.update(_datos_taller(cuerpo))
+    if cuerpo.tipo == "recorrido":
+        datos["accion"] = cuerpo.accion or "empezar"
     try:
         entregadas = dejar_orden(db, usuario.id, cuerpo.tipo, datos)
         db.commit()
