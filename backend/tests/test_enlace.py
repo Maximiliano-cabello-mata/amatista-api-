@@ -369,3 +369,50 @@ def test_detalle_igual_no_escribe_cada_latido(cliente, crear_cuenta):
         with patch.object(db, 'commit', wraps=db.commit) as commit:
             latido(cuerpo, request, db, usuario)
             commit.assert_not_called()
+
+
+# --- Add-on 5.1: los primeros pasos en Blender ------------------------------------------
+
+RECORRIDO = {
+    "activo": True, "hecho": False, "paso": 3, "total": 10, "titulo": "Mira alrededor",
+    "texto": "Orbitar es girar la vista.", "hacer": "Arrastra con el botón central.", "teclas": ["Botón central"],
+    "pasos": [{"titulo": f"Parada {i}", "ok": i < 3} for i in range(10)],
+}
+
+
+def test_la_leccion_ve_los_primeros_pasos_sin_practica_abierta(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, detalle={"recorrido": RECORRIDO})
+    (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
+    assert b["practica_id"] is None
+    assert b["detalle"]["recorrido"]["titulo"] == "Mira alrededor" and b["detalle"]["recorrido"]["paso"] == 3
+    assert [p["ok"] for p in b["detalle"]["recorrido"]["pasos"]][:4] == [True, True, True, False]
+    # Un add-on anterior al 5.1 no lo manda: sin práctica no queda detalle.
+    latir(cliente, blender)
+    (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
+    assert b["detalle"] is None
+
+
+def test_los_primeros_pasos_tienen_limites(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    largo = {**RECORRIDO, "pasos": [{"titulo": "x"}] * 13}
+    assert cliente.post(f"{API}/enlace", json={"detalle": {"recorrido": largo}}, headers=blender).status_code == 422
+
+
+def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender, detalle={"recorrido": RECORRIDO})
+    for accion in ("empezar", "siguiente", "anterior", "salir"):
+        r = cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "accion": accion}, headers=alumno)
+        assert r.status_code == 200 and r.json()["entregada"], r.text
+        orden = latir(cliente, blender)["orden"]
+        assert orden["tipo"] == "recorrido" and orden["datos"] == {"accion": accion}
+        latir(cliente, blender, orden_hecha=orden["id"])
+    # Sin acción, empieza; una acción desconocida no pasa.
+    cliente.post(f"{API}/ordenes", json={"tipo": "recorrido"}, headers=alumno)
+    assert latir(cliente, blender)["orden"]["datos"] == {"accion": "empezar"}
+    malo = cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "accion": "borrar"}, headers=alumno)
+    assert malo.status_code == 422

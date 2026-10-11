@@ -37,6 +37,11 @@ BLOQUES_CONTENIDO = (
     # Herramientas gráficas v3.6 (docs/plataforma/07_herramientas_graficas.md): SVG propio, sin librerías.
     "mesh_viewer",
     "node_graph",
+    # Recursos gráficos v3.7 (docs/plataforma/10_primeros_pasos_y_recursos.md): SVG propio.
+    "ui_tour",
+    "connection_flow",
+    "axis_gizmo",
+    "param_demo",
 )
 # Llevan id único en la lección y "required" (por defecto true): la lección
 # se completa cuando todos los requeridos están resueltos.
@@ -55,6 +60,12 @@ BLOQUES_INTERACTIVOS = (
     # (practices/blender/habilidades.json). Se resuelve cuando se abre el
     # proyecto; con «vista»: «proyecto» es la tarjeta del proyecto y la isla.
     "blender_taller",
+    # Recursos v3.7: cada tarjeta a su grupo y ¿verdad o mito?
+    "classify",
+    "true_false",
+    # Primeros pasos dentro de Blender (add-on 5.1, recorrido.py): se resuelve cuando
+    # Blender avisa por el enlace en vivo que el recorrido terminó.
+    "blender_tour",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -77,6 +88,14 @@ TIPOS_CONTROL = ("range", "color", "toggle")
 # Tipo de control cuando el bloque no lo indica.
 CONTROL_POR_PARAMETRO = {"color": "color", "wireframe": "toggle"}
 OPERADORES_META = ("<=", ">=", "==", "!=")
+# Recursos v3.7: las zonas de cada pantalla del recorrido (frontend/src/components/leccion/recursos.js, PANTALLAS).
+ZONAS_PANTALLA = {
+    "plataforma": ("barra", "avance", "ayuda", "continuar", "cursos", "panel", "blender"),
+    "leccion": ("titulo", "quehacer", "teoria", "actividad", "hexagonos", "completar", "mascota"),
+    "blender": ("herramientas", "vista3d", "tarjeta", "molde", "barra_n", "outliner", "propiedades"),
+}
+ICONOS_NODO_FLUJO = ("plataforma", "servidor", "blender", "alumno")
+DEMOS_PARAMETRO = ("array", "bevel", "subdivision", "mirror", "light", "resolution")
 
 # Letras, números, guion y guion bajo: los ids viajan en la URL (#/curso/c/leccion/l)
 # y en la clave "curso:leccion" del progreso, así que no admiten ":" ni espacios.
@@ -756,6 +775,105 @@ def _blender_taller(c: _Contexto, b: dict) -> None:
     c.texto(b, "text", obligatorio=False, maximo=2000)
 
 
+# --- Recursos gráficos v3.7 ----------------------------------------------------------------
+
+
+def _ui_tour(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    pantalla = c.opcion(b, "screen", tuple(ZONAS_PANTALLA))
+    for i, parada in c.objetos(b, "stops", 2, 10):
+        p = f"stops[{i}]."
+        if pantalla:
+            c.opcion(parada, "area", ZONAS_PANTALLA[pantalla], p)
+        c.texto(parada, "title", p, maximo=120)
+        c.texto(parada, "text", p, maximo=600)
+
+
+def _connection_flow(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    nodos = c.objetos(b, "nodes", 2, 4)
+    c.ids_unicos(nodos, "nodes")
+    ids = set()
+    for i, nodo in nodos:
+        p = f"nodes[{i}]."
+        ident = c.identificador(nodo, "id", p)
+        c.texto(nodo, "label", p, maximo=24)
+        c.opcion(nodo, "icon", ICONOS_NODO_FLUJO, p, obligatorio=False)
+        if ident:
+            ids.add(ident)
+    for i, mensaje in c.objetos(b, "messages", 1, 10):
+        p = f"messages[{i}]."
+        desde = c.texto(mensaje, "from", p)
+        hasta = c.texto(mensaje, "to", p)
+        for campo, valor in (("from", desde), ("to", hasta)):
+            if valor is not None and ids and valor not in ids:
+                c.error(f"«{p}{campo}» = «{valor}» no es un nodo (hay: {', '.join(sorted(ids))})")
+        if desde is not None and desde == hasta:
+            c.error(f"«{p}from» y «{p}to» son el mismo nodo")
+        c.texto(mensaje, "label", p, maximo=60)
+        c.texto(mensaje, "text", p, maximo=600)
+    c.texto(b, "caption", obligatorio=False)
+
+
+def _axis_gizmo(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "caption", obligatorio=False)
+
+
+def _param_demo(c: _Contexto, b: dict) -> None:
+    c.opcion(b, "demo", DEMOS_PARAMETRO)
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "caption", obligatorio=False)
+    c.numero(b, "value", obligatorio=False)
+
+
+def _classify(c: _Contexto, b: dict) -> None:
+    c.texto(b, "question", maximo=300)
+    grupos = c.objetos(b, "groups", 2, 4)
+    c.ids_unicos(grupos, "groups")
+    ids = set()
+    for i, grupo in grupos:
+        p = f"groups[{i}]."
+        ident = c.identificador(grupo, "id", p)
+        c.texto(grupo, "label", p, maximo=24)
+        if ident:
+            ids.add(ident)
+    items = c.objetos(b, "items", 3, 10)
+    c.ids_unicos(items, "items", clave="text")
+    usados = set()
+    for i, item in items:
+        p = f"items[{i}]."
+        c.texto(item, "text", p, maximo=160)
+        grupo = c.texto(item, "group", p)
+        if grupo is not None and ids and grupo not in ids:
+            c.error(f"«{p}group» = «{grupo}» no es un grupo (hay: {', '.join(sorted(ids))})")
+        usados.add(grupo)
+    vacios = sorted(ids - usados)
+    if items and vacios:
+        c.error(f"el grupo «{vacios[0]}» no tiene ninguna tarjeta")
+    c.texto(b, "explanation", obligatorio=False)
+
+
+def _true_false(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    afirmaciones = c.objetos(b, "statements", 2, 8)
+    c.ids_unicos(afirmaciones, "statements", clave="text")
+    for i, afirmacion in afirmaciones:
+        p = f"statements[{i}]."
+        c.texto(afirmacion, "text", p, maximo=300)
+        c.booleano(afirmacion, "answer", p, obligatorio=True)
+        c.texto(afirmacion, "explanation", p, obligatorio=False, maximo=600)
+    respuestas = {a.get("answer") for _, a in afirmaciones if isinstance(a.get("answer"), bool)}
+    if len(afirmaciones) >= 3 and len(respuestas) == 1:
+        c.error("todas las afirmaciones tienen la misma respuesta: mezcla verdades y mitos")
+
+
+def _blender_tour(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=2000)
+    c.booleano(b, "allowManual")
+
+
 REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "markdown_text": _markdown_text,
     "image": _image,
@@ -780,6 +898,13 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "code_challenge": _code_challenge,
     "blender_practice": _blender_practice,
     "blender_taller": _blender_taller,
+    "ui_tour": _ui_tour,
+    "connection_flow": _connection_flow,
+    "axis_gizmo": _axis_gizmo,
+    "param_demo": _param_demo,
+    "classify": _classify,
+    "true_false": _true_false,
+    "blender_tour": _blender_tour,
 }
 
 
