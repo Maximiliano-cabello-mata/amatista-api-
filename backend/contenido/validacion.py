@@ -76,7 +76,7 @@ BLOQUES_INTERACTIVOS = (
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
-VARIANTES_AVISO = ("dato", "reto")
+VARIANTES_AVISO = ("dato", "reto", "estudio")
 MODOS_COMPARAR = ("columns", "slider")
 MAX_TECLAS = 6
 # Visor de malla (frontend/src/components/graficas/malla.js).
