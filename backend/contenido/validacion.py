@@ -66,6 +66,13 @@ BLOQUES_INTERACTIVOS = (
     # Primeros pasos dentro de Blender (add-on 5.1, recorrido.py): se resuelve cuando
     # Blender avisa por el enlace en vivo que el recorrido terminó.
     "blender_tour",
+    # Recursos gráficos v4.2 (docs/plataforma/13_camino_graficos_y_motor_web.md): se aprende
+    # haciendo con la figura, no leyendo listas.
+    "viewport_sim",
+    "image_choice",
+    "keyframe_sim",
+    # Motor Web de Amatista (frontend/src/motor3d/): un mundo A-Frame con objetos que se mueven y retos.
+    "motor_scene",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -95,6 +102,17 @@ ZONAS_PANTALLA = {
     "blender": ("herramientas", "vista3d", "tarjeta", "molde", "barra_n", "outliner", "propiedades"),
 }
 ICONOS_NODO_FLUJO = ("plataforma", "servidor", "blender", "alumno")
+# Recursos gráficos v4.2 y Motor Web (frontend/src/components/leccion/graficos/, frontend/src/motor3d/).
+MISIONES_VISTA = ("orbitar", "acercar", "frente", "arriba", "lado", "encuadrar")
+FIGURAS_ELEGIR = (
+    "cubo", "cubo_bisel", "cubo_suave", "cilindro", "cono", "esfera", "plano", "toro",
+    "fila_array", "espejo", "alambre", "extruido",
+)
+ENTORNOS_MOTOR = ("pradera", "bosque", "isla", "desierto", "nieve", "ciudad", "cristal", "espacio", "vacio")
+FORMAS_MOTOR = ("caja", "esfera", "cilindro", "cono", "toro", "cristal", "plano", "modelo")
+MODELOS_MOTOR = ("arbol", "casa", "cristal")
+PATRONES_MOTOR = ("fila", "rejilla", "circulo", "espiral", "azar")
+RETOS_MOTOR = ("en_zona", "todos_en_zona", "tocar", "cerca", "altura")
 DEMOS_PARAMETRO = ("array", "bevel", "subdivision", "mirror", "light", "resolution")
 
 # Letras, números, guion y guion bajo: los ids viajan en la URL (#/curso/c/leccion/l)
@@ -874,6 +892,117 @@ def _blender_tour(c: _Contexto, b: dict) -> None:
     c.booleano(b, "allowManual")
 
 
+def _viewport_sim(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "caption", obligatorio=False)
+    misiones = _valor(b, "missions")
+    if misiones is _FALTA:
+        return
+    if not isinstance(misiones, list) or not 1 <= len(misiones) <= len(MISIONES_VISTA):
+        c.error(f"«missions» debe ser una lista de 1 a {len(MISIONES_VISTA)} misiones")
+        return
+    for i, mision in enumerate(misiones):
+        if mision not in MISIONES_VISTA:
+            c.error(f"«missions[{i}]» = «{mision}» no es válida (usa: {', '.join(MISIONES_VISTA)})")
+    if len(set(m for m in misiones if isinstance(m, str))) != len(misiones):
+        c.error("«missions» tiene misiones repetidas")
+
+
+def _image_choice(c: _Contexto, b: dict) -> None:
+    c.texto(b, "question", maximo=300)
+    opciones = c.objetos(b, "options", 2, 4)
+    c.ids_unicos(opciones, "options")
+    correctas = 0
+    for i, opcion in opciones:
+        p = f"options[{i}]."
+        c.identificador(opcion, "id", p)
+        c.opcion(opcion, "figure", FIGURAS_ELEGIR, p)
+        c.texto(opcion, "label", p, obligatorio=False, maximo=40)
+        if c.booleano(opcion, "isCorrect", p, obligatorio=True):
+            correctas += 1
+    if opciones and correctas != 1:
+        c.error(f"debe haber exactamente una opción correcta (hay {correctas})")
+    c.texto(b, "explanation", obligatorio=False)
+
+
+def _keyframe_sim(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "caption", obligatorio=False)
+    cuadros = c.entero(b, "frames", obligatorio=False, minimo=12, maximo=120) or 60
+    metas = c.objetos(b, "targets", 2, 6)
+    vistos = set()
+    for i, meta in metas:
+        p = f"targets[{i}]."
+        cuadro = c.entero(meta, "frame", p, minimo=1, maximo=cuadros)
+        c.numero(meta, "height", p, minimo=0, maximo=1)
+        if cuadro in vistos:
+            c.error(f"«{p}frame» = {cuadro} se repite")
+        vistos.add(cuadro)
+
+
+def _motor_scene(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "instructions", obligatorio=False, maximo=600)
+    c.texto(b, "success", obligatorio=False, maximo=300)
+    escena = _valor(b, "escena")
+    if not isinstance(escena, dict):
+        c.error("falta «escena» (un objeto con entorno, objetos, zonas y retos)")
+        return
+    entorno = escena.get("entorno")
+    if entorno is not None:
+        if not isinstance(entorno, dict):
+            c.error("«escena.entorno» debe ser un objeto o null")
+        else:
+            c.opcion(entorno, "tipo", ENTORNOS_MOTOR, "escena.entorno.")
+            c.numero(entorno, "tamano", "escena.entorno.", obligatorio=False, minimo=10, maximo=120)
+            c.numero(entorno, "densidad", "escena.entorno.", obligatorio=False, minimo=0, maximo=1)
+    ids = set()
+    for lista, maximo in (("objetos", 40), ("zonas", 8), ("generar", 6), ("retos", 8)):
+        valor = escena.get(lista, [])
+        if not isinstance(valor, list) or len(valor) > maximo:
+            c.error(f"«escena.{lista}» debe ser una lista de hasta {maximo}")
+    for i, objeto in enumerate(escena.get("objetos") or []):
+        p = f"escena.objetos[{i}]."
+        if not isinstance(objeto, dict):
+            c.error(f"«{p[:-1]}» debe ser un objeto JSON")
+            continue
+        ident = c.identificador(objeto, "id", p)
+        if ident in ids:
+            c.error(f"«{p}id» = «{ident}» se repite")
+        ids.add(ident)
+        forma = c.opcion(objeto, "forma", FORMAS_MOTOR, p, obligatorio=False)
+        if forma == "modelo":
+            c.opcion(objeto, "modelo", MODELOS_MOTOR, p)
+    for i, zona in enumerate(escena.get("zonas") or []):
+        p = f"escena.zonas[{i}]."
+        if not isinstance(zona, dict):
+            c.error(f"«{p[:-1]}» debe ser un objeto JSON")
+            continue
+        ident = c.identificador(zona, "id", p)
+        if ident in ids:
+            c.error(f"«{p}id» = «{ident}» ya lo usa otro objeto")
+        ids.add(ident)
+        c.numero(zona, "radio", p, obligatorio=False, minimo=0.3, maximo=10)
+    for i, grupo in enumerate(escena.get("generar") or []):
+        if isinstance(grupo, dict):
+            c.opcion(grupo, "patron", PATRONES_MOTOR, f"escena.generar[{i}].", obligatorio=False)
+    retos = escena.get("retos") or []
+    for i, reto in enumerate(retos):
+        p = f"escena.retos[{i}]."
+        if not isinstance(reto, dict):
+            c.error(f"«{p[:-1]}» debe ser un objeto JSON")
+            continue
+        c.opcion(reto, "tipo", RETOS_MOTOR, p)
+        for campo in ("objeto", "zona", "de"):
+            ref = reto.get(campo)
+            if ref is not None and str(ref).lstrip("#") not in ids:
+                c.error(f"«{p}{campo}» = «{ref}» no está en la escena")
+        for ref in reto.get("objetos") or []:
+            if str(ref).lstrip("#") not in ids:
+                c.error(f"«{p}objetos»: «{ref}» no está en la escena")
+        c.texto(reto, "texto", p, obligatorio=False, maximo=160)
+
+
 REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "markdown_text": _markdown_text,
     "image": _image,
@@ -905,6 +1034,10 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "classify": _classify,
     "true_false": _true_false,
     "blender_tour": _blender_tour,
+    "viewport_sim": _viewport_sim,
+    "image_choice": _image_choice,
+    "keyframe_sim": _keyframe_sim,
+    "motor_scene": _motor_scene,
 }
 
 

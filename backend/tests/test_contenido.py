@@ -195,6 +195,42 @@ def test_herramientas_nuevas_validan():
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
 
 
+def test_recursos_graficos_y_motor_web_validan():
+    for tipo in ("viewport_sim", "image_choice", "keyframe_sim", "motor_scene"):
+        assert tipo in BLOQUES_INTERACTIVOS
+        assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
+
+
+@pytest.mark.parametrize(
+    "bloque, esperado",
+    [
+        ({**EJEMPLOS_BLOQUES["viewport_sim"], "missions": ["volar"]}, "«missions[0]» = «volar» no es válida"),
+        (
+            {**EJEMPLOS_BLOQUES["image_choice"], "options": [{**o, "isCorrect": True} for o in EJEMPLOS_BLOQUES["image_choice"]["options"]]},
+            "exactamente una opción correcta (hay 3)",
+        ),
+        (
+            {**EJEMPLOS_BLOQUES["image_choice"], "options": [{"id": "a", "figure": "tetera", "isCorrect": True}, {"id": "b", "figure": "cubo", "isCorrect": False}]},
+            "«options[0].figure» = «tetera» no es válido",
+        ),
+        ({**EJEMPLOS_BLOQUES["keyframe_sim"], "targets": [{"frame": 1, "height": 1}, {"frame": 1, "height": 0}]}, "se repite"),
+        ({**EJEMPLOS_BLOQUES["keyframe_sim"], "targets": [{"frame": 1, "height": 2}, {"frame": 9, "height": 0}]}, "«targets[0].height»"),
+        ({**EJEMPLOS_BLOQUES["motor_scene"], "escena": None}, "falta «escena»"),
+        (
+            {**EJEMPLOS_BLOQUES["motor_scene"], "escena": {"entorno": {"tipo": "luna"}}},
+            "«escena.entorno.tipo» = «luna» no es válido",
+        ),
+        (
+            {**EJEMPLOS_BLOQUES["motor_scene"], "escena": {"objetos": [{"id": "a"}], "retos": [{"tipo": "en_zona", "objeto": "a", "zona": "meta"}]}},
+            "«escena.retos[0].zona» = «meta» no está en la escena",
+        ),
+    ],
+)
+def test_errores_de_recursos_v42(bloque, esperado):
+    errores = validar_leccion(leccion_con(bloque))
+    assert any(esperado in error for error in errores), errores
+
+
 def test_teoria_y_blender_se_intercalan():
     modulo = leer(MODULOS / "blender_principiante-modulo-1.json")
     assert validar_modulo(modulo) == []

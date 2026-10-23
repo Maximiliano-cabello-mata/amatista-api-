@@ -358,6 +358,41 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
             {"text": "G sirve para girar.", "answer": False, "explanation": "G mueve (grab); R rota."},
         ],
     },
+    "viewport_sim": {
+        "type": "viewport_sim",
+        "id": "vista_1",
+        "title": f"{REEMPLAZA}: muévete como en Blender",
+        "missions": ["orbitar", "acercar", "frente", "arriba"],
+    },
+    "image_choice": {
+        "type": "image_choice",
+        "id": "elige_1",
+        "question": f"{REEMPLAZA}: ¿cuál tiene un bisel?",
+        "options": [
+            {"id": "a", "figure": "cubo", "isCorrect": False},
+            {"id": "b", "figure": "cubo_bisel", "isCorrect": True},
+            {"id": "c", "figure": "cubo_suave", "isCorrect": False},
+        ],
+        "explanation": "El bisel corta las aristas: se ven caras pequeñas en cada borde.",
+    },
+    "keyframe_sim": {
+        "type": "keyframe_sim",
+        "id": "claves_1",
+        "title": f"{REEMPLAZA}: haz rebotar la pelota",
+        "frames": 60,
+        "targets": [{"frame": 1, "height": 1}, {"frame": 15, "height": 0}, {"frame": 30, "height": 1}],
+    },
+    "motor_scene": {
+        "type": "motor_scene",
+        "id": "mundo_1",
+        "title": f"{REEMPLAZA}: lleva la caja a la meta",
+        "escena": {
+            "entorno": {"tipo": "pradera", "semilla": 1},
+            "objetos": [{"id": "caja", "forma": "caja", "movible": True, "posicion": [-3, 0, 1]}],
+            "zonas": [{"id": "meta", "posicion": [3, -1], "radio": 1.2}],
+            "retos": [{"tipo": "en_zona", "objeto": "caja", "zona": "meta"}],
+        },
+    },
     "blender_tour": {
         "type": "blender_tour",
         "id": "recorrido_1",
