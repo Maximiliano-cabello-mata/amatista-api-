@@ -358,6 +358,41 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
             {"text": "G sirve para girar.", "answer": False, "explanation": "G mueve (grab); R rota."},
         ],
     },
+    "viewport_sim": {
+        "type": "viewport_sim",
+        "id": "vista_1",
+        "title": f"{REEMPLAZA}: muévete como en Blender",
+        "missions": ["orbitar", "acercar", "frente", "arriba"],
+    },
+    "image_choice": {
+        "type": "image_choice",
+        "id": "elige_1",
+        "question": f"{REEMPLAZA}: ¿cuál tiene un bisel?",
+        "options": [
+            {"id": "a", "figure": "cubo", "isCorrect": False},
+            {"id": "b", "figure": "cubo_bisel", "isCorrect": True},
+            {"id": "c", "figure": "cubo_suave", "isCorrect": False},
+        ],
+        "explanation": "El bisel corta las aristas: se ven caras pequeñas en cada borde.",
+    },
+    "keyframe_sim": {
+        "type": "keyframe_sim",
+        "id": "claves_1",
+        "title": f"{REEMPLAZA}: haz rebotar la pelota",
+        "frames": 60,
+        "targets": [{"frame": 1, "height": 1}, {"frame": 15, "height": 0}, {"frame": 30, "height": 1}],
+    },
+    "motor_scene": {
+        "type": "motor_scene",
+        "id": "mundo_1",
+        "title": f"{REEMPLAZA}: lleva la caja a la meta",
+        "escena": {
+            "entorno": {"tipo": "pradera", "semilla": 1},
+            "objetos": [{"id": "caja", "forma": "caja", "movible": True, "posicion": [-3, 0, 1]}],
+            "zonas": [{"id": "meta", "posicion": [3, -1], "radio": 1.2}],
+            "retos": [{"tipo": "en_zona", "objeto": "caja", "zona": "meta"}],
+        },
+    },
     "blender_tour": {
         "type": "blender_tour",
         "id": "recorrido_1",
@@ -732,22 +767,41 @@ CURSOS_BASE: Dict[str, dict] = {
         "ruta": "blender",
         "requisito_id": None,
     },
+    # Programa A-Frame en dos cursos (2026-10-23): los módulos 4 y 5 de «aframe» pasaron a
+    # «aframe_interactivo» (mod_afi_001 y mod_afi_003) con los mismos ids de lección.
     "aframe": {
         "id": "aframe",
-        "numero": "02",
-        "titulo": "A-Frame",
-        "subtitulo": "Mundos WebXR en el navegador",
+        "numero": "05",
+        "titulo": "A-Frame Inicial",
+        "subtitulo": "Tu primera escena 3D en el navegador",
         "descripcion": (
-            "Lleva tus modelos a la web: crea escenas 3D con HTML, agrega interacción y visítalas en "
-            "realidad virtual o aumentada."
+            "Construye escenas 3D con HTML: entidades, coordenadas, luces y materiales, y carga tus propios "
+            "modelos GLB hechos en Blender."
         ),
-        "nivel": "Intermedio",
+        "nivel": "Inicial",
         "acento": "neon",
         "recurso_texto": "Documentación de A-Frame",
         "recurso_url": "https://aframe.io/docs/",
         "orden": 5,
         "ruta": "aframe",
         "requisito_id": None,
+    },
+    "aframe_interactivo": {
+        "id": "aframe_interactivo",
+        "numero": "06",
+        "titulo": "A-Frame Interactivo",
+        "subtitulo": "Mundos que se mueven, se juegan y se visitan en VR",
+        "descripcion": (
+            "Da vida a tus escenas: animaciones y clics, mundos generados con el Motor Amatista en los que se "
+            "arrastran objetos y se cumplen retos, y tu experiencia WebXR publicada."
+        ),
+        "nivel": "Interactivo",
+        "acento": "neon",
+        "recurso_texto": "Documentación de A-Frame",
+        "recurso_url": "https://aframe.io/docs/",
+        "orden": 6,
+        "ruta": "aframe",
+        "requisito_id": "aframe",
     },
 }
 
