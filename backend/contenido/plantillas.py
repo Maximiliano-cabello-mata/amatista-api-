@@ -767,22 +767,41 @@ CURSOS_BASE: Dict[str, dict] = {
         "ruta": "blender",
         "requisito_id": None,
     },
+    # Programa A-Frame en dos cursos (2026-10-23): los módulos 4 y 5 de «aframe» pasaron a
+    # «aframe_interactivo» (mod_afi_001 y mod_afi_003) con los mismos ids de lección.
     "aframe": {
         "id": "aframe",
-        "numero": "02",
-        "titulo": "A-Frame",
-        "subtitulo": "Mundos WebXR en el navegador",
+        "numero": "05",
+        "titulo": "A-Frame Inicial",
+        "subtitulo": "Tu primera escena 3D en el navegador",
         "descripcion": (
-            "Lleva tus modelos a la web: crea escenas 3D con HTML, agrega interacción y visítalas en "
-            "realidad virtual o aumentada."
+            "Construye escenas 3D con HTML: entidades, coordenadas, luces y materiales, y carga tus propios "
+            "modelos GLB hechos en Blender."
         ),
-        "nivel": "Intermedio",
+        "nivel": "Inicial",
         "acento": "neon",
         "recurso_texto": "Documentación de A-Frame",
         "recurso_url": "https://aframe.io/docs/",
         "orden": 5,
         "ruta": "aframe",
         "requisito_id": None,
+    },
+    "aframe_interactivo": {
+        "id": "aframe_interactivo",
+        "numero": "06",
+        "titulo": "A-Frame Interactivo",
+        "subtitulo": "Mundos que se mueven, se juegan y se visitan en VR",
+        "descripcion": (
+            "Da vida a tus escenas: animaciones y clics, mundos generados con el Motor Amatista en los que se "
+            "arrastran objetos y se cumplen retos, y tu experiencia WebXR publicada."
+        ),
+        "nivel": "Interactivo",
+        "acento": "neon",
+        "recurso_texto": "Documentación de A-Frame",
+        "recurso_url": "https://aframe.io/docs/",
+        "orden": 6,
+        "ruta": "aframe",
+        "requisito_id": "aframe",
     },
 }
 
