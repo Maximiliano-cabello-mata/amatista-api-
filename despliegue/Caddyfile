@@ -2,7 +2,10 @@
 #
 #   Alumno ──HTTPS──> Cloudflare (proxy, nube naranja) ──HTTPS──> Caddy :443 ──> uvicorn 127.0.0.1:8000
 #
-# Dominio oficial: api.amatista-3d.me. Guía completa (DNS, certificados,
+# Dominio oficial: api.amatista-3d.tech. Guía de producción verificada:
+# docs/despliegue/2026-10-29_despliegue_publico_amatista_3d_tech.md
+# Esta es una plantilla versionada; contrastar con /etc/caddy/Caddyfile de la VM.
+# Guía histórica (DNS, certificados,
 # PWA y alternativas): docs/despliegue/2026-10-04_dominio_amatista-3d.md
 #
 #   sudo install -d -m 750 -o root -g caddy /etc/caddy/certs
@@ -30,7 +33,7 @@
 	}
 }
 
-api.amatista-3d.me {
+api.amatista-3d.tech {
 	# Opción A. Para la opción B, borra esta línea.
 	tls /etc/caddy/certs/origen.pem /etc/caddy/certs/origen.key
 
