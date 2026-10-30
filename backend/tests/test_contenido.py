@@ -231,6 +231,32 @@ def test_errores_de_recursos_v42(bloque, esperado):
     assert any(esperado in error for error in errores), errores
 
 
+def test_dinamicas_v43_validan():
+    for tipo in ("shortcut_drill", "transform_challenge", "spot_error"):
+        assert tipo in BLOQUES_INTERACTIVOS
+        assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
+
+
+@pytest.mark.parametrize(
+    "bloque, esperado",
+    [
+        ({**EJEMPLOS_BLOQUES["shortcut_drill"], "drills": [{"prompt": "Mueve", "keys": ["Super+G"]}]}, "no se puede pulsar"),
+        ({**EJEMPLOS_BLOQUES["shortcut_drill"], "drills": [{"prompt": "Mueve", "keys": []}]}, "lista de 1 a"),
+        ({**EJEMPLOS_BLOQUES["transform_challenge"], "property": "color"}, "«property» = «color»"),
+        ({**EJEMPLOS_BLOQUES["transform_challenge"], "target": 400}, "queda fuera del campo"),
+        ({**EJEMPLOS_BLOQUES["transform_challenge"], "property": "scale", "target": 1}, "es el valor inicial"),
+        ({**EJEMPLOS_BLOQUES["spot_error"], "steps": [{"text": f"Paso {i}"} for i in range(3)]}, "al menos un paso"),
+        (
+            {**EJEMPLOS_BLOQUES["spot_error"], "steps": [{"text": "a", "wrong": True}, {"text": "b"}, {"text": "c"}]},
+            "«steps[0].explanation»",
+        ),
+    ],
+)
+def test_errores_de_dinamicas_v43(bloque, esperado):
+    errores = validar_leccion(leccion_con(bloque))
+    assert any(esperado in error for error in errores), errores
+
+
 def test_teoria_y_blender_se_intercalan():
     modulo = leer(MODULOS / "blender_principiante-modulo-1.json")
     assert validar_modulo(modulo) == []

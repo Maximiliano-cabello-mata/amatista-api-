@@ -73,6 +73,11 @@ BLOQUES_INTERACTIVOS = (
     "keyframe_sim",
     # Motor Web de Amatista (frontend/src/motor3d/): un mundo A-Frame con objetos que se mueven y retos.
     "motor_scene",
+    # Dinámicas v4.3 (frontend/src/components/leccion/dinamicas.js): teclas de Blender en el
+    # navegador, el campo del panel N con su molde y la receta con errores.
+    "shortcut_drill",
+    "transform_challenge",
+    "spot_error",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -940,6 +945,79 @@ def _keyframe_sim(c: _Contexto, b: dict) -> None:
         vistos.add(cuadro)
 
 
+# Teclas que entiende «Entrena tus teclas» (dinamicas.js › normalizarCombinacion): una letra o número,
+# o una tecla con nombre, con Shift, Ctrl o Alt delante.
+TECLAS_CON_NOMBRE = ("Tab", "Espacio", "Esc", "Enter", "Delete", "Backspace", "F2", "F3", "F12", "Home",
+                     "Plus", "Minus", "↑", "↓", "←", "→")
+MAX_EJERCICIOS_TECLAS = 8
+PROPIEDADES_TRANSFORMAR = ("location", "rotation", "scale")
+EJES_TRANSFORMAR = ("X", "Y", "Z")
+
+
+def _tecla_valida(texto: Any) -> bool:
+    if not isinstance(texto, str) or not texto.strip():
+        return False
+    *mods, tecla = [p.strip() for p in texto.split("+")]
+    if any(m.lower() not in ("shift", "ctrl", "control", "alt") for m in mods):
+        return False
+    return (len(tecla) == 1 and tecla.isalnum()) or tecla.lower() in {t.lower() for t in TECLAS_CON_NOMBRE}
+
+
+def _shortcut_drill(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=600)
+    ejercicios = c.objetos(b, "drills", 1, MAX_EJERCICIOS_TECLAS)
+    for i, ejercicio in ejercicios:
+        p = f"drills[{i}]."
+        c.texto(ejercicio, "prompt", p, maximo=200)
+        c.texto(ejercicio, "explanation", p, obligatorio=False, maximo=400)
+        teclas = ejercicio.get("keys")
+        if not isinstance(teclas, list) or not 1 <= len(teclas) <= MAX_TECLAS:
+            c.error(f"«{p}keys» debe ser una lista de 1 a {MAX_TECLAS} teclas")
+            continue
+        for tecla in teclas:
+            if not _tecla_valida(tecla):
+                c.error(f"«{p}keys» tiene una tecla que no se puede pulsar: {tecla!r}")
+
+
+def _transform_challenge(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=600)
+    c.texto(b, "explanation", obligatorio=False, maximo=400)
+    c.texto(b, "unit", obligatorio=False, maximo=4)
+    propiedad = c.opcion(b, "property", PROPIEDADES_TRANSFORMAR)
+    c.opcion(b, "axis", EJES_TRANSFORMAR)
+    meta = c.numero(b, "target")
+    minimo = c.numero(b, "min", obligatorio=False)
+    maximo = c.numero(b, "max", obligatorio=False)
+    paso = c.numero(b, "step", obligatorio=False, minimo=0.001)
+    tolerancia = c.numero(b, "tolerance", obligatorio=False, minimo=0)
+    limites = {"location": (-3, 3), "rotation": (-180, 180), "scale": (0.2, 3)}.get(propiedad, (None, None))
+    bajo = minimo if minimo is not None else limites[0]
+    alto = maximo if maximo is not None else limites[1]
+    if None not in (meta, bajo, alto) and not bajo <= meta <= alto:
+        c.error(f"«target» = {meta:g} queda fuera del campo ({bajo:g} a {alto:g})")
+    inicial = {"location": 0, "rotation": 0, "scale": 1}.get(propiedad)
+    margen = tolerancia if tolerancia is not None else (paso or {"location": 0.1, "rotation": 5, "scale": 0.1}.get(propiedad, 0)) / 2
+    if meta is not None and inicial is not None and abs(meta - inicial) <= margen:
+        c.error("«target» es el valor inicial: el alumno no tendría nada que ajustar")
+
+
+def _spot_error(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=600)
+    pasos = c.objetos(b, "steps", 3, 10)
+    c.ids_unicos(pasos, "steps", clave="text")
+    for i, paso in pasos:
+        p = f"steps[{i}]."
+        c.texto(paso, "text", p, maximo=300)
+        c.booleano(paso, "wrong", p)
+        c.texto(paso, "explanation", p, obligatorio=bool(paso.get("wrong")), maximo=400)
+    malos = sum(1 for _, paso in pasos if paso.get("wrong") is True)
+    if pasos and not 1 <= malos < len(pasos):
+        c.error("marca con «wrong»: true al menos un paso, y deja al menos uno bien hecho")
+
+
 def _motor_scene(c: _Contexto, b: dict) -> None:
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "instructions", obligatorio=False, maximo=600)
@@ -1038,6 +1116,9 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "image_choice": _image_choice,
     "keyframe_sim": _keyframe_sim,
     "motor_scene": _motor_scene,
+    "shortcut_drill": _shortcut_drill,
+    "transform_challenge": _transform_challenge,
+    "spot_error": _spot_error,
 }
 
 

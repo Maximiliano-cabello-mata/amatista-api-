@@ -393,6 +393,36 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
             "retos": [{"tipo": "en_zona", "objeto": "caja", "zona": "meta"}],
         },
     },
+    # Dinámicas v4.3.
+    "shortcut_drill": {
+        "type": "shortcut_drill",
+        "id": "teclas_1",
+        "title": f"{REEMPLAZA}: entrena tus teclas",
+        "drills": [
+            {"prompt": "Mueve el cubo solo en el eje X", "keys": ["G", "X"],
+             "explanation": "G agarra y X lo deja ir solo por el eje rojo."},
+            {"prompt": "Gíralo sobre el eje Z", "keys": ["R", "Z"]},
+        ],
+    },
+    "transform_challenge": {
+        "type": "transform_challenge",
+        "id": "valor_1",
+        "title": f"{REEMPLAZA}: llena el molde",
+        "property": "rotation",
+        "axis": "Z",
+        "target": 45,
+    },
+    "spot_error": {
+        "type": "spot_error",
+        "id": "error_1",
+        "title": f"{REEMPLAZA}: encuentra el error",
+        "steps": [
+            {"text": "Agrega un cubo con Shift + A › Malla › Cubo."},
+            {"text": "Escálalo con S y aplica la escala con Ctrl + A › Escala."},
+            {"text": "Biselalo antes de aplicar la escala.", "wrong": True,
+             "explanation": "Con la escala sin aplicar, el bisel sale desparejo: aplica primero."},
+        ],
+    },
     "blender_tour": {
         "type": "blender_tour",
         "id": "recorrido_1",
