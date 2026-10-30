@@ -2,8 +2,8 @@
 
 Deben coincidir con los scripts de backend/sql/ (001 crea la base, 002 la
 amplía sin borrar datos, 005 agrega la reestructuración por niveles, 007 el
-motor de prácticas de Blender, 010 y 011 el enlace en vivo y 012 el modelo
-del alumno de Amatista Taller). Todos los identificadores son texto (VARCHAR2):
+motor de prácticas de Blender, 010 y 011 el enlace en vivo, 012 el modelo
+del alumno de Amatista Taller y 013 los avatares y el buzón del creador). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
@@ -42,6 +42,9 @@ RESULTADOS_VERIFICACION = ("verificada", "con_diferencias", "falla")
 ESTADOS_VINCULO = ("pendiente", "listo", "canjeado")
 # Quién subió la versión vigente de una práctica.
 ORIGENES_PRACTICA = ("repositorio", "addon", "panel")
+# Buzón del creador (sql/013): de qué trata una conversación y en qué va.
+CATEGORIAS_SUGERENCIA = ("error", "idea", "contenido", "otra")
+ESTADOS_SUGERENCIA = ("abierta", "respondida", "resuelta")
 
 
 def ahora() -> datetime:
@@ -562,3 +565,51 @@ class AddonAjustes(Base):
     usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
     datos: Mapped[str] = mapped_column(TextoJSONCorto(1000))
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class Perfil(Base):
+    """El avatar low poly que eligió una cuenta (sql/013).
+
+    avatar es un id del catálogo de la PWA (frontend/src/avatares/catalogo.js).
+    Tabla aparte, no una columna de USUARIOS: sin 013 nada de lo de antes se rompe.
+    """
+
+    __tablename__ = "perfiles"
+
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    avatar: Mapped[Optional[str]] = mapped_column(String(40))
+    actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class Sugerencia(Base):
+    """Una conversación del buzón del creador (sql/013)."""
+
+    __tablename__ = "sugerencias"
+    __table_args__ = (
+        Index("ix_sugerencias_usuario", "usuario_id", "actualizada_en"),
+        Index("ix_sugerencias_estado", "estado", "actualizada_en"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    categoria: Mapped[str] = mapped_column(String(20))
+    pagina: Mapped[Optional[str]] = mapped_column(String(200))
+    estado: Mapped[str] = mapped_column(String(20), default="abierta")
+    sin_leer_alumno: Mapped[int] = mapped_column(Integer, default=0)
+    sin_leer_creador: Mapped[int] = mapped_column(Integer, default=1)
+    creada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    actualizada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class MensajeSugerencia(Base):
+    """Un mensaje de una conversación del buzón: del alumno o del creador (sql/013)."""
+
+    __tablename__ = "sugerencia_mensajes"
+    __table_args__ = (Index("ix_sug_mensajes_sug", "sugerencia_id", "creado_en"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    sugerencia_id: Mapped[str] = mapped_column(String(40), ForeignKey("sugerencias.id"))
+    autor_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    de_creador: Mapped[int] = mapped_column(Integer, default=0)
+    texto: Mapped[str] = mapped_column(String(2000))
+    creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

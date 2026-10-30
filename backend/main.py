@@ -18,7 +18,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import addon, admin, auth, blender, contenido, enlace, eventos, niveles, progreso, sesiones, taller
+from api import addon, admin, auth, blender, buzon, contenido, enlace, eventos, niveles, perfil, progreso, sesiones, taller
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
@@ -114,7 +114,8 @@ CABECERAS_SEGURAS = {
     "Cross-Origin-Resource-Policy": "cross-origin",
 }
 # Respuestas con datos de una cuenta: nunca en cachés compartidas.
-RUTAS_PRIVADAS = ("/api/auth/", "/api/progreso", "/api/admin/", "/api/addon/v1/yo", "/api/addon/v1/mi-progreso")
+RUTAS_PRIVADAS = ("/api/auth/", "/api/progreso", "/api/admin/", "/api/addon/v1/yo", "/api/addon/v1/mi-progreso",
+                  "/api/perfil", "/api/buzon")
 
 
 @app.middleware("http")
@@ -219,6 +220,8 @@ app.include_router(blender.router)  # versiones de Blender y matriz de compatibi
 app.include_router(addon.router)  # add-on de Blender y motor de prácticas (sql/007)
 app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/010, motor 3.4)
 app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por habilidad (sql/012, motor 5)
+app.include_router(perfil.router)  # avatares low poly de cada cuenta (sql/013)
+app.include_router(buzon.router)  # buzón del creador: sugerencias de los alumnos (sql/013)
 
 
 @app.get("/")
