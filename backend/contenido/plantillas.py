@@ -423,6 +423,19 @@ EJEMPLOS_BLOQUES: Dict[str, dict] = {
              "explanation": "Con la escala sin aplicar, el bisel sale desparejo: aplica primero."},
         ],
     },
+    "herramienta_blender": {
+        "type": "herramienta_blender",
+        "id": "ficha_1",
+        "tool": "transform.scale",
+        "title": f"{REEMPLAZA}: conoce la herramienta",
+    },
+    "blender_mapa": {
+        "type": "blender_mapa",
+        "id": "mapa_1",
+        "title": f"{REEMPLAZA}: ¿dónde está cada cosa?",
+        "mode": "find",
+        "questions": [{"tool": "transform.move"}, {"zone": "propiedades", "prompt": "¿Dónde le pones un material?"}],
+    },
     "blender_tour": {
         "type": "blender_tour",
         "id": "recorrido_1",
