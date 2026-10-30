@@ -169,6 +169,25 @@ def test_la_plataforma_maneja_el_taller_en_blender(cliente, crear_cuenta):
     assert ordenar(tipo="taller_repaso", taller=TALLER, habilidad="bl-mover").status_code == 200
 
 
+def test_la_leccion_manda_su_etapa_y_blender_no_sale_de_ella(cliente, crear_cuenta):
+    """Motor 6: la exploración lleva sus habilidades (solo las del taller) y la lección a la que se vuelve."""
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender)
+    ordenar = lambda **cuerpo: cliente.post(f"{API}/ordenes", json=cuerpo, headers=alumno)  # noqa: E731
+    r = ordenar(tipo="taller_abrir", taller=TALLER, etapa="exploracion",
+                habilidades=["bl-agregar-primitivas", "bl-luces", "bl-mover"], leccion="bp1_blender")
+    assert r.status_code == 200 and r.json()["entregada"] is True
+    orden = latir(cliente, blender)["orden"]
+    assert orden["datos"] == {"taller": TALLER, "etapa": "exploracion",
+                              "habilidades": ["bl-agregar-primitivas", "bl-mover"], "leccion": "bp1_blender"}
+    latir(cliente, blender, orden_hecha=orden["id"])
+    assert ordenar(tipo="taller_abrir", taller=TALLER, etapa="todo").status_code == 422
+    assert ordenar(tipo="taller_abrir", taller=TALLER, leccion="../../etc").status_code == 422
+    assert ordenar(tipo="taller_abrir", taller=TALLER, etapa="exploracion",
+                   habilidades=["a", "b", "c", "d", "e"]).status_code == 422
+
+
 def test_la_leccion_ve_el_taller_en_vivo(cliente, crear_cuenta):
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
@@ -204,3 +223,27 @@ def test_el_bloque_blender_taller_se_valida():
     assert any("no está en practices" in e for e in validar_leccion(leccion({**bien, "taller": "blender.zz.m9"})))
     assert any("vista" in e for e in validar_leccion(leccion({**bien, "vista": "otra"})))
     assert any("id" in e for e in validar_leccion(leccion({k: v for k, v in bien.items() if k != "id"})))
+
+
+def test_la_etapa_del_taller_se_valida():
+    """Motor 6: exploración (con habilidades del taller) antes que la práctica, una vez cada una por módulo."""
+    from contenido.validacion import _revisar_orden_practica
+    from tests.test_contenido import leccion_con as leccion
+
+    explora = {"type": "blender_taller", "id": "t1", "taller": TALLER, "title": "Explora", "etapa": "exploracion",
+               "habilidades": ["bl-agregar-primitivas", "bl-mover"]}
+    assert validar_leccion(leccion(explora)) == []
+    assert any("no es válido" in e for e in validar_leccion(leccion({**explora, "etapa": "todo"})))
+    assert any("no son del taller" in e for e in validar_leccion(leccion({**explora, "habilidades": ["bl-luces"]})))
+    assert any("solo va con" in e for e in validar_leccion(leccion({**explora, "etapa": "practica"})))
+    assert any("lista de 1 a 4" in e for e in validar_leccion(leccion({**explora, "habilidades": list("abcde")})))
+    practica = {"type": "blender_taller", "id": "t2", "taller": TALLER, "title": "Taller", "etapa": "practica"}
+    con = lambda bloque: {"contentBlocks": [bloque]}  # noqa: E731
+    errores = []
+    _revisar_orden_practica(errores, [con(explora), con(practica)])
+    assert errores == []
+    _revisar_orden_practica(errores, [con(practica), con(explora)])
+    assert any("va antes que su práctica" in e for e in errores)
+    errores = []
+    _revisar_orden_practica(errores, [con(explora), con(explora)])
+    assert any("cada etapa del taller va una sola vez" in e for e in errores)

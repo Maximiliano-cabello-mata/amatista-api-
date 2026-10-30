@@ -281,6 +281,9 @@ class TallerVivo(BaseModel):
     habilidades: List[HabilidadVivo] = Field(default_factory=list, max_length=12)
     proyecto_abierto: bool = False
     repasos: List[str] = Field(default_factory=list, max_length=12)
+    # Motor 6: la etapa que mandó la lección y si ya se cumplió (la lección se da por hecha).
+    etapa: Literal["", "exploracion", "practica"] = ""
+    etapa_cumplida: bool = False
 
 
 class ParadaVivo(BaseModel):
@@ -427,6 +430,11 @@ class Orden(BaseModel):
     # «Conoce Amatista Motor» habla (sin ella, «empezar» abre la primera sin terminar).
     accion: Optional[Literal["empezar", "siguiente", "anterior", "salir"]] = None
     recorrido: Optional[Literal["pestana", "vista", "taller"]] = None
+    # Motor 6: la lección marca la etapa del taller y Blender no sale de ella
+    # (engine/amatista_engine/taller/etapas.py). leccion: a dónde vuelve «Volver a la plataforma».
+    etapa: Optional[Literal["exploracion", "practica"]] = None
+    habilidades: Optional[List[str]] = Field(default=None, max_length=4)
+    leccion: Optional[str] = Field(default=None, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 
 
 def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
@@ -449,6 +457,13 @@ def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
         datos["habilidad"] = cuerpo.habilidad
     if cuerpo.tipo == "taller_abrir" and cuerpo.actividad:
         datos["actividad"] = cuerpo.actividad  # Blender la vuelve a armar y, si no existe, abre lo que toca
+    if cuerpo.tipo == "taller_abrir" and cuerpo.etapa:
+        datos["etapa"] = cuerpo.etapa
+        if cuerpo.etapa == "exploracion":
+            # Solo habilidades de este taller: Blender vuelve a revisarlas (etapas.etapa_de).
+            datos["habilidades"] = [h for h in (cuerpo.habilidades or []) if h in taller.habilidades][:4]
+    if cuerpo.tipo == "taller_abrir" and cuerpo.leccion:
+        datos["leccion"] = cuerpo.leccion
     return datos
 
 
