@@ -102,34 +102,47 @@ Guía completa para la base real, paso a paso:
                                         avatar se queda en el dispositivo y
                                         el buzón avisa que se está
                                         preparando (503).
+  014_panel_del_profesor.sql .......... Incremental (panel del profesor
+                                        evaluador): GRUPOS (con su código
+                                        para unirse), GRUPO_ALUMNOS,
+                                        ASIGNACIONES (prácticas que deja el
+                                        profesor) y ENTREGAS. El modelo de
+                                        cada entrega solo pasa por aquí: se
+                                        borra al recogerlo el profesor o a
+                                        los 30 días. Trae la verificación
+                                        vigente de las 28 tablas. Va
+                                        después de 013 (necesita PRACTICAS
+                                        de 007). No borra datos. Sin 014 el
+                                        panel del profesor avisa (503).
 
   Nota sobre 004: el comentario de su encabezado lista las tablas de 005 y
   «las 4 de 007», pero el script ya da permisos también a ADDON_ENLACES y
   ADDON_AJUSTES (010). El comentario quedó atrasado; el archivo no se edita
   porque los scripts de esta carpeta nunca se tocan (sección 6, regla 1).
 
-  002 a 013 son idempotentes: se pueden ejecutar varias veces sin error y
+  002 a 014 son idempotentes: se pueden ejecutar varias veces sin error y
   sin duplicar nada. Guía de la v3: docs/reestructuracion/02_manual_oracle.md
 
 2. ORDEN DE EJECUCIÓN
 -----------------------------------------------------------------------------
   Base NUEVA (sin tablas, o prototipo que se puede borrar):
-      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 012 -> 013 -> 004 (opcional)
+      001 -> 002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 012 -> 013 -> 014 -> 004 (opcional)
       (009 solo si hay datos de la v2 que archivar)
 
   Base EXISTENTE CON DATOS (alumnos reales o progreso que se quiere
   conservar):
-      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 012 -> 013 -> 004 (opcional) -> 009
+      002 -> 003 -> 005 -> 006 -> 007 -> 008 -> 010 -> 011 -> 012 -> 013 -> 014 -> 004 (opcional) -> 009
       NUNCA 001: borraría usuarios, sesiones y progreso.
 
   Producción tiene 002, 003, 005 y 006 (14 tablas; bitácora
   docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md, secciones 14 a 22)
-  y le faltan 007, 008, 009, 010, 011, 012 y 013. El piloto del 8 de octubre ya se hizo;
+  y le faltan 007, 008, 009, 010, 011, 012, 013 y 014. El piloto del 8 de octubre ya se hizo;
   la actualización sigue docs/despliegue/2026-10-05_plan_de_despliegue.md:
   cada script va ANTES de subir el backend que lo necesita (007: T-055;
   008 y 009: docs/base-de-datos/02_manual_008_009.md; 010: T-087; 011:
   T-094; 012: docs/despliegue/2026-10-10_amatista_taller_motor_5.md;
-  013: docs/plataforma/16_avatares_y_buzon.md, T-149).
+  013: docs/plataforma/16_avatares_y_buzon.md, T-149; 014:
+  docs/plataforma/17_panel_del_profesor.md, T-150).
   despliegue/actualizar.sh corre diagnostico_oracle.py antes de reiniciar
   y se detiene si falta alguno. 004 sigue opcional: la base de
   producción todavía usa ADMIN (T-004).
@@ -185,9 +198,9 @@ Guía completa para la base real, paso a paso:
     esquema limpio y copia los datos convirtiendo los ids a texto. No
     ejecutes 001 sobre la base con los datos originales.
 
-6. REGLAS PARA LOS SCRIPTS FUTUROS (siguiente libre: 013)
+6. REGLAS PARA LOS SCRIPTS FUTUROS (siguiente libre: 015)
 -----------------------------------------------------------------------------
-  1. Numerados y en orden: 013_<qué_hace>.sql. Nunca se edita un script que
+  1. Numerados y en orden: 015_<qué_hace>.sql. Nunca se edita un script que
      ya se ejecutó en producción; el cambio va en el siguiente número.
   2. Solo agregan: ALTER TABLE ... ADD (columnas, restricciones), CREATE
      TABLE, CREATE INDEX. Prohibido DROP TABLE, TRUNCATE o DELETE de datos

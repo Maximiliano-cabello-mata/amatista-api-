@@ -3,7 +3,8 @@
 Deben coincidir con los scripts de backend/sql/ (001 crea la base, 002 la
 amplía sin borrar datos, 005 agrega la reestructuración por niveles, 007 el
 motor de prácticas de Blender, 010 y 011 el enlace en vivo, 012 el modelo
-del alumno de Amatista Taller y 013 los avatares y el buzón del creador). Todos los identificadores son texto (VARCHAR2):
+del alumno de Amatista Taller, 013 los avatares y el buzón del creador y 014
+el panel del profesor evaluador). Todos los identificadores son texto (VARCHAR2):
 así caben correos y UUID sin provocar ORA-01722, y las llaves foráneas
 tienen el mismo tipo en ambos lados (evita ORA-02267).
 
@@ -45,6 +46,9 @@ ORIGENES_PRACTICA = ("repositorio", "addon", "panel")
 # Buzón del creador (sql/013): de qué trata una conversación y en qué va.
 CATEGORIAS_SUGERENCIA = ("error", "idea", "contenido", "otra")
 ESTADOS_SUGERENCIA = ("abierta", "respondida", "resuelta")
+# Panel del profesor evaluador (sql/014): una asignación y la entrega de cada alumno.
+ESTADOS_ASIGNACION = ("abierta", "cerrada")
+ESTADOS_ENTREGA = ("entregada", "evaluada", "rehacer")
 
 
 def ahora() -> datetime:
@@ -613,3 +617,80 @@ class MensajeSugerencia(Base):
     de_creador: Mapped[int] = mapped_column(Integer, default=0)
     texto: Mapped[str] = mapped_column(String(2000))
     creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+# --- Panel del profesor evaluador (sql/014) ------------------------------------------
+
+
+class Grupo(Base):
+    """Un grupo de un profesor: sus alumnos entran con el código (como «AMA-7K2P»)."""
+
+    __tablename__ = "grupos"
+    __table_args__ = (Index("ix_grupos_profesor", "profesor_id"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    profesor_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    nombre: Mapped[str] = mapped_column(String(120))
+    codigo: Mapped[str] = mapped_column(String(12), unique=True)
+    archivado: Mapped[int] = mapped_column(Integer, default=0)
+    creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class GrupoAlumno(Base):
+    """Un alumno dentro de un grupo (entró con el código del profesor)."""
+
+    __tablename__ = "grupo_alumnos"
+    __table_args__ = (Index("ix_grupo_alumnos_alumno", "alumno_id"),)
+
+    grupo_id: Mapped[str] = mapped_column(String(40), ForeignKey("grupos.id"), primary_key=True)
+    alumno_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    unido_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class Asignacion(Base):
+    """Una práctica de Blender que el profesor deja a un grupo, con indicaciones y fecha."""
+
+    __tablename__ = "asignaciones"
+    __table_args__ = (Index("ix_asignaciones_grupo", "grupo_id", "creada_en"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    grupo_id: Mapped[str] = mapped_column(String(40), ForeignKey("grupos.id"))
+    profesor_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    practica_id: Mapped[str] = mapped_column(String(80), ForeignKey("practicas.id"))
+    titulo: Mapped[str] = mapped_column(String(200))
+    indicaciones: Mapped[Optional[str]] = mapped_column(String(1000))
+    fecha_limite: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    estado: Mapped[str] = mapped_column(String(12), default="abierta")
+    creada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class Entrega(Base):
+    """Lo que un alumno entregó de una asignación: una fila por par (se reemplaza al reentregar).
+
+    modelo guarda la descripción ligera del modelo (formato amatista.modelo/1:
+    JSON comprimido con zlib y en base64, nunca el .blend) SOLO hasta que el
+    profesor la recoge: en ese momento queda en su computadora y aquí se borra
+    (recogido_en). Las que nadie recoge se borran a los 30 días. Lo demás
+    (progreso del motor, resumen, calificación) son unos cientos de bytes.
+    """
+
+    __tablename__ = "entregas"
+    __table_args__ = (Index("ix_entregas_alumno", "alumno_id"),)
+
+    asignacion_id: Mapped[str] = mapped_column(String(40), ForeignKey("asignaciones.id"), primary_key=True)
+    alumno_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"), primary_key=True)
+    estado: Mapped[str] = mapped_column(String(12), default="entregada")
+    progreso: Mapped[int] = mapped_column(Integer, default=0)
+    completada: Mapped[int] = mapped_column(Integer, default=0)
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    # {"objetos", "vertices", "triangulos", "materiales", "nombres": [...], "resumido"}
+    resumen: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(2000))
+    modelo: Mapped[Optional[str]] = mapped_column(Text)
+    modelo_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    entregada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    recogido_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    calificacion: Mapped[Optional[int]] = mapped_column(Integer)  # 0 a 10
+    comentario: Mapped[Optional[str]] = mapped_column(String(1000))
+    evaluada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    # 1 cuando el alumno ya vio la evaluación (o no hay nada nuevo que ver).
+    vista_alumno: Mapped[int] = mapped_column(Integer, default=1)

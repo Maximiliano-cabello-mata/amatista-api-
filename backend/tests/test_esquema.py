@@ -16,7 +16,9 @@ from database import conexion
 from database.modelos import (
     CATEGORIAS_BLENDER,
     CRITERIOS_RUBRICA,
+    ESTADOS_ASIGNACION,
     ESTADOS_CONTENIDO,
+    ESTADOS_ENTREGA,
     ESTADOS_HABILIDAD,
     ESTADOS_VINCULO,
     LOGROS_RUBRICA,
@@ -240,6 +242,8 @@ def test_email_unico_y_checks_con_las_constantes_de_los_modelos():
     assert valores("CK_VERIFICACIONES_RESULTADO") == set(RESULTADOS_VERIFICACION)
     assert valores("CK_VINCULOS_ESTADO") == set(ESTADOS_VINCULO)
     assert valores("CK_PRACTICAS_ORIGEN") == set(ORIGENES_PRACTICA)
+    assert valores("CK_ASIGNACIONES_ESTADO") == set(ESTADOS_ASIGNACION)
+    assert valores("CK_ENTREGAS_ESTADO") == set(ESTADOS_ENTREGA)
     # La autonomía de una práctica es un estado de habilidad ya practicada.
     assert valores("CK_PROG_PRACTICAS_AUTONOMIA") == set(ESTADOS_HABILIDAD) - {"sin_practicar"}
     for nombre in ("CK_PRACTICAS_DEFINICION", "CK_PRAC_VERSIONES_DEFINICION", "CK_PROG_PRACTICAS_OBJETIVOS"):
@@ -262,9 +266,9 @@ def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
 
 
 def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas():
-    """El último script con verificación (013) la trae vigente para todas las tablas."""
+    """El último script con verificación (014) la trae vigente para todas las tablas."""
     esperadas = dict(
-        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("013"), re.I)
+        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("014"), re.I)
     )
     assert {tabla: int(n) for tabla, n in esperadas.items()} == {
         nombre: len(tabla.columns) for nombre, tabla in TABLAS.items()
@@ -273,9 +277,9 @@ def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas
 
 def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas():
     # 003 ya se ejecutó en producción: las tablas nuevas se cuentan en la
-    # verificación del script que las crea (005, 007, 010, 012 o 013), sin editar 003.
+    # verificación del script que las crea (005, 007, 010, 012, 013 o 014), sin editar 003.
     mantenimiento = sin_comentarios(script("003"))
-    conteos = mantenimiento + "".join(sin_comentarios(script(n)) for n in ("005", "007", "010", "012", "013"))
+    conteos = mantenimiento + "".join(sin_comentarios(script(n)) for n in ("005", "007", "010", "012", "013", "014"))
     for nombre in TABLAS:
         assert re.search(rf"COUNT\(\*\)(\s+AS\s+\w+)?\s+FROM\s+{nombre}\b", conteos, re.I), nombre
     lista = re.search(r"ODCIVARCHAR2LIST\(([^)]*)\)", sin_comentarios(script("004")), re.I).group(1)
@@ -287,7 +291,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 # --- Sintaxis y reglas de los scripts ----------------------------------------
 
 
-@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011", "012", "013"])
+@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):

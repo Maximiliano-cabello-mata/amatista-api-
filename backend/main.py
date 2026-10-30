@@ -18,7 +18,8 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import addon, admin, auth, blender, buzon, contenido, enlace, eventos, niveles, perfil, progreso, sesiones, taller
+from api import (addon, admin, auth, blender, buzon, contenido, enlace, evaluacion, eventos, niveles, perfil, progreso,
+                 sesiones, taller)
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
@@ -222,6 +223,7 @@ app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/
 app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por habilidad (sql/012, motor 5)
 app.include_router(perfil.router)  # avatares low poly de cada cuenta (sql/013)
 app.include_router(buzon.router)  # buzón del creador: sugerencias de los alumnos (sql/013)
+app.include_router(evaluacion.router)  # panel del profesor evaluador y «Mi grupo» (sql/014)
 
 
 @app.get("/")

@@ -75,6 +75,8 @@ AJUSTES_POR_DEFECTO: Dict[str, Any] = {
 ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            # Motor 3.5: la plataforma maneja la práctica en Blender.
            "comprobar", "pista", "hazlo_conmigo", "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
+           # Panel del profesor (sql/014): entregar la práctica abierta (addon/amatista_blender/entrega.py).
+           "entregar",
            # Motor 5: la plataforma maneja el taller (addon/amatista_blender/taller/sesion.py, ORDENES).
            "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame", "taller_probar",
            "taller_repaso", "isla",
@@ -417,7 +419,7 @@ def ver_enlace(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usu
 
 class Orden(BaseModel):
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
-                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
+                  "guardar", "reiniciar", "ver_ejemplo", "volver_practica", "entregar",
                   "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame",
                   "taller_probar", "taller_repaso", "isla", "recorrido"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
