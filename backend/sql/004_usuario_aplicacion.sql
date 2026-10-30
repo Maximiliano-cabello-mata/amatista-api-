@@ -69,10 +69,13 @@ DECLARE
                 -- 010 (enlace en vivo con Blender)
                 'ADDON_ENLACES', 'ADDON_AJUSTES',
                 -- 012 (Amatista Taller)
-                'TALLERES_ALUMNO');
+                'TALLERES_ALUMNO',
+                -- 013 (avatares y buzón del creador)
+                'PERFILES', 'SUGERENCIAS', 'SUGERENCIA_MENSAJES');
   v_opcional  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
                 'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
-                'ADDON_ENLACES', 'ADDON_AJUSTES', 'TALLERES_ALUMNO');
+                'ADDON_ENLACES', 'ADDON_AJUSTES', 'TALLERES_ALUMNO',
+                'PERFILES', 'SUGERENCIAS', 'SUGERENCIA_MENSAJES');
 
   FUNCTION existe(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
     v_n PLS_INTEGER;
