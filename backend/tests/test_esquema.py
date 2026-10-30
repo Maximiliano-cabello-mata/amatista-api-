@@ -262,9 +262,9 @@ def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
 
 
 def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas():
-    """El último script con verificación (012) la trae vigente para todas las tablas."""
+    """El último script con verificación (013) la trae vigente para todas las tablas."""
     esperadas = dict(
-        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("012"), re.I)
+        re.findall(r"SELECT\s+'(\w+)'(?:\s+AS\s+tabla)?\s*,\s*(\d+)(?:\s+AS\s+esperadas)?\s+FROM\s+dual", script("013"), re.I)
     )
     assert {tabla: int(n) for tabla, n in esperadas.items()} == {
         nombre: len(tabla.columns) for nombre, tabla in TABLAS.items()
@@ -273,9 +273,9 @@ def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas
 
 def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas():
     # 003 ya se ejecutó en producción: las tablas nuevas se cuentan en la
-    # verificación del script que las crea (005, 007, 010 o 012), sin editar 003.
+    # verificación del script que las crea (005, 007, 010, 012 o 013), sin editar 003.
     mantenimiento = sin_comentarios(script("003"))
-    conteos = mantenimiento + "".join(sin_comentarios(script(n)) for n in ("005", "007", "010", "012"))
+    conteos = mantenimiento + "".join(sin_comentarios(script(n)) for n in ("005", "007", "010", "012", "013"))
     for nombre in TABLAS:
         assert re.search(rf"COUNT\(\*\)(\s+AS\s+\w+)?\s+FROM\s+{nombre}\b", conteos, re.I), nombre
     lista = re.search(r"ODCIVARCHAR2LIST\(([^)]*)\)", sin_comentarios(script("004")), re.I).group(1)
@@ -287,7 +287,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 # --- Sintaxis y reglas de los scripts ----------------------------------------
 
 
-@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011", "012"])
+@pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011", "012", "013"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):
