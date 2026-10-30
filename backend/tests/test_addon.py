@@ -313,10 +313,10 @@ def test_la_descarga_es_amatista_motor_5_con_todo_lo_nuevo(cliente):
     estado = cliente.get(f"{API}/estado").json()
     assert estado["nombre"] == "Amatista Motor 5.4" and estado["version_addon"] == "5.4.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-5.3-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-5.4-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 5.3/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 5.3/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 5.3 PARA BLENDER")
+    assert "Amatista Motor 5.4/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 5.4/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 5.4 PARA BLENDER")
     extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 5.4/amatista-5.4.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
@@ -330,6 +330,8 @@ def test_la_descarga_es_amatista_motor_5_con_todo_lo_nuevo(cliente):
     assert {"mision.py", "amatista_engine/ruta/mision.py", "amatista_engine/ruta/medidas.py"} <= set(nombres)
     # Add-on 5.1: los primeros pasos dentro de Blender.
     assert {"recorrido.py", "recorrido_pasos.py"} <= set(nombres)
+    # Add-on 5.4: Amatista dentro de Blender y el enlace amatista:// (el instalador usa protocolo.py).
+    assert {"integracion.py", "protocolo.py"} <= set(nombres)
     # Motor 5: Amatista Taller (el modelo del alumno, el molde y el catálogo de habilidades).
     assert {"taller/sesion.py", "taller/vista/molde.py", "practicas/habilidades.json",
             "amatista_engine/taller/modelo.py", "amatista_engine/validators/taller.py"} <= set(nombres)
