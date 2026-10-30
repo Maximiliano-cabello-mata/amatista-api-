@@ -781,6 +781,11 @@ def _blender_practice(c: _Contexto, b: dict) -> None:
 
 
 VISTAS_TALLER = ("taller", "proyecto")  # taller (por defecto): las habilidades; proyecto: la tarjeta de la isla
+# Motor 6 (engine/amatista_engine/taller/etapas.py): la guía de aprendizaje pone dos momentos en Blender por
+# módulo. «exploracion»: las primeras habilidades, Mira y un Hazlo conmigo, antes de la teoría. «practica» (por
+# defecto): el resto del ciclo hasta el proyecto, en la lección de cierre.
+ETAPAS_TALLER = ("exploracion", "practica")
+MAX_HABILIDADES_EXPLORACION = 4
 
 
 def _blender_taller(c: _Contexto, b: dict) -> None:
@@ -794,6 +799,22 @@ def _blender_taller(c: _Contexto, b: dict) -> None:
         if conocidos and taller not in conocidos:
             c.error(f"«taller» = «{taller}» no está en practices/blender/habilidades.json (hay: {', '.join(conocidos)})")
     c.opcion(b, "vista", VISTAS_TALLER, obligatorio=False)
+    etapa = c.opcion(b, "etapa", ETAPAS_TALLER, obligatorio=False)
+    habilidades = b.get("habilidades")
+    if habilidades is not None:
+        if etapa != "exploracion":
+            c.error("«habilidades» solo va con «etapa»: «exploracion» (la práctica es el taller entero)")
+        elif (not isinstance(habilidades, list) or not habilidades or len(habilidades) > MAX_HABILIDADES_EXPLORACION
+              or not all(isinstance(h, str) for h in habilidades)):
+            c.error(f"«habilidades» debe ser una lista de 1 a {MAX_HABILIDADES_EXPLORACION} ids de habilidad")
+        elif taller is not None:
+            from contenido.taller import catalogo
+
+            cat = catalogo()
+            t = cat.taller(taller) if cat else None
+            ajenas = [h for h in habilidades if t is not None and h not in t.habilidades]
+            if ajenas:
+                c.error(f"«habilidades»: {', '.join(ajenas)} no son del taller «{taller}»")
     c.texto(b, "title", maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=2000)
 
@@ -1365,6 +1386,13 @@ def talleres_de_leccion(leccion: Any) -> List[str]:
             if _es_taller(b) and isinstance(b.get("taller"), str)]
 
 
+def etapas_de_leccion(leccion: Any) -> List[tuple]:
+    """(taller, etapa) de los bloques blender_taller de habilidades de una lección (motor 6)."""
+    bloques = leccion.get("contentBlocks") if isinstance(leccion, dict) else None
+    return [(b["taller"], b.get("etapa") if b.get("etapa") in ETAPAS_TALLER else "practica")
+            for b in (bloques if isinstance(bloques, list) else []) if _es_taller(b) and isinstance(b.get("taller"), str)]
+
+
 def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
     """Teoría y Blender se intercalan (v3.2, docs/plataforma/02).
 
@@ -1372,10 +1400,11 @@ def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
     exploración corta entre dos lecciones de teoría y la práctica de cierre.
     Lo único que no se permite es repetir la misma práctica en el módulo: el
     motor registra un avance por práctica. Lo mismo con el taller de
-    habilidades (motor 5): una lección por taller.
+    habilidades: una lección por taller y etapa (motor 6), y la exploración
+    antes que la práctica (la guía de aprendizaje: tocar antes de estudiar).
     """
     vistas: Dict[str, int] = {}
-    talleres: Dict[str, int] = {}
+    talleres: Dict[tuple, int] = {}
     for i, leccion in enumerate(lecciones):
         for practica in practicas_de_leccion(leccion):
             if practica in vistas:
@@ -1384,10 +1413,16 @@ def _revisar_orden_practica(errores: List[str], lecciones: List[Any]) -> None:
                 )
             else:
                 vistas[practica] = i
-        for taller in talleres_de_leccion(leccion):
-            if taller in talleres:
+        for clave in etapas_de_leccion(leccion):
+            taller, etapa = clave
+            if clave in talleres:
                 _Contexto(errores, f"lessons[{i}]").error(
-                    f"el taller «{taller}» ya está en lessons[{talleres[taller]}]: cada taller va una sola vez por módulo"
+                    f"el taller «{taller}» (etapa {etapa}) ya está en lessons[{talleres[clave]}]: "
+                    "cada etapa del taller va una sola vez por módulo"
                 )
-            else:
-                talleres[taller] = i
+                continue
+            if etapa == "exploracion" and (taller, "practica") in talleres:
+                _Contexto(errores, f"lessons[{i}]").error(
+                    f"la exploración del taller «{taller}» va antes que su práctica (lessons[{talleres[(taller, 'practica')]}])"
+                )
+            talleres[clave] = i
