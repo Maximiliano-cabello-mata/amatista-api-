@@ -78,6 +78,11 @@ BLOQUES_INTERACTIVOS = (
     "shortcut_drill",
     "transform_challenge",
     "spot_error",
+    # Motor 6.1 (practices/blender/fichas.json): la ficha de una herramienta con su lugar en la ventana de
+    # Blender y el mapa de la ventana para recorrerla o encontrar cada herramienta. Las mismas fichas que
+    # presenta Blender al llegar a la práctica.
+    "herramienta_blender",
+    "blender_mapa",
 )
 TIPOS_BLOQUE = BLOQUES_CONTENIDO + BLOQUES_INTERACTIVOS
 
@@ -819,6 +824,66 @@ def _blender_taller(c: _Contexto, b: dict) -> None:
     c.texto(b, "text", obligatorio=False, maximo=2000)
 
 
+# --- Motor 6.1: fichas de herramientas y el mapa de Blender ---------------------------------
+
+MODOS_MAPA = ("explore", "find")
+MAX_PREGUNTAS_MAPA = 6
+
+
+def _fichas():
+    from contenido.taller import fichas
+
+    return fichas()
+
+
+def _herramienta_blender(c: _Contexto, b: dict) -> None:
+    herramienta = c.texto(b, "tool", maximo=40)
+    if herramienta is not None:
+        f = _fichas()
+        if len(f) and herramienta not in f:
+            c.error(f"«tool» = «{herramienta}» no tiene ficha en practices/blender/fichas.json (hay: {', '.join(f.ids())})")
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=600)
+    c.booleano(b, "check")  # por defecto sí: encontrarla en el mapa de Blender para darla por vista
+
+
+def _blender_mapa(c: _Contexto, b: dict) -> None:
+    c.texto(b, "title", obligatorio=False, maximo=200)
+    c.texto(b, "text", obligatorio=False, maximo=600)
+    modo = c.opcion(b, "mode", MODOS_MAPA)
+    f = _fichas()
+    zonas = {z.id for z in f.zonas()}
+    lista = _valor(b, "zones")
+    if lista is not _FALTA:
+        if modo != "explore":
+            c.error("«zones» solo va con «mode»: «explore»")
+        elif not isinstance(lista, list) or not 2 <= len(lista) <= max(2, len(zonas) or 9) or \
+                not all(isinstance(z, str) for z in lista):
+            c.error("«zones» debe ser una lista de 2 o más zonas")
+        else:
+            for z in lista:
+                if zonas and z not in zonas:
+                    c.error(f"«zones»: «{z}» no es una zona de Blender (hay: {', '.join(sorted(zonas))})")
+            if len(set(lista)) != len(lista):
+                c.error("«zones» tiene zonas repetidas")
+    if modo == "find":
+        for i, pregunta in c.objetos(b, "questions", 1, MAX_PREGUNTAS_MAPA):
+            p = f"questions[{i}]."
+            herramienta = _valor(pregunta, "tool")
+            if herramienta is not _FALTA:
+                if not isinstance(herramienta, str) or (len(f) and herramienta not in f):
+                    c.error(f"«{p}tool» = «{herramienta}» no tiene ficha")
+                if _valor(pregunta, "zone") is not _FALTA:
+                    c.error(f"«{p}» lleva «tool» o «zone», no los dos")
+                continue
+            zona = c.texto(pregunta, "zone", p, maximo=40)
+            if zona is not None and zonas and zona not in zonas:
+                c.error(f"«{p}zone» = «{zona}» no es una zona de Blender")
+            c.texto(pregunta, "prompt", p, maximo=200)
+    elif _valor(b, "questions") is not _FALTA:
+        c.error("«questions» solo va con «mode»: «find»")
+
+
 # --- Recursos gráficos v3.7 ----------------------------------------------------------------
 
 
@@ -1140,6 +1205,8 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
     "shortcut_drill": _shortcut_drill,
     "transform_challenge": _transform_challenge,
     "spot_error": _spot_error,
+    "herramienta_blender": _herramienta_blender,
+    "blender_mapa": _blender_mapa,
 }
 
 

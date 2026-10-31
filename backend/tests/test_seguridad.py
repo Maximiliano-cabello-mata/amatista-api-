@@ -69,6 +69,7 @@ def test_matriz_de_permisos(cliente, crear_cuenta, app):
         "GET /api/addon/v1/practicas", "GET /api/addon/v1/practicas/{practica_id}",
         "GET /api/addon/v1/descargas/{sistema}", "GET /api/addon/v1/extension.zip",
         "GET /api/addon/v1/extensiones/index.json",
+        "GET /api/addon/v1/instaladores/{sistema}",
     ])
 
 

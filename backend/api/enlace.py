@@ -25,6 +25,11 @@ un Blender conectado. Ahora:
   plataforma deja la orden «recorrido» con su acción (empezar, siguiente,
   anterior, salir) y la práctica (pestana, vista, taller). Con un recorrido el
   detalle se guarda aunque no haya práctica abierta.
+- Motor 6.1: la lección abierta en la plataforma se lo dice a Blender con la
+  orden «leccion» (curso, lección, título, clase y su lugar en el módulo) al
+  abrirse y cada poco mientras está a la vista. Una orden «leccion» nueva
+  reemplaza a la que esperaba (solo importa la última). El latido trae
+  detalle.taller.ficha: la herramienta nueva que Blender está presentando.
 - «Mi Blender» guarda cómo se ve Blender para el alumno (GET/PUT /ajustes):
   modo enfocado, acompañamiento, avisos. El add-on aplica solo los que el
   alumno eligió; lo que nunca tocó sigue como esté en Blender.
@@ -79,7 +84,10 @@ ORDENES = ("abrir_practica", "enfocar", "ver_todo", "actualizar",
            "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame", "taller_probar",
            "taller_repaso", "isla",
            # Add-on 5.1: los primeros pasos en Blender (addon/amatista_blender/recorrido.py).
-           "recorrido")
+           "recorrido",
+           # Motor 6.1: en qué lección va el alumno en la plataforma (addon/amatista_blender/plataforma.py).
+           "leccion")
+CLASES_LECCION = ("teoria", "blender", "examen", "proyecto")
 # Las órdenes del taller que necesitan saber de qué taller (y de qué habilidad) hablan.
 ORDENES_CON_TALLER = ("taller_abrir", "taller_probar", "taller_repaso")
 ORDENES_CON_HABILIDAD = ("taller_probar", "taller_repaso")
@@ -179,6 +187,8 @@ def _encolar(cola: List[Dict[str, Any]], orden: Dict[str, Any]) -> List[Dict[str
     """
     if orden["tipo"] == "actualizar" and any(o.get("tipo") == "actualizar" for o in cola):
         return cola
+    if orden["tipo"] == "leccion":  # solo importa la lección de ahora: la nueva reemplaza a la que esperaba
+        cola = [o for o in cola if o.get("tipo") != "leccion"]
     cola = cola + [orden]
     while len(cola) > MAX_ORDENES or len(_compactar(cola)) > LARGO_ORDEN:
         sobra = next((i for i, o in enumerate(cola[:-1]) if o.get("tipo") != "abrir_practica"), 0)
@@ -267,6 +277,19 @@ class HabilidadVivo(BaseModel):
     fase: str = Field(default="", max_length=12)  # nueva | acompanada | sola | dominada
 
 
+class FichaVivo(BaseModel):
+    id: str = Field(default="", max_length=40)
+    nombre: str = Field(default="", max_length=60)
+
+
+class AcompanamientoVivo(BaseModel):
+    """Motor 6.2: cómo va el alumno en la actividad (el panel del profesor ve dónde se atora)."""
+
+    animo: Literal["tranquilo", "duda", "atorado", "frustrado"] = "tranquilo"
+    razones: List[str] = Field(default_factory=list, max_length=4)
+    luz: Literal["", "apagada", "tenue", "media", "plena"] = ""
+
+
 class TallerVivo(BaseModel):
     """detalle.taller del latido (motor 5): lo que la lección muestra del taller en vivo."""
 
@@ -277,13 +300,17 @@ class TallerVivo(BaseModel):
     total: int = Field(default=0, ge=0, le=99)
     mensaje: str = Field(default="", max_length=300)
     pista: Optional[PistaVivo] = None
-    estado: str = Field(default="", max_length=12)  # mirando | trabajando | lograda | pausa
+    estado: str = Field(default="", max_length=12)  # mirando | trabajando | lograda | pausa | presentando
     habilidades: List[HabilidadVivo] = Field(default_factory=list, max_length=12)
     proyecto_abierto: bool = False
     repasos: List[str] = Field(default_factory=list, max_length=12)
     # Motor 6: la etapa que mandó la lección y si ya se cumplió (la lección se da por hecha).
     etapa: Literal["", "exploracion", "practica"] = ""
     etapa_cumplida: bool = False
+    # Motor 6.1: la herramienta nueva que Blender está presentando con su ficha.
+    ficha: Optional[FichaVivo] = None
+    # Motor 6.2: el ánimo (tranquilo, duda, atorado, frustrado) y cuánta luz encendió Blender.
+    acompanamiento: Optional[AcompanamientoVivo] = None
 
 
 class ParadaVivo(BaseModel):
@@ -419,7 +446,7 @@ class Orden(BaseModel):
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
                   "guardar", "reiniciar", "ver_ejemplo", "volver_practica",
                   "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame",
-                  "taller_probar", "taller_repaso", "isla", "recorrido"]
+                  "taller_probar", "taller_repaso", "isla", "recorrido", "leccion"]
     practica_id: Optional[str] = Field(default=None, max_length=80)
     confirmar: bool = False  # «reiniciar» lo exige: la plataforma pregunta antes
     # Motor 5: de qué taller, actividad o habilidad habla una orden del taller.
@@ -435,6 +462,12 @@ class Orden(BaseModel):
     etapa: Optional[Literal["exploracion", "practica"]] = None
     habilidades: Optional[List[str]] = Field(default=None, max_length=4)
     leccion: Optional[str] = Field(default=None, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
+    # Motor 6.1 (orden «leccion»): la lección abierta en la plataforma, para que Blender sepa dónde va el alumno.
+    curso: Optional[str] = Field(default=None, max_length=60, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$")
+    titulo: Optional[str] = Field(default=None, max_length=120)
+    clase: Optional[Literal["teoria", "blender", "examen", "proyecto"]] = None
+    numero: Optional[int] = Field(default=None, ge=0, le=99)
+    total: Optional[int] = Field(default=None, ge=0, le=99)
 
 
 def _datos_taller(cuerpo: Orden) -> Dict[str, Any]:
@@ -489,6 +522,11 @@ def nueva_orden(cuerpo: Orden, request: Request, db: Session = Depends(obtener_d
         practica = obtener_practica(db, cuerpo.practica_id or "", usuario)
         datos["practica_id"] = practica.id
     datos.update(_datos_taller(cuerpo))
+    if cuerpo.tipo == "leccion":
+        if not cuerpo.leccion or not cuerpo.curso:
+            raise HTTPException(status_code=400, detail="La orden «leccion» necesita «curso» y «leccion».")
+        datos = {"curso": cuerpo.curso, "leccion": cuerpo.leccion, "titulo": (cuerpo.titulo or "").strip()[:120],
+                 "clase": cuerpo.clase or "teoria", "numero": cuerpo.numero or 0, "total": cuerpo.total or 0}
     if cuerpo.tipo == "recorrido":
         datos["accion"] = cuerpo.accion or "empezar"
         if cuerpo.recorrido:

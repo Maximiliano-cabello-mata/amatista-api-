@@ -247,3 +247,61 @@ def test_la_etapa_del_taller_se_valida():
     errores = []
     _revisar_orden_practica(errores, [con(explora), con(explora)])
     assert any("cada etapa del taller va una sola vez" in e for e in errores)
+
+
+def test_blender_sabe_en_que_leccion_va_la_plataforma(cliente, crear_cuenta):
+    """Motor 6.1: la orden «leccion» llega a Blender y una nueva reemplaza a la que esperaba."""
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    latir(cliente, blender)
+    ordenar = lambda **cuerpo: cliente.post(f"{API}/ordenes", json=cuerpo, headers=alumno)  # noqa: E731
+    r = ordenar(tipo="leccion", curso="blender_principiante", leccion="bp2_blender", titulo="Explora en Blender",
+                clase="blender", numero=2, total=5)
+    assert r.status_code == 200 and r.json()["entregada"] is True
+    r = ordenar(tipo="leccion", curso="blender_principiante", leccion="bp2_explora", titulo="Extruir, cortar y limpiar",
+                clase="teoria", numero=3, total=5)
+    assert r.status_code == 200
+    orden = latir(cliente, blender)["orden"]
+    assert orden["tipo"] == "leccion" and orden["datos"] == {
+        "curso": "blender_principiante", "leccion": "bp2_explora", "titulo": "Extruir, cortar y limpiar",
+        "clase": "teoria", "numero": 3, "total": 5}
+    latir(cliente, blender, orden_hecha=orden["id"])
+    assert latir(cliente, blender)["orden"] is None  # la lección de antes ya no espera: solo importa la última
+    assert ordenar(tipo="leccion", leccion="bp2_explora").status_code == 400  # sin curso
+    assert ordenar(tipo="leccion", curso="../x", leccion="bp2_explora").status_code == 422
+    assert ordenar(tipo="leccion", curso="c", leccion="l", clase="otra").status_code == 422
+    assert ordenar(tipo="leccion", curso="c", leccion="l", numero=500).status_code == 422
+
+
+def test_la_leccion_ve_la_ficha_que_presenta_blender(cliente, crear_cuenta):
+    _, alumno = crear_cuenta()
+    blender, _ = vincular(cliente, alumno)
+    vivo = {"taller": "blender.bp.m2", "estado": "presentando", "ficha": {"id": "mesh.extrude", "nombre": "Extruir"},
+            "actividad": {"id": "mira:bl-extruir", "tipo": "mira", "habilidad": "bl-extruir"}}
+    latir(cliente, blender, practica_id="taller.bl-extruir.mira", detalle={"titulo": "Extruir", "taller": vivo})
+    (b,) = cliente.get(f"{API}/enlace", headers=alumno).json()["blender"]
+    assert b["detalle"]["taller"]["ficha"] == {"id": "mesh.extrude", "nombre": "Extruir"}
+    assert b["detalle"]["taller"]["estado"] == "presentando"
+
+
+def test_los_bloques_de_fichas_se_validan():
+    """Motor 6.1: herramienta_blender y blender_mapa usan las fichas de practices/blender/fichas.json."""
+    from tests.test_contenido import leccion_con as leccion
+
+    ficha = {"type": "herramienta_blender", "id": "f1", "tool": "mesh.extrude"}
+    assert validar_leccion(leccion(ficha)) == []
+    assert any("no tiene ficha" in e for e in validar_leccion(leccion({**ficha, "tool": "sculpt"})))
+    explora = {"type": "blender_mapa", "id": "m1", "mode": "explore", "zones": ["herramientas", "vista3d", "lateral"]}
+    assert validar_leccion(leccion(explora)) == []
+    assert validar_leccion(leccion({"type": "blender_mapa", "id": "m0", "mode": "explore"})) == []
+    assert any("no es una zona" in e for e in validar_leccion(leccion({**explora, "zones": ["herramientas", "cocina"]})))
+    assert any("repetidas" in e for e in validar_leccion(leccion({**explora, "zones": ["vista3d", "vista3d"]})))
+    busca = {"type": "blender_mapa", "id": "m2", "mode": "find",
+             "questions": [{"tool": "transform.move"}, {"zone": "propiedades", "prompt": "¿Dónde va el material?"}]}
+    assert validar_leccion(leccion(busca)) == []
+    assert any("no tiene ficha" in e for e in validar_leccion(leccion({**busca, "questions": [{"tool": "nada"}]})))
+    assert any("no los dos" in e for e in validar_leccion(
+        leccion({**busca, "questions": [{"tool": "transform.move", "zone": "vista3d"}]})))
+    assert any("prompt" in e for e in validar_leccion(leccion({**busca, "questions": [{"zone": "vista3d"}]})))
+    assert any("solo va con" in e for e in validar_leccion(leccion({**explora, "questions": [{"tool": "transform.move"}]})))
+    assert any("questions" in e for e in validar_leccion(leccion({"type": "blender_mapa", "id": "m3", "mode": "find"})))

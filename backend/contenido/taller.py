@@ -23,6 +23,7 @@ import threading
 from typing import Any, Dict, Optional
 
 from contenido import motor
+from amatista_engine.taller.fichas import Fichas, cargar_fichas
 from amatista_engine.taller.habilidades import Catalogo, ErrorCatalogo, leer_catalogo
 
 log = logging.getLogger("amatista.taller")
@@ -57,6 +58,24 @@ def catalogo() -> Optional[Catalogo]:
 def ids_de_talleres() -> tuple:
     cat = catalogo()
     return tuple(t.id for t in cat.talleres) if cat else ()
+
+
+# Motor 6.1: las fichas de herramientas (practices/blender/fichas.json), las mismas de Blender y de la teoría.
+FICHAS = motor.RAIZ / "practices" / "blender" / "fichas.json"
+_fichas: Dict[str, Any] = {"clave": None, "fichas": None}
+
+
+def fichas() -> Fichas:
+    """Las fichas vigentes (se releen si cambió el archivo). Vacías si falta."""
+    try:
+        clave = (str(FICHAS), FICHAS.stat().st_mtime_ns)
+    except OSError:
+        return Fichas()
+    with _cerrojo:
+        if _fichas["clave"] != clave:
+            _fichas["fichas"] = cargar_fichas(FICHAS)
+            _fichas["clave"] = clave
+        return _fichas["fichas"]
 
 
 def _compilada(definicion: Dict[str, Any]):
