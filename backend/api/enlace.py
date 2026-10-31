@@ -282,6 +282,14 @@ class FichaVivo(BaseModel):
     nombre: str = Field(default="", max_length=60)
 
 
+class AcompanamientoVivo(BaseModel):
+    """Motor 6.2: cómo va el alumno en la actividad (el panel del profesor ve dónde se atora)."""
+
+    animo: Literal["tranquilo", "duda", "atorado", "frustrado"] = "tranquilo"
+    razones: List[str] = Field(default_factory=list, max_length=4)
+    luz: Literal["", "apagada", "tenue", "media", "plena"] = ""
+
+
 class TallerVivo(BaseModel):
     """detalle.taller del latido (motor 5): lo que la lección muestra del taller en vivo."""
 
@@ -301,6 +309,8 @@ class TallerVivo(BaseModel):
     etapa_cumplida: bool = False
     # Motor 6.1: la herramienta nueva que Blender está presentando con su ficha.
     ficha: Optional[FichaVivo] = None
+    # Motor 6.2: el ánimo (tranquilo, duda, atorado, frustrado) y cuánta luz encendió Blender.
+    acompanamiento: Optional[AcompanamientoVivo] = None
 
 
 class ParadaVivo(BaseModel):
