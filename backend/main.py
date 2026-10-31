@@ -25,6 +25,7 @@ from api import (
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
+import observabilidad
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -93,9 +94,12 @@ def apagado(nombre: str) -> bool:
 # AMATISTA_OCULTAR_DOCS=1 no publica /docs, /redoc ni /openapi.json (producción
 # sin Caddy delante). Con Caddy ya responden 404 ahí (despliegue/Caddyfile).
 _DOCS = not apagado("AMATISTA_OCULTAR_DOCS")
+VERSION_API = "0.3.0"
+# Errores a Sentry solo con SENTRY_DSN en backend/.env (observabilidad.py).
+observabilidad.iniciar(VERSION_API)
 app = FastAPI(
     title="Amatista API",
-    version="0.3.0",
+    version=VERSION_API,
     lifespan=ciclo_de_vida,
     docs_url="/docs" if _DOCS else None,
     redoc_url="/redoc" if _DOCS else None,
