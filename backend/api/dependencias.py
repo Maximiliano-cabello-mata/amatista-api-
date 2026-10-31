@@ -124,3 +124,12 @@ def puede_ver_alumno(db: Session, actual: Optional[Usuario], usuario_id: str) ->
     if actual is not None and (actual.id == usuario_id or actual.rol in ("profesor", "admin")):
         return True
     return not es_cuenta_registrada(db.get(Usuario, usuario_id))
+
+
+def sin_progreso(usuario: Optional[Usuario]) -> bool:
+    """Motor 7 (pedido del creador, 31 de octubre de 2026): un administrador no lleva progreso.
+
+    Practica cuantas veces quiera para probar: lo que manda no se guarda y lo
+    que lee llega vacío, así que cada vez que entra todo empieza de cero.
+    """
+    return usuario is not None and (usuario.rol or "") == "admin"

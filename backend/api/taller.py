@@ -48,7 +48,7 @@ from sqlalchemy.orm import Session
 
 from api.addon import copia_verificada, definicion_de, es_equipo, politica_copias, version_para, visible
 from api.comun import error_bd
-from api.dependencias import usuario_requerido
+from api.dependencias import sin_progreso, usuario_requerido
 from api.limites import limitar
 from contenido import motor
 from contenido.taller import catalogo, revisar_escena
@@ -232,6 +232,13 @@ class Lectura:
         return valor if isinstance(valor, dict) else {}
 
 
+def leer_de(db: Session, usuario: Usuario, cat: Optional[Catalogo], ruta: str) -> Lectura:
+    """leer() para quien llama; un administrador (motor 7) siempre empieza de cero."""
+    if sin_progreso(usuario):
+        return Lectura()
+    return leer(db, usuario.id, cat, ruta)
+
+
 def leer(db: Session, usuario_id: str, cat: Optional[Catalogo], ruta: str) -> Lectura:
     """Todo lo que el taller sabe del alumno. Lo que falta en la base (012, 007) se lee como vacío."""
     lectura = Lectura()
@@ -348,7 +355,7 @@ def sincronizar_al_arrancar(db: Session) -> Dict[str, Any]:
 def mis_habilidades(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
     """El modelo del alumno: {estado: {habilidad: Dominio}, completadas, ahora, guardado}."""
     momento = time.time()
-    lectura = leer(db, usuario.id, catalogo(), "/api/addon/v1/habilidades")
+    lectura = leer_de(db, usuario, catalogo(), "/api/addon/v1/habilidades")
     return respuesta_estado(lectura, momento)
 
 
@@ -582,6 +589,10 @@ def registrar_intentos(cuerpo: IntentosTaller, request: Request, db: Session = D
     if cat is None:
         raise HTTPException(status_code=503, detail="El servidor no tiene el catálogo de habilidades del taller.")
     momento = time.time()
+    if sin_progreso(usuario):
+        # Motor 7: el administrador practica sin progreso; el add-on puede borrar su cola.
+        return {**respuesta_estado(Lectura(), momento), "aceptados": 0, "repetidos": 0, "rechazados": [],
+                "sin_progreso": True}
     lectura = Lectura()
     try:
         registradas = sincronizar_habilidades(db, solo_faltantes=True)["registradas"]
@@ -641,7 +652,7 @@ def mis_talleres(curso: Optional[str] = None, db: Session = Depends(obtener_db),
     cat = catalogo()
     if cat is None:
         return {"talleres": [], "ahora": round(momento, 3), "guardado": False}
-    lectura = leer(db, usuario.id, cat, "/api/addon/v1/talleres")
+    lectura = leer_de(db, usuario, cat, "/api/addon/v1/talleres")
     completadas = lectura.completadas
     talleres = []
     for taller in cat.talleres:
@@ -665,7 +676,7 @@ def un_taller(taller_id: str, elegida: Optional[str] = None, db: Session = Depen
     taller = cat.taller(taller_id) if cat else None
     if taller is None:
         raise HTTPException(status_code=404, detail=f"No existe el taller «{taller_id[:60]}».")
-    lectura = leer(db, usuario.id, cat, f"/api/addon/v1/talleres/{taller.id}")
+    lectura = leer_de(db, usuario, cat, f"/api/addon/v1/talleres/{taller.id}")
     plan = planear(cat, taller.id, lectura.estado, momento, lectura.completadas, elegida=(elegida or "")[:60])
     datos = plan.a_dict()
     for tarjeta in datos["habilidades"]:

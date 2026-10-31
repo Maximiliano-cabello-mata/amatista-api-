@@ -20,6 +20,7 @@ from api.dependencias import (
     REFRESCO_ACCESO,
     puede_ver_alumno,
     resolver_alumno,
+    sin_progreso,
     usuario_opcional,
     usuario_requerido,
 )
@@ -274,6 +275,8 @@ def guardar_progreso(
     El progreso nunca retrocede: una lección completada sigue completada y
     se conserva el mejor puntaje, aunque lleguen eventos viejos o repetidos.
     """
+    if sin_progreso(actual):
+        return {"guardados": 0, "insignias": 0, "sin_progreso": True}  # motor 7: el administrador no lleva progreso
     momento = ahora()
     por_leccion, insignias = agrupar(datos.eventos, datos.insignias, momento)
 
@@ -310,6 +313,10 @@ def leer_mi_progreso(
     ?desde=<servidor_en de la descarga anterior> devuelve solo lo cambiado:
     con datos móviles limitados, abrir la app no vuelve a bajar todo.
     """
+    if sin_progreso(usuario):
+        # Motor 7: el administrador entra siempre de cero (la PWA borra además lo que tenga en el equipo).
+        return {"usuario_id": usuario.id, "lecciones": [], "insignias": [], "parcial": False,
+                "servidor_en": iso(ahora()), "sin_progreso": True}
     try:
         # servidor_en se toma antes de leer: es el `desde` de la próxima descarga.
         servidor_en = ahora()

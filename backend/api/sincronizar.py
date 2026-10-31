@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from api import eventos as api_eventos
 from api import progreso as api_progreso
 from api.comun import error_bd
-from api.dependencias import resolver_alumno, usuario_opcional
+from api.dependencias import resolver_alumno, sin_progreso, usuario_opcional
 from api.limites import limitar
 from database.conexion import obtener_db
 from database.modelos import Usuario, ahora
@@ -50,6 +50,10 @@ def sincronizar(
     db: Session = Depends(obtener_db),
 ):
     momento = ahora()
+    if sin_progreso(actual):
+        # Motor 7: el administrador practica sin progreso (ni lecciones ni eventos).
+        return {"guardados": 0, "insignias": 0, "eventos": len(datos.eventos), "nuevos": 0,
+                "servidor_en": api_progreso.iso(momento), "sin_progreso": True}
     por_leccion, insignias = api_progreso.agrupar(datos.progreso, datos.insignias, momento)
     unicos = api_eventos.sin_repetir(datos.eventos)
     nuevos = 0

@@ -57,7 +57,7 @@ from api import progreso as api_progreso
 from api.auth import abrir_sesion
 from api.comun import error_bd, usuario_publico
 from api.contenido import confirmar, iso, rechazo
-from api.dependencias import PREFIJO_ADDON, requiere_rol, usuario_opcional, usuario_requerido
+from api.dependencias import PREFIJO_ADDON, requiere_rol, sin_progreso, usuario_opcional, usuario_requerido
 from api.limites import limitar
 from contenido import motor
 from database.conexion import obtener_db
@@ -1003,6 +1003,13 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
         cumplidos.pop()
     version_blender = (request.headers.get("x-blender-version") or cuerpo.escena.get("blender") or "")[:20] or None
 
+    if sin_progreso(usuario):
+        # Motor 7: el administrador prueba la práctica; se evalúa igual pero no se guarda nada.
+        return {"practica_id": practica.id, "version": version, "progreso": progreso, "mejor_progreso": progreso,
+                "completada": reporte.completed, "nueva_completa": False, "paso_actual": reporte.current_target_id,
+                "autonomia": autonomia, "habilidades": [], "pasos": [{"id": s.target_id, "estado": s.status}
+                                                                      for s in reporte.steps],
+                "copia_verificada": verificada, "sin_progreso": True}
     fila = db.get(ProgresoPractica, (usuario.id, practica.id))
     nueva_completa = False
     if fila is None:
@@ -1079,6 +1086,8 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
 @router.get("/mi-progreso")
 def mi_progreso(practica_id: Optional[str] = None, db: Session = Depends(obtener_db),
                 usuario: Usuario = Depends(usuario_requerido)):
+    if sin_progreso(usuario):
+        return {"practicas": [], "sin_progreso": True}  # motor 7: el administrador entra siempre de cero
     consulta = select(ProgresoPractica).where(ProgresoPractica.usuario_id == usuario.id)
     if practica_id:
         consulta = consulta.where(ProgresoPractica.practica_id == practica_id)
