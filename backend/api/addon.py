@@ -44,7 +44,10 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -88,6 +91,12 @@ DURACION_VINCULO_PAQUETE = timedelta(days=7)
 ALFABETO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 PATRON_CODIGO = re.compile(r"^[A-Z0-9]{4}-?[A-Z0-9]{4}$")
 SISTEMAS = ("windows", "macos", "linux")
+# Motor 6.2: los instaladores de verdad (.exe firmado, .deb) que arma .github/workflows/instaladores.yml.
+# Se copian a AMATISTA_INSTALADORES en el servidor; sin ellos la plataforma ofrece el .zip de siempre.
+INSTALADORES = {
+    "windows": ("Amatista-*-Windows.exe", "application/vnd.microsoft.portable-executable"),
+    "linux": ("amatista_*_all.deb", "application/vnd.debian.binary-package"),
+}
 MAX_DEFINICION = 200_000  # caracteres de una practice.json
 ORDEN_AUTONOMIA = {"sin_practicar": 0, "con_guia": 1, "con_pistas": 2, "autonoma": 3}
 # Una práctica sola no demuestra autonomía: eso lo confirma el proyecto del nivel.
@@ -379,6 +388,26 @@ def cerrar(db: Session, ruta: str) -> None:
 # --- Estado y vínculo ------------------------------------------------------------
 
 
+def carpeta_instaladores() -> Path:
+    return Path(os.getenv("AMATISTA_INSTALADORES") or Path(__file__).resolve().parents[1] / "instaladores")
+
+
+def _orden_version(ruta: Path) -> Tuple[int, ...]:
+    numeros = re.findall(r"\d+", ruta.name)
+    return tuple(int(n) for n in numeros)
+
+
+def instalador_de(sistema: str) -> Optional[Path]:
+    """El instalador más nuevo de ese sistema en la carpeta del servidor, o None."""
+    if sistema not in INSTALADORES:
+        return None
+    carpeta = carpeta_instaladores()
+    if not carpeta.is_dir():
+        return None
+    archivos = [a for a in carpeta.glob(INSTALADORES[sistema][0]) if a.is_file()]
+    return max(archivos, key=_orden_version) if archivos else None
+
+
 @router.get("/estado")
 def estado(request: Request):
     """Lo que el add-on necesita saber antes de nada (público)."""
@@ -390,6 +419,9 @@ def estado(request: Request):
         "version_motor": motor.VERSION_MOTOR,
         "blender_minimo": motor.BLENDER_MINIMO,
         "descargas": {s: f"{servidor}/api/addon/v1/descargas/{s}" for s in SISTEMAS},
+        # Motor 6.2: el .exe / .deb si el servidor los tiene (si no, null y se usa la descarga .zip).
+        "instaladores": {s: (f"{servidor}/api/addon/v1/instaladores/{s}" if instalador_de(s) else None)
+                         for s in INSTALADORES},
         "repositorio": f"{servidor}/api/addon/v1/extensiones/index.json",
     }
 
@@ -1093,6 +1125,16 @@ def descargar(sistema: str, request: Request, db: Session = Depends(obtener_db),
         licencia=licencia_para(usuario),
     )
     return _zip(contenido, nombre, privado=True)
+
+
+@router.get("/instaladores/{sistema}", dependencies=[Depends(LIMITE_DESCARGAS)])
+def descargar_instalador(sistema: str):
+    """Motor 6.2: el instalador firmado (igual para todos: la cuenta se conecta después, desde Blender)."""
+    archivo = instalador_de(sistema)
+    if archivo is None:
+        raise HTTPException(status_code=404, detail="Este servidor todavía no tiene el instalador; usa la descarga .zip.")
+    return FileResponse(archivo, media_type=INSTALADORES[sistema][1], filename=archivo.name,
+                        headers={"Cache-Control": "public, max-age=300"})
 
 
 @router.get("/extension.zip")

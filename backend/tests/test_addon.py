@@ -313,10 +313,10 @@ def test_la_descarga_es_amatista_motor_6_con_todo_lo_nuevo(cliente):
     estado = cliente.get(f"{API}/estado").json()
     assert estado["nombre"] == "Amatista Motor 6.2" and estado["version_addon"] == "6.2.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-6.1-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-6.2-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 6.1/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 6.1/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 6.1 PARA BLENDER")
+    assert "Amatista Motor 6.2/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 6.2/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 6.2 PARA BLENDER")
     extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 6.2/amatista-6.2.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
@@ -450,3 +450,20 @@ def test_desconectar_no_acepta_comodines(cliente, crear_cuenta):
         assert cliente.delete(f"{API}/dispositivos/{comodin}", headers=alumno).status_code == 404
     assert cliente.get(f"{API}/yo", headers=uno).status_code == 200
     assert cliente.get(f"{API}/yo", headers=otro).status_code == 200
+
+
+def test_instaladores_firmados_si_el_servidor_los_tiene(cliente, tmp_path, monkeypatch):
+    """Motor 6.2: el .exe y el .deb se ofrecen solo cuando están en AMATISTA_INSTALADORES."""
+    monkeypatch.setenv("AMATISTA_INSTALADORES", str(tmp_path))
+    estado = cliente.get(f"{API}/estado").json()
+    assert estado["instaladores"] == {"windows": None, "linux": None}
+    assert cliente.get(f"{API}/instaladores/windows").status_code == 404
+    (tmp_path / "Amatista-6.1.0-Windows.exe").write_bytes(b"MZ viejo")
+    (tmp_path / "Amatista-6.10.0-Windows.exe").write_bytes(b"MZ nuevo")
+    estado = cliente.get(f"{API}/estado").json()
+    assert estado["instaladores"]["windows"].endswith("/api/addon/v1/instaladores/windows")
+    assert estado["instaladores"]["linux"] is None
+    respuesta = cliente.get(f"{API}/instaladores/windows")
+    assert respuesta.status_code == 200 and respuesta.content == b"MZ nuevo"
+    assert "Amatista-6.10.0-Windows.exe" in respuesta.headers["content-disposition"]
+    assert cliente.get(f"{API}/instaladores/macos").status_code == 404
