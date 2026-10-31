@@ -102,9 +102,11 @@ def _sesion_addon(request: Request, db: Session, usuario: Usuario) -> Sesion:
     return sesion
 
 
-def _leer(texto: Optional[str]) -> Any:
+def _leer(texto: Any) -> Any:
     if not texto:
         return None
+    if isinstance(texto, (dict, list)):  # columna IS JSON leída por python-oracledb
+        return texto
     try:
         return json.loads(texto)
     except ValueError:

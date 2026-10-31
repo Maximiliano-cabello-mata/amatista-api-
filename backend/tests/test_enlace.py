@@ -430,3 +430,15 @@ def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
     assert latir(cliente, blender)["orden"]["datos"] == {"accion": "empezar", "recorrido": "taller"}
     otra = cliente.post(f"{API}/ordenes", json={"tipo": "recorrido", "recorrido": "nada"}, headers=alumno)
     assert otra.status_code == 422
+
+
+def test_detalle_leido_de_oracle_como_dict_no_rompe_el_enlace():
+    """python-oracledb entrega CHECK (detalle IS JSON) como dict (error 500 visto en Sentry el 31 oct)."""
+    from api.enlace import _leer
+    from database.modelos import AddonEnlace, TextoJSON
+
+    columna = AddonEnlace.__table__.c.detalle.type
+    assert isinstance(columna, TextoJSON)
+    assert columna.process_result_value({"paso": "vagones", "n": 2}, None) == '{"paso":"vagones","n":2}'
+    assert _leer({"paso": "vagones"}) == {"paso": "vagones"}
+    assert _leer('{"paso":"vagones"}') == {"paso": "vagones"}

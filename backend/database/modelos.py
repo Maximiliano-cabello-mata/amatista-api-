@@ -549,7 +549,8 @@ class AddonEnlace(Base):
     orden: Mapped[Optional[str]] = mapped_column(TextoJSONCorto(1000))
     orden_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
     # sql/011: compartido entre procesos; se sobrescribe, no acumula historial.
-    detalle: Mapped[Optional[str]] = mapped_column(Text)
+    # CHECK (detalle IS JSON): Oracle lo entrega como dict, TextoJSON lo deja en texto.
+    detalle: Mapped[Optional[str]] = mapped_column(TextoJSON)
 
 
 class AddonAjustes(Base):
