@@ -113,18 +113,22 @@ def guardar(db: Session, alumno_id: str, unicos: Dict[str, EventoEntrada], momen
     return nuevos
 
 
+def sin_repetir(eventos: List[EventoEntrada]) -> Dict[str, EventoEntrada]:
+    """Duplicados dentro del mismo lote: cuenta el primero."""
+    unicos: Dict[str, EventoEntrada] = {}
+    for evento in eventos:
+        unicos.setdefault(evento.id.strip(), evento)
+    unicos.pop("", None)
+    return unicos
+
+
 @router.post("/eventos", dependencies=[Depends(LIMITE_ESCRITURA)])
 def guardar_eventos(
     datos: SolicitudEventos,
     actual: Optional[Usuario] = Depends(usuario_opcional),
     db: Session = Depends(obtener_db),
 ):
-    # Duplicados dentro del mismo lote: cuenta el primero.
-    unicos: Dict[str, EventoEntrada] = {}
-    for evento in datos.eventos:
-        unicos.setdefault(evento.id.strip(), evento)
-    unicos.pop("", None)
-
+    unicos = sin_repetir(datos.eventos)
     momento = ahora()
     nuevos = 0
     # Dos intentos: si el mismo lote llega dos veces a la vez, la segunda

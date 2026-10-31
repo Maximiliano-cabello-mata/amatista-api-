@@ -8,6 +8,7 @@ Servidor (con backend/.env configurado para Oracle):
 """
 import logging
 import os
+import zlib
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -18,7 +19,9 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import addon, admin, auth, blender, buzon, contenido, enlace, eventos, niveles, perfil, progreso, sesiones, taller
+from api import (
+    addon, admin, auth, blender, buzon, contenido, enlace, eventos, niveles, perfil, progreso, sesiones, sincronizar, taller,
+)
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
 from database.modelos import Base
@@ -178,6 +181,64 @@ class LimitarCuerpo:
         await JSONResponse({"detail": "La petición es demasiado grande."}, status_code=413)(scope, receive, send)
 
 
+class DescomprimirCuerpo:
+    """Acepta cuerpos con Content-Encoding: gzip (la PWA comprime los lotes de sincronización).
+
+    Con datos móviles limitados, un lote de progreso y eventos pesa entre 5 y
+    10 veces menos comprimido. Va por dentro de LimitarCuerpo (que mide lo
+    comprimido) y vuelve a medir al descomprimir: una «bomba» de gzip se
+    corta en MAX_CUERPO sin llegar a cargarse entera en memoria.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        cabeceras = list(scope.get("headers") or ())
+        codificacion = dict(cabeceras).get(b"content-encoding", b"").strip().lower()
+        if not codificacion or codificacion == b"identity":
+            await self.app(scope, receive, send)
+            return
+        if codificacion != b"gzip":
+            await JSONResponse({"detail": "Solo se acepta Content-Encoding: gzip."}, status_code=415)(scope, receive, send)
+            return
+        partes = []
+        while True:
+            mensaje = await receive()
+            if mensaje["type"] != "http.request":
+                return  # el cliente se desconectó
+            partes.append(mensaje.get("body", b""))
+            if not mensaje.get("more_body"):
+                break
+        descompresor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        try:
+            cuerpo = descompresor.decompress(b"".join(partes), MAX_CUERPO + 1)
+        except zlib.error:
+            await JSONResponse({"detail": "El cuerpo comprimido no es válido."}, status_code=400)(scope, receive, send)
+            return
+        if len(cuerpo) > MAX_CUERPO or descompresor.unconsumed_tail:
+            await LimitarCuerpo._demasiado(scope, receive, send)
+            return
+        nuevas = [(k, v) for k, v in cabeceras if k not in (b"content-encoding", b"content-length")]
+        nuevas.append((b"content-length", str(len(cuerpo)).encode()))
+        entregado = False
+
+        async def recibir():
+            nonlocal entregado
+            if not entregado:
+                entregado = True
+                return {"type": "http.request", "body": cuerpo, "more_body": False}
+            return await receive()
+
+        await self.app({**scope, "headers": nuevas}, recibir, send)
+
+
+# El último que se agrega queda por fuera: LimitarCuerpo mide lo que llega y
+# después DescomprimirCuerpo mide lo descomprimido.
+app.add_middleware(DescomprimirCuerpo)
 app.add_middleware(LimitarCuerpo)
 
 
@@ -205,7 +266,7 @@ app.add_middleware(
     # Cualquier puerto de localhost: Vite usa 5173, 5174, 5176...
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "X-Sesion-Id", "If-None-Match"],
+    allow_headers=["Content-Type", "Content-Encoding", "Authorization", "X-Sesion-Id", "If-None-Match"],
     expose_headers=["ETag"],
 )
 
@@ -213,6 +274,7 @@ app.include_router(auth.router)
 app.include_router(sesiones.router)  # /api/iniciar-sesion heredado (alumnos anónimos)
 app.include_router(progreso.router)
 app.include_router(eventos.router)
+app.include_router(sincronizar.router)  # progreso + eventos en una petición comprimida (poca conectividad)
 app.include_router(admin.router)
 app.include_router(contenido.router)
 app.include_router(niveles.router)  # reestructuración v3: niveles y mapa del curso

@@ -578,7 +578,8 @@ def test_fusion_al_iniciar_sesion_desde_otro_dispositivo(cliente):
     l1, l2, l3, l4 = (progreso[k] for k in ("les_001", "les_002", "les_003", "les_004"))
     assert (l1.completada, l1.puntaje, l1.intentos, l1.completada_en) == (1, 90, 3, t2)  # nunca retrocede
     assert l1.datos_ligeros == '{"a":1}'  # se conserva el de la cuenta
-    assert l1.actualizado_en == t3
+    # La fusión marca la fila como cambiada ahora (GET /api/progreso?desde= la ve).
+    assert l1.actualizado_en > t3
     assert (l2.completada, l2.puntaje, l2.intentos, l2.completada_en) == (1, 80, 4, t1)
     assert l2.datos_ligeros == '{"p":2}'  # la cuenta no tenía: se toma el del anónimo
     assert (l3.completada, l3.puntaje, l3.completada_en) == (1, 100, t3)
