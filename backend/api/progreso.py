@@ -6,7 +6,7 @@ los campos nuevos (datos_ligeros, completada_en, insignias) son opcionales,
 así que la PWA vieja que manda {usuario_id, eventos:[...]} sigue funcionando.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +32,9 @@ from database.modelos import Logro, ProgresoLeccion, Usuario, ahora
 LIMITE_ESCRITURA = limitar(300, por="cuenta")
 
 router = APIRouter(prefix="/api", tags=["progreso"])
+
+# GET /api/progreso?desde=: también se devuelven las filas de estos minutos previos.
+MARGEN_DESDE = timedelta(minutes=2)
 
 # Tamaño de PROGRESO_LECCIONES.DATOS_LIGEROS (VARCHAR2(250 CHAR)).
 MAX_DATOS = 250
@@ -143,13 +146,19 @@ def fila_publica(fila: ProgresoLeccion) -> dict:
     }
 
 
-def progreso_de(db: Session, usuario_id: str) -> dict:
-    """Progreso e insignias de un alumno con el formato de GET /api/progreso."""
-    filas = db.scalars(
-        select(ProgresoLeccion)
-        .where(ProgresoLeccion.usuario_id == usuario_id)
-        .order_by(ProgresoLeccion.curso_id, ProgresoLeccion.leccion_id)
-    ).all()
+def progreso_de(db: Session, usuario_id: str, desde: Optional[datetime] = None) -> dict:
+    """Progreso e insignias de un alumno con el formato de GET /api/progreso.
+
+    Con `desde` solo van las lecciones que cambiaron desde esa hora del
+    servidor (las insignias van siempre: son pocas y su fecha es la de
+    obtención, no la del último cambio).
+    """
+    consulta = select(ProgresoLeccion).where(ProgresoLeccion.usuario_id == usuario_id)
+    if desde is not None:
+        # Margen: una escritura que empezó antes de la descarga anterior pudo
+        # confirmarse después. Repetir unas filas no hace daño (la PWA une).
+        consulta = consulta.where(ProgresoLeccion.actualizado_en >= desde - MARGEN_DESDE)
+    filas = db.scalars(consulta.order_by(ProgresoLeccion.curso_id, ProgresoLeccion.leccion_id)).all()
     logros = db.scalars(
         select(Logro).where(Logro.usuario_id == usuario_id).order_by(Logro.obtenido_en, Logro.insignia_id)
     ).all()
@@ -244,6 +253,16 @@ def guardar(
                 db.add(Logro(usuario_id=alumno_id, insignia_id=insignia, obtenido_en=momento))
 
 
+def agrupar(eventos: List[EventoProgreso], insignias: Optional[List[str]], momento: datetime):
+    """Un avance por lección (los repetidos se unen) e insignias sin duplicados."""
+    por_leccion: Dict[Tuple[str, str], dict] = {}
+    for evento in eventos:
+        clave = (evento.curso_id, evento.leccion_id)
+        avance = avance_de(evento, momento)
+        por_leccion[clave] = combinar(por_leccion[clave], avance) if clave in por_leccion else avance
+    return por_leccion, list(dict.fromkeys(i.strip() for i in insignias or [] if i.strip()))
+
+
 @router.post("/progreso", dependencies=[Depends(LIMITE_ESCRITURA)])
 def guardar_progreso(
     datos: SolicitudProgreso,
@@ -256,12 +275,7 @@ def guardar_progreso(
     se conserva el mejor puntaje, aunque lleguen eventos viejos o repetidos.
     """
     momento = ahora()
-    por_leccion: Dict[Tuple[str, str], dict] = {}
-    for evento in datos.eventos:
-        clave = (evento.curso_id, evento.leccion_id)
-        avance = avance_de(evento, momento)
-        por_leccion[clave] = combinar(por_leccion[clave], avance) if clave in por_leccion else avance
-    insignias = list(dict.fromkeys(i.strip() for i in datos.insignias or [] if i.strip()))
+    por_leccion, insignias = agrupar(datos.eventos, datos.insignias, momento)
 
     # Dos intentos: si otra petición del mismo alumno insertó la misma fila al
     # mismo tiempo (IntegrityError), la segunda vuelta ya la encuentra.
@@ -286,10 +300,20 @@ def guardar_progreso(
 
 
 @router.get("/progreso")
-def leer_mi_progreso(usuario: Usuario = Depends(usuario_requerido), db: Session = Depends(obtener_db)):
-    """Progreso de la cuenta de la sesión (la PWA lo combina con el local)."""
+def leer_mi_progreso(
+    desde: Optional[datetime] = None,
+    usuario: Usuario = Depends(usuario_requerido),
+    db: Session = Depends(obtener_db),
+):
+    """Progreso de la cuenta de la sesión (la PWA lo combina con el local).
+
+    ?desde=<servidor_en de la descarga anterior> devuelve solo lo cambiado:
+    con datos móviles limitados, abrir la app no vuelve a bajar todo.
+    """
     try:
-        return progreso_de(db, usuario.id)
+        # servidor_en se toma antes de leer: es el `desde` de la próxima descarga.
+        servidor_en = ahora()
+        return {**progreso_de(db, usuario.id, a_utc(desde)), "parcial": desde is not None, "servidor_en": iso(servidor_en)}
     except SQLAlchemyError as error:
         raise error_bd(error, "/api/progreso")
 

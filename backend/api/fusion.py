@@ -12,6 +12,8 @@ que /api/progreso):
 - logros: se copian (los que la cuenta ya tenía conservan su fecha).
 - eventos de aprendizaje: se reasignan a la cuenta (las métricas siguen
   contando a la misma persona).
+- actualizado_en: la hora de la fusión en cada fila que toca. Así las PWA
+  que descargan solo lo cambiado (GET /api/progreso?desde=) también la ven.
 
 Las filas del anónimo se mueven (no se duplican): una sola fila por alumno y
 lección cuida el presupuesto de 20 GB y evita contar dos veces en las
@@ -24,7 +26,7 @@ from typing import Optional
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from database.modelos import EventoAprendizaje, Logro, ProgresoLeccion, Sesion, Usuario
+from database.modelos import EventoAprendizaje, Logro, ProgresoLeccion, Sesion, Usuario, ahora
 
 
 def es_anonimo_fusionable(usuario: Optional[Usuario]) -> bool:
@@ -42,11 +44,6 @@ def _minimo_no_nulo(a: Optional[datetime], b: Optional[datetime]) -> Optional[da
     return min(fechas) if fechas else None
 
 
-def _maximo_no_nulo(a: Optional[datetime], b: Optional[datetime]) -> Optional[datetime]:
-    fechas = [f for f in (a, b) if f is not None]
-    return max(fechas) if fechas else None
-
-
 def fusionar_alumno(db: Session, origen_id: str, destino_id: str) -> int:
     """Une el progreso del anónimo `origen_id` con la cuenta `destino_id`.
 
@@ -62,6 +59,7 @@ def fusionar_alumno(db: Session, origen_id: str, destino_id: str) -> int:
     if destino is None or not es_anonimo_fusionable(origen):
         return 0
 
+    momento = ahora()
     filas_origen = db.scalars(select(ProgresoLeccion).where(ProgresoLeccion.usuario_id == origen_id)).all()
     filas_destino = {
         (f.curso_id, f.leccion_id): f
@@ -81,7 +79,7 @@ def fusionar_alumno(db: Session, origen_id: str, destino_id: str) -> int:
                     intentos=fila.intentos or 0,
                     datos_ligeros=fila.datos_ligeros,
                     completada_en=fila.completada_en,
-                    actualizado_en=fila.actualizado_en,
+                    actualizado_en=momento,
                 )
             )
             continue
@@ -92,7 +90,7 @@ def fusionar_alumno(db: Session, origen_id: str, destino_id: str) -> int:
         propia.completada_en = _minimo_no_nulo(propia.completada_en, fila.completada_en)
         if not propia.datos_ligeros:
             propia.datos_ligeros = fila.datos_ligeros
-        propia.actualizado_en = _maximo_no_nulo(propia.actualizado_en, fila.actualizado_en)
+        propia.actualizado_en = momento
 
     logros_destino = set(db.scalars(select(Logro.insignia_id).where(Logro.usuario_id == destino_id)).all())
     for logro in db.scalars(select(Logro).where(Logro.usuario_id == origen_id)).all():
