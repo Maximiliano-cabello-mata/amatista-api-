@@ -41,3 +41,10 @@ def test_con_dsn_se_activa_sin_pii(monkeypatch):
     assert visto["traces_sample_rate"] == 1.0
     assert visto["release"] == "amatista-api@0.3.0"
     assert visto["before_send"] is observabilidad._limpiar
+
+
+def test_las_migas_del_log_de_acceso_no_se_envian():
+    acceso = {"category": "uvicorn.access", "message": '2806:2f0::1:0 - "GET /api/addon/v1/enlace HTTP/1.1" 500'}
+    assert observabilidad._miga(acceso) is None
+    consulta = {"category": "query", "message": "SELECT practicas.id FROM practicas"}
+    assert observabilidad._miga(consulta) is consulta

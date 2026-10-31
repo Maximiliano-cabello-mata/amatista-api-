@@ -32,6 +32,13 @@ def _limpiar(evento, _pista=None):
     return evento
 
 
+def _miga(miga, _pista=None):
+    """El log de acceso de uvicorn lleva la IP del alumno: no se envía."""
+    if (miga or {}).get("category") in ("uvicorn.access", "uvicorn.error"):
+        return None
+    return miga
+
+
 def _proporcion(nombre: str) -> float:
     try:
         return min(max(float(os.getenv(nombre, "0") or 0), 0.0), 1.0)
@@ -57,6 +64,7 @@ def iniciar(version: str = "") -> bool:
         traces_sample_rate=_proporcion("SENTRY_TRAZAS"),
         before_send=_limpiar,
         before_send_transaction=_limpiar,
+        before_breadcrumb=_miga,
         max_request_body_size="never",
     )
     registro.info("Sentry activo (entorno %s)", os.getenv("SENTRY_ENTORNO", "produccion"))
