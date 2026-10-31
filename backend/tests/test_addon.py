@@ -311,13 +311,13 @@ def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
 def test_la_descarga_es_amatista_motor_6_con_todo_lo_nuevo(cliente):
     """La plataforma entrega la versión del repositorio, con los 9 proyectos, el taller y las temáticas."""
     estado = cliente.get(f"{API}/estado").json()
-    assert estado["nombre"] == "Amatista Motor 6.2" and estado["version_addon"] == "6.2.0"
+    assert estado["nombre"] == "Amatista Motor 7.0" and estado["version_addon"] == "7.0.0"
     respuesta = cliente.get(f"{API}/descargas/macos")
-    assert 'filename="Amatista-Motor-6.2-macos.zip"' in respuesta.headers["content-disposition"]
+    assert 'filename="Amatista-Motor-7.0-macos.zip"' in respuesta.headers["content-disposition"]
     paquete = zipfile.ZipFile(io.BytesIO(respuesta.content))
-    assert "Amatista Motor 6.2/LEEME.txt" in paquete.namelist()
-    assert paquete.read("Amatista Motor 6.2/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 6.2 PARA BLENDER")
-    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 6.2/amatista-6.2.0.zip")))
+    assert "Amatista Motor 7.0/LEEME.txt" in paquete.namelist()
+    assert paquete.read("Amatista Motor 7.0/LEEME.txt").decode("utf-8").startswith("AMATISTA MOTOR 7.0 PARA BLENDER")
+    extension = zipfile.ZipFile(io.BytesIO(paquete.read("Amatista Motor 7.0/amatista-7.0.0.zip")))
     nombres = extension.namelist()
     assert 'name = "Amatista Motor"' in extension.read("blender_manifest.toml").decode("utf-8")
     assert "practicas/temas.json" in nombres and "temas.py" in nombres
