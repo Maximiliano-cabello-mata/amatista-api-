@@ -1,102 +1,50 @@
 # Amatista · Backend
 
-API de FastAPI que guarda las sesiones y el progreso de los alumnos en
-Oracle Autonomous Database.
+API de FastAPI que guarda las sesiones, el progreso, el enlace en vivo con Blender, el modelo por habilidad de Amatista Taller, los avatares y el buzón del creador en Oracle Autonomous Database (o SQLite en desarrollo y pruebas).
 
-La app funciona aunque este backend esté caído: el progreso se guarda
-primero en el dispositivo del alumno (IndexedDB) y se sincroniza aquí
-cuando el servidor responde.
+La app funciona aunque este backend esté caído: el progreso se guarda primero en el dispositivo del alumno (IndexedDB) y se sincroniza aquí cuando el servidor responde.
 
-## Rutas
+## Rutas (14 routers en `main.py`)
 
-Detalle de cada contrato en `docs/arquitectura/2026-10-02_contrato_tecnico_plataforma.md`.
-Los errores siempre responden `{"detail": "mensaje en español"}`.
+Detalle de cada contrato en `docs/manual-del-codigo/03_backend.md`. Los errores siempre responden `{"detail": "mensaje en español"}`.
 
 | Grupo | Rutas | Para qué |
 |---|---|---|
 | Salud | `GET /` · `GET /api/salud` | Backend vivo · base de datos responde (503 si no) |
 | Cuentas (`api/auth.py`) | `POST /api/auth/registro`, `iniciar-sesion`, `cerrar-sesion`, `cerrar-todas` · `GET/PATCH /api/auth/yo` · `POST confirmar-correo`, `reenviar-codigo`, `recuperar`, `restablecer`, `cambiar-password` | Registro, sesión con token, confirmación por correo y recuperación |
-| Sesiones heredadas | `POST /api/iniciar-sesion` | Compatibilidad con la PWA anterior (alumnos anónimos) |
-| Progreso | `POST /api/progreso` · `GET /api/progreso` · `GET /api/progreso/{usuario_id}` | Guardar y leer progreso; con token, la identidad sale de la sesión |
-| Eventos | `POST /api/eventos` | Eventos de aprendizaje deduplicados por id (métricas) |
+| Sesiones heredadas (`api/sesiones.py`) | `POST /api/iniciar-sesion` | Compatibilidad con alumnos anónimos |
+| Progreso (`api/progreso.py`) | `POST /api/progreso` · `GET /api/progreso` (`?desde=` incremental) · `GET /api/progreso/{usuario_id}` | Guardar y leer progreso; las cuentas `admin` practican sin guardar progreso |
+| Eventos (`api/eventos.py`) | `POST /api/eventos` | Eventos de aprendizaje deduplicados por id |
+| Sincronización comprimida (`api/sincronizar.py`) | `POST /api/sincronizar` | Recibe progreso + eventos en una sola petición (acepta `Content-Encoding: gzip`) y devuelve el progreso fusionado; pensado para escuelas con pocos datos ([17_pocos_datos.md](../docs/plataforma/17_pocos_datos.md)) |
 | Contenido (`api/contenido.py`) | `GET /api/contenido/catalogo` (público, ETag) · `admin/arbol`, `plantillas`, `validar`, CRUD de cursos, módulos y lecciones, `publicar`, `archivar`, `mover`, `exportar` | Contenido administrable borrador → publicado |
-| Niveles (`api/niveles.py`) | `GET/POST /api/contenido/niveles` · `PUT /niveles/{id}` · `POST /niveles/sembrar` · `GET /api/contenido/mapa/{curso_id}` | Niveles del curso (v3) y mapa de fichas pendientes (profesor lee, admin modifica) |
-| Blender (`api/blender.py`) | `GET /api/blender/versiones` (público) · `PUT /versiones/{v}` · `POST /verificaciones` · `GET /compatibilidad` | Versiones de Blender verificadas y matriz de compatibilidad |
-| Add-on de Blender (`api/addon.py`) | `/api/addon/v1`: `estado`, `vinculos` (código y confirmar), `yo`, `salir`, `dispositivos`, `practicas` (listar, registrar, publicar, archivar, versiones, sincronizar, abrir), `practica-actual`, `intentos`, `mi-progreso`, `descargas/{sistema}`, `extension.zip`, `extensiones/index.json` | El add-on y la PWA: vincular Blender, prácticas del motor y su progreso ([docs/motor/referencia/05_api.md](../docs/motor/referencia/05_api.md)) |
-| Enlace en vivo (`api/enlace.py`) | `/api/addon/v1`: `POST/GET /enlace`, `POST /ordenes`, `GET/PUT /ajustes` | El latido de Blender con lo que muestra el instructor, las órdenes que manda la lección (abrir la práctica, comprobar, pista, «Hazlo conmigo», guardar, empezar de nuevo, ver el ejemplo) y los ajustes de «Mi Blender». Desde el motor 5 también maneja el taller (abrir, seguir, pausa, pista, «Mírame», demostrar, repasar, «Mi isla») y el latido trae `detalle.taller`. Necesita `sql/010` y `sql/011`; sin 010 responde `enlace: false` ([12_plataforma_y_blender.md](../docs/motor/referencia/12_plataforma_y_blender.md)) |
-| Amatista Taller (`api/taller.py`, `contenido/taller.py`) | `/api/addon/v1`: `GET /habilidades`, `POST /habilidades/intentos`, `GET /talleres`, `GET /talleres/{taller_id}` | El modelo del alumno por habilidad (motor 5): el servidor vuelve a calcularlo con el mismo motor a partir de los intentos, revisa la foto de la escena si llega y no cuenta dos veces un reenvío; el plan de cada taller (qué toca ahora, fases, repasos, pieza de la isla). Al arrancar registra las habilidades de `practices/blender/habilidades.json` en `HABILIDADES`. Necesita `sql/012`; sin 012 las lecturas responden vacío y los intentos 503 (el add-on los reenvía) ([guía](../docs/despliegue/2026-10-10_amatista_taller_motor_5.md)) |
-| Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas del lanzamiento y gestión de usuarios (profesor lee, admin modifica) |
+| Niveles (`api/niveles.py`) | `GET/POST /api/contenido/niveles` · `PUT /niveles/{id}` · `POST /niveles/sembrar` · `GET /api/contenido/mapa/{curso_id}` | Niveles del curso (v3) y mapa de fichas pendientes |
+| Blender (`api/blender.py`) | `GET /api/blender/versiones` · `PUT /versiones/{v}` · `POST /verificaciones` · `GET /compatibilidad` | Versiones de Blender verificadas y matriz de compatibilidad |
+| Add-on de Blender (`api/addon.py`) | `/api/addon/v1`: `estado`, `vinculos`, `yo`, `salir`, `dispositivos`, `practicas`, `practica-actual`, `intentos`, `mi-progreso`, `descargas/{sistema}` (`.exe`, `.deb`, `.zip`), `extension.zip`, `extensiones/index.json` | Vincular Blender, prácticas del motor, instaladores y progreso ([05_api.md](../docs/motor/referencia/05_api.md)) |
+| Enlace en vivo (`api/enlace.py`) | `/api/addon/v1`: `POST/GET /enlace`, `POST /ordenes`, `GET/PUT /ajustes` | Latido de Blender, cola de órdenes (`leccion`, `recorrido`, `abrir_practica`, `taller`, etc.) y ajustes de «Mi Blender» (`sql/010` y `sql/011`) |
+| Amatista Taller (`api/taller.py`) | `/api/addon/v1`: `GET /habilidades`, `POST /habilidades/intentos`, `GET /talleres`, `GET /talleres/{taller_id}` | Modelo BKT del alumno por habilidad e isla (`sql/012`) |
+| Perfil y avatares (`api/perfil.py`) | `GET /api/perfil/avatar` · `PUT /api/perfil/avatar` | Personaje low poly de cada cuenta y pavo real exclusivo de `AMATISTA_CREADOR` (`sql/013`) |
+| Buzón del creador (`api/buzon.py`) | `GET/POST /api/buzon`, `POST /api/buzon/{id}/mensajes` · `GET /api/admin/buzon`, `POST /api/admin/buzon/{id}/responder`, `PATCH /api/admin/buzon/{id}` | Conversaciones directas de los alumnos con el creador (`sql/013`) |
+| Administración (`api/admin.py`) | `GET /api/admin/resumen`, `usuarios`, `usuarios/{id}`, `auditoria`, `salud-detallada` · `PATCH usuarios/{id}` · `POST mantenimiento/purgar` | Métricas, auditoría y gestión de usuarios |
 
-Primer administrador: `AMATISTA_ADMINS=correo@x` en `.env` o `python herramientas/crear_admin.py correo@x`.
-Contenido desde la terminal: `python herramientas/contenido.py validar | importar | exportar | nuevo-modulo | nueva-leccion | mapa | sembrar-niveles | practicas`.
-
-La documentación interactiva queda en `http://localhost:8000/docs` en desarrollo. En el servidor, Caddy responde 404 en `/docs`: se ve con un túnel SSH (`ssh -L 8000:127.0.0.1:8000 <vm>`).
-
-## Probar en tu computadora sin Oracle (SQLite)
+## Probar en local sin Oracle (SQLite)
 
 ```bash
 cd backend
 python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements-dev.txt
 DATABASE_URL=sqlite:///./amatista_local.db uvicorn main:app --reload
 ```
 
-En otra terminal, `cd frontend && npm run dev`. El frontend usa
-`VITE_API_URL` de `frontend/.env` (ver `frontend/.env.example`).
+Pruebas automáticas y validación de contenido:
 
-Pruebas automáticas: `python -m pytest`.
+```bash
+python -m pytest -q
+python herramientas/contenido.py validar
+```
 
-## Dejar Oracle funcionando (en el servidor ARM)
+## Actualizar Oracle en el servidor (`sql/001` a `013`, 24 tablas)
 
-La base solo acepta conexiones desde la IP del servidor (ACL), así que
-estos pasos se hacen ahí.
-
-1. **Respaldar y actualizar.** Desde el 2 de octubre el servidor sigue este
-   repositorio (`~/amatista`, remoto oficial). La primera vez se guardó una
-   copia del código local; los pasos quedan como referencia:
-   ```bash
-   cp -r ~/amatista/backend ~/backend_respaldo_$(date +%F)
-   cd ~/amatista
-   git stash --include-untracked   # aparta los cambios locales del servidor
-   git pull origin main
-   ```
-   `git stash` no toca `backend/.env` ni `venv/` (están en `.gitignore`).
-2. **Instalar dependencias:** `cd backend && source venv/bin/activate && pip install -r requirements.txt`
-3. **Revisar la conexión.** Tu `backend/.env` actual sirve tal cual si tiene
-   `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` y `DB_SERVICE`: el backend
-   arma la conexión cifrada (`tcps`) con ellos. Si no existe, créalo con
-   `cp .env.example .env`. Si falla, pega en `DB_DSN` la cadena **TLS** de la
-   consola de OCI (Autonomous Database → Conexión a la base de datos).
-4. **Actualizar las tablas:** abre Database Actions → SQL y ejecuta con
-   **Ejecutar script (F5)**, en orden, los scripts de `sql/` (detalle en
-   [`sql/LEEME.txt`](sql/LEEME.txt)):
-   - Base que ya tiene datos de alumnos: `002` → `003` → `005` → `006` → `007` → `008` → `010` → `011` → `012` → (opcional) `004` → `009`.
-     **Nunca `001`**: borra las tablas. Producción ya tiene `002`, `003`, `005` y `006` (3 oct): faltan `007` a `012`, después del piloto (T-055, T-064 y T-087).
-   - Base vacía: `001` → `002` → `003` → `005` → `006` → `007` → `008` → `010` → `011` → `012` → (opcional) `004`; `009` solo si hay datos de la v2.
-   - Manual completo de la v3 (verificación y recetas para crear lecciones desde Oracle):
-     [`docs/reestructuracion/02_manual_oracle.md`](../docs/reestructuracion/02_manual_oracle.md).
-5. **Verificar:** `python diagnostico_oracle.py`. Debe terminar con
-   «✓ Las tablas coinciden con lo que espera el backend».
-6. **Arrancar:** `uvicorn main:app --host 0.0.0.0 --port 8000` y abre
-   `http://<servidor>:8000/api/salud`. Debe responder `{"estado": "ok", "motor": "oracle"}`.
-
-### Dejarlo como servicio (evita el error del puerto ocupado, Errno 98)
-
-Los archivos listos están en [`despliegue/`](../despliegue/): `amatista-api.service` (systemd),
-`Caddyfile` (HTTPS) y `actualizar.sh`. Cada uno explica en su encabezado cómo instalarlo.
-Para ver los errores del servicio: `journalctl -u amatista-api -f`.
-
-La VM de producción ya corre la API con la unidad que tenía instalada, **`amatista-backend`**
-(`journalctl -u amatista-backend -f`); `actualizar.sh` la detecta sola si `amatista-api` no existe.
-Pasar a la unidad del repositorio queda en T-003.
-
-## Errores de Oracle frecuentes
-
-| Error | Causa real | Solución |
-|---|---|---|
-| ORA-00942 table or view does not exist | La tabla no existe con ese nombre (o se creó con comillas en minúsculas) | Ejecutar el script SQL |
-| ORA-01722 invalid number | Se guarda texto (correo, UUID) en una columna NUMBER | Todas las columnas de usuario son VARCHAR2 en el script |
-| ORA-02267 column type incompatible with referenced column type | Llave foránea entre columnas de tipos distintos (VARCHAR2 → NUMBER) | Mismo tipo en ambos lados: lo hace el script |
-| ORA-12506 / timeout | La ACL no incluye la IP desde donde te conectas | Ejecutar desde el servidor o agregar tu IP en OCI |
-| Errno 104 Connection reset | Conexión sin cifrar al puerto 1522 | Usar la cadena TLS (`tcps`) |
+El orden exacto y las reglas viven en [`sql/LEEME.txt`](sql/LEEME.txt):
+- **Base existente con datos**: `002` → `003` → `005` → `006` → `007` → `008` → `010` → `011` → `012` → `013` → `004` (opcional) → `009` (**nunca `001`**).
+- **Verificar antes de reiniciar**: `python diagnostico_oracle.py` debe responder `✓ Las tablas coinciden con lo que espera el backend`.

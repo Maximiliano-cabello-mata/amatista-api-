@@ -185,9 +185,9 @@ Guía completa para la base real, paso a paso:
     esquema limpio y copia los datos convirtiendo los ids a texto. No
     ejecutes 001 sobre la base con los datos originales.
 
-6. REGLAS PARA LOS SCRIPTS FUTUROS (siguiente libre: 013)
+6. REGLAS PARA LOS SCRIPTS FUTUROS (siguiente libre: 014)
 -----------------------------------------------------------------------------
-  1. Numerados y en orden: 013_<qué_hace>.sql. Nunca se edita un script que
+  1. Numerados y en orden: 014_<qué_hace>.sql. Nunca se edita un script que
      ya se ejecutó en producción; el cambio va en el siguiente número.
   2. Solo agregan: ALTER TABLE ... ADD (columnas, restricciones), CREATE
      TABLE, CREATE INDEX. Prohibido DROP TABLE, TRUNCATE o DELETE de datos
