@@ -97,7 +97,7 @@ nuevo="$(git rev-parse HEAD)"
 if [ "$nuevo" = "$anterior" ]; then
   echo "Sin cambios: ya estás en ${nuevo:0:7}."
 fi
-git log --oneline "$anterior..$nuevo" | head -20
+git log --oneline -20 "$anterior..$nuevo"
 
 cd "$REPO/backend"
 paso "Dependencias"
@@ -110,7 +110,11 @@ if [ -f .env ]; then
   echo "Aviso: existe backend/.env; sus variables también llegan a las pruebas."
   echo "       En producción usa /etc/amatista/amatista-api.env (ver la guía de despliegue)."
 fi
-if ! venv/bin/python -m pytest -q; then
+# Aislar tests de backend/.env: pytest usa SQLite temporal, no las variables de producción.
+# La comprobación de Oracle posterior conserva su entorno real.
+if ! PYTHON_DOTENV_DISABLED=1 env -u AMATISTA_URL_PWA \
+      -u AMATISTA_PROXY_CONFIABLE -u AMATISTA_CREADOR \
+      venv/bin/python -m pytest -q; then
   volver
   fallar "las pruebas fallaron: el servicio sigue con la versión anterior (no se reinició)."
 fi
