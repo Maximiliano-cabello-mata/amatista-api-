@@ -280,7 +280,9 @@ def estado(usuario: Optional[Usuario] = Depends(usuario_opcional), db: Session =
         return datos
     try:
         mantener(db)
-        datos["usadas_hoy"] = _usadas_hoy(db, usuario.id)
+        datos["usadas_hoy"] = 0 if usuario.rol == "admin" else _usadas_hoy(db, usuario.id)
+        if usuario.rol == "admin":
+            datos["por_dia"] = 999
     except SQLAlchemyError as error:
         if sin_esquema(error):
             return {**datos, "listo": False, "motivo": SIN_014}
