@@ -45,6 +45,8 @@ ORIGENES_PRACTICA = ("repositorio", "addon", "panel")
 # Buzón del creador (sql/013): de qué trata una conversación y en qué va.
 CATEGORIAS_SUGERENCIA = ("error", "idea", "contenido", "otra")
 ESTADOS_SUGERENCIA = ("abierta", "respondida", "resuelta")
+# Amatista Cloud (sql/014): asignada → lista → terminada, o fallida si el nodo no pudo abrirla.
+ESTADOS_NUBE = ("asignada", "lista", "terminada", "fallida")
 
 
 def ahora() -> datetime:
@@ -614,3 +616,27 @@ class MensajeSugerencia(Base):
     de_creador: Mapped[int] = mapped_column(Integer, default=0)
     texto: Mapped[str] = mapped_column(String(2000))
     creado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+class NubeSesion(Base):
+    """Una sesión de Amatista Cloud: una hora de Blender en un nodo (sql/014).
+
+    Sirve de bitácora (quién usó qué nodo y cuánto) y de cuota diaria. El
+    token de acceso nunca se guarda: solo su hash SHA-256, como en SESIONES.
+    """
+
+    __tablename__ = "nube_sesiones"
+    __table_args__ = (
+        Index("ix_nube_sesiones_usuario", "usuario_id", "creada_en"),
+        Index("ix_nube_sesiones_estado", "estado", "expira_en"),
+    )
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    usuario_id: Mapped[str] = mapped_column(String(100), ForeignKey("usuarios.id"))
+    nodo: Mapped[str] = mapped_column(String(60))
+    estado: Mapped[str] = mapped_column(String(20), default="asignada")
+    token_hash: Mapped[str] = mapped_column(String(64))
+    creada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+    expira_en: Mapped[datetime] = mapped_column(TIMESTAMP)
+    terminada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
+    motivo_fin: Mapped[Optional[str]] = mapped_column(String(40))

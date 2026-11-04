@@ -43,7 +43,7 @@ def test_esquema_correcto_no_tiene_problemas():
     assert comparar(real) == []
 
 
-def test_esperado_incluye_las_veinticuatro_tablas():
+def test_esperado_incluye_las_veinticinco_tablas():
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -69,6 +69,7 @@ def test_esperado_incluye_las_veinticuatro_tablas():
         "PERFILES",
         "SUGERENCIAS",
         "SUGERENCIA_MENSAJES",
+        "NUBE_SESIONES",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
     assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"
@@ -236,3 +237,18 @@ def test_base_con_010_pide_011_sin_recrear_tablas():
     assert 'Falta la columna ADDON_ENLACES.DETALLE.' in comparar(real)
     assert '011_detalle_instructor.sql' in ' '.join(solucion(real))
     assert '001_esquema' not in ' '.join(solucion(real))
+
+
+def test_base_con_013_pide_solo_014():
+    """Todo hasta 013: falta solo la tabla de Amatista Cloud."""
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_014}
+    recomendacion = " ".join(solucion(real))
+    assert "014_nube.sql" in recomendacion
+    assert "013_" not in recomendacion and "NO ejecutes 001" in recomendacion
+
+
+def test_base_sin_013_ni_014_pide_los_dos_en_orden():
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items()
+            if tabla not in diagnostico_oracle.TABLAS_013 + diagnostico_oracle.TABLAS_014}
+    recomendacion = " ".join(solucion(real))
+    assert recomendacion.index("013_avatares_y_buzon.sql") < recomendacion.index("014_nube.sql")

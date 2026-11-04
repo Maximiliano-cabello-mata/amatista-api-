@@ -20,7 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from api import (
-    addon, admin, auth, blender, buzon, contenido, enlace, eventos, g7b, niveles, perfil, progreso, sesiones, sincronizar, taller,
+    addon, admin, auth, blender, buzon, contenido, enlace, eventos, g7b, niveles, nube, perfil, progreso, sesiones, sincronizar, taller,
 )
 from api.comun import error_bd
 from database.conexion import motor, obtener_db
@@ -288,6 +288,7 @@ app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/
 app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por habilidad (sql/012, motor 5)
 app.include_router(perfil.router)  # avatares low poly de cada cuenta (sql/013)
 app.include_router(buzon.router)  # buzón del creador: sugerencias de los alumnos (sql/013)
+app.include_router(nube.router)  # Amatista Cloud: Blender en la nube para cuentas de la UTN (sql/014)
 app.include_router(g7b.router)  # estado agregado G7B -> Geoda (sin Oracle; falla con perfiles locales)
 
 

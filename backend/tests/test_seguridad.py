@@ -60,6 +60,7 @@ def test_matriz_de_permisos(cliente, crear_cuenta, app):
     publicas = sorted(f"{m} {r}" for (m, r), q in requisitos.items() if q == "publica")
     assert publicas == sorted([
         "GET /", "GET /api/salud", "GET /api/g7b/v1/estado",
+        "GET /api/nube/v1/estado",  # lugares libres y reglas; con sesión, además, si la cuenta puede entrar
         "POST /api/auth/registro", "POST /api/auth/iniciar-sesion", "POST /api/auth/confirmar-correo",
         "POST /api/auth/reenviar-codigo", "POST /api/auth/recuperar", "POST /api/auth/restablecer",
         "POST /api/iniciar-sesion", "POST /api/progreso", "GET /api/progreso/{usuario_id}", "POST /api/eventos",

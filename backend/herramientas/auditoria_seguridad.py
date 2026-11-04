@@ -286,7 +286,8 @@ def revisar_cabeceras(cliente, ruta: str = "/api/salud") -> List[Hallazgo]:
 
 
 def requisito_de(ruta) -> str:
-    """'rol' si exige un rol, 'sesion' si exige iniciar sesión, 'publica' si no."""
+    """'rol' si exige un rol, 'sesion' si exige iniciar sesión, 'nodo' si exige el token de un nodo de
+    Amatista Cloud (api/nube.py), 'publica' si no."""
     pendientes = [ruta.dependant]
     encontrado = "publica"
     while pendientes:
@@ -294,6 +295,8 @@ def requisito_de(ruta) -> str:
         nombre = getattr(dep.call, "__qualname__", "") if dep.call else ""
         if nombre.startswith("requiere_rol."):
             return "rol"
+        if nombre == "nodo_actual":
+            return "nodo"
         if nombre == "usuario_requerido":
             encontrado = "sesion"
         pendientes.extend(dep.dependencies)
@@ -337,6 +340,8 @@ def probar_permisos(cliente, app, cabeceras_alumno: Dict[str, str]) -> Tuple[Lis
         nombre = f"{fila['metodo']} {fila['ruta']}"
         if anonimo not in (401, 403):
             hallazgos.append(Hallazgo("critica", nombre, "Responde sin sesión", f"estado={anonimo}"))
+        if fila["requisito"] == "nodo" and alumno not in (None, 401, 403):
+            hallazgos.append(Hallazgo("critica", nombre, "Una cuenta de alumno entra a una ruta de nodo", f"estado={alumno}"))
         if fila["requisito"] == "rol" and alumno not in (None, 403):
             hallazgos.append(Hallazgo("critica", nombre, "Un alumno entra a una ruta de rol", f"estado={alumno}"))
     return filas, hallazgos
