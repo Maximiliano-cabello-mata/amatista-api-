@@ -53,16 +53,22 @@ def armar_mensaje(email: str, codigo: str, proposito: str, remitente: str) -> Em
     mensaje["Date"] = formatdate(localtime=False)
     dominio = remitente.rpartition("@")[2].strip("> ") if "@" in remitente else ""
     mensaje["Message-ID"] = make_msgid(domain=dominio or None)
+    if proposito == "correo":
+        enlace = f"https://amatista-3d.tech/#/confirmar?email={email}&codigo={codigo}"
+        detalle_enlace = f"O confirma directamente con este enlace:\n{enlace}\n\n"
+    else:
+        detalle_enlace = ""
+
     mensaje.set_content(
-        "Hola:\n\n"
+        f"Hola:\n\n"
         f"Tu código para {motivo} en Amatista es:\n\n"
         f"    {codigo}\n\n"
-        f"Vence en {minutos} minutos. Si no lo pediste, ignora este mensaje: tu cuenta sigue segura.\n\n"
-        "— Amatista\n"
+        f"Vence en {minutos} minutos.\n\n"
+        f"{detalle_enlace}"
+        f"Si no lo pediste, ignora este mensaje: tu cuenta sigue segura.\n\n"
+        f"— Amatista 3D\n"
     )
     return mensaje
-
-
 def enviar_codigo(email: str, codigo: str, proposito: str) -> bool:
     """Envía el código de 6 dígitos. Devuelve True si salió por SMTP.
 
