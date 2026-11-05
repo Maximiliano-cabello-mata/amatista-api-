@@ -7,7 +7,7 @@ RAIZ_BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ_BACKEND))
 
 from sqlalchemy import text
-from database.conexion import motor
+from database.conexion import crear_motor
 
 DDL_STATEMENTS = [
     # 1. GRUPOS
@@ -93,16 +93,28 @@ DDL_STATEMENTS = [
 ]
 
 def tabla_existe(con, tabla):
-    r = con.execute(text("SELECT COUNT(*) FROM user_tables WHERE table_name = :t"), {"t": tabla.upper()}).scalar()
-    return r > 0
+    r = con.execute(
+        text("SELECT COUNT(*) FROM all_tables WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND table_name = :t"),
+        {"t": tabla.upper()}
+    ).scalar()
+    return (r or 0) > 0
 
 def indice_existe(con, idx):
-    r = con.execute(text("SELECT COUNT(*) FROM user_indexes WHERE index_name = :i"), {"i": idx.upper()}).scalar()
-    return r > 0
+    r = con.execute(
+        text("SELECT COUNT(*) FROM all_indexes WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND index_name = :i"),
+        {"i": idx.upper()}
+    ).scalar()
+    return (r or 0) > 0
 
 def main():
     print("Conectando a la base de datos...")
+    motor = crear_motor()
     with motor.begin() as con:
+        usuario, esquema = con.execute(
+            text("SELECT USER, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL")
+        ).one()
+        print(f"Conectado como usuario '{usuario}', esquema activo '{esquema}'.")
+
         # 1. GRUPOS
         if not tabla_existe(con, "grupos"):
             print("Creando tabla GRUPOS...")
