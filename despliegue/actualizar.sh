@@ -49,7 +49,7 @@ avisar() { printf '\nAVISO: %s\n' "$*" >&2; }
 # backend/.env; si no existe y sí /etc/amatista/amatista-api.env (root, 600),
 # se las pasa systemd (docs/despliegue/2026-10-04_despliegue_oci.md, §7).
 herramienta() {
-  if [ ! -f "$REPO/backend/.env" ] && [ -f /etc/amatista/amatista-api.env ]; then
+  if [ -f /etc/amatista/amatista-api.env ]; then
     sudo systemd-run --pipe --wait --collect --quiet \
       -p EnvironmentFile=/etc/amatista/amatista-api.env \
       -p WorkingDirectory="$REPO/backend" -p User="$(id -un)" \
