@@ -1,5 +1,11 @@
 """Aplica de forma idempotente las tablas de sql/014_panel_del_profesor.sql en Oracle."""
 import sys
+from pathlib import Path
+
+# Asegurar que backend/ está en sys.path
+RAIZ_BACKEND = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(RAIZ_BACKEND))
+
 from sqlalchemy import text
 from database.conexion import motor
 
