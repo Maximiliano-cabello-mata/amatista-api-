@@ -897,3 +897,64 @@ def test_autenticar_google_token_invalido(cliente):
         json={"credencial": ""},
     )
     assert respuesta.status_code == 400
+
+
+
+def test_autenticar_google_incluye_foto(cliente):
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": "test_google_sofia@amatista.local_Sofía+Ramírez"},
+    )
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert datos["usuario"]["foto"].startswith("https://lh3.googleusercontent.com/a/")
+
+
+def test_enviar_codigo_personalizado_con_nombre(monkeypatch):
+    SMTPFalso.enviados = []
+    monkeypatch.setattr(correo.smtplib, "SMTP", SMTPFalso)
+    monkeypatch.setenv("SMTP_HOST", "smtp.ejemplo.com")
+
+    assert correo.enviar_codigo("marcos@amatista.local", "998877", "correo", nombre="Marcos") is True
+    smtp = SMTPFalso.enviados[0]
+    assert "Hola, Marcos:" in smtp.mensaje.get_content()
+
+    html = correo.construir_plantilla_html("marcos@amatista.local", "998877", "correo", "Marcos")
+    assert "Hola, <strong>Marcos</strong>:" in html
+    assert "GOLIAT" in html
+    assert "998877" in html
+
+
+def test_enviar_codigo_con_brevo_api(monkeypatch):
+    import json
+    llamadas = []
+
+    class DummyResponse:
+        status = 201
+
+        def read(self):
+            return b'{"messageId":"<test@brevo>"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    def mock_urlopen(req, timeout=10):
+        llamadas.append(req)
+        return DummyResponse()
+
+    monkeypatch.setenv("BREVO_API_KEY", "xkeysib-clave-prueba")
+    monkeypatch.setattr(correo.urllib.request, "urlopen", mock_urlopen)
+
+    assert correo.enviar_codigo("alumno@amatista.local", "445566", "correo", nombre="Maximiliano") is True
+    assert len(llamadas) == 1
+    req = llamadas[0]
+    assert req.full_url == "https://api.brevo.com/v3/smtp/email"
+    assert req.headers.get("Api-key") == "xkeysib-clave-prueba"
+    cuerpo = json.loads(req.data.decode("utf-8"))
+    assert cuerpo["to"][0]["email"] == "alumno@amatista.local"
+    assert cuerpo["to"][0]["name"] == "Maximiliano"
+    assert "445566" in cuerpo["textContent"]
+    assert "Hola, <strong>Maximiliano</strong>:" in cuerpo["htmlContent"]

@@ -411,7 +411,7 @@ def registro(
         raise error_bd(error, "/api/auth/registro")
 
     # El correo sale después de responder: un SMTP lento o caído no frena el registro.
-    tareas.add_task(enviar_codigo, usuario.email, codigo, "correo")
+    tareas.add_task(enviar_codigo, usuario.email, codigo, "correo", usuario.nombre)
     respuesta = {"token": token, "usuario": usuario_publico(usuario), "fusion": {"lecciones": lecciones or 0}}
     if token is None:
         respuesta["requiere_confirmacion"] = True
@@ -475,6 +475,7 @@ def verificar_token_google(credencial: str, client_id_esperado: Optional[str] = 
             "nombre": nombre_test,
             "email_verified": True,
             "sub": f"google_test_{correo_test}",
+            "picture": f"https://lh3.googleusercontent.com/a/test_{correo_test.split('@')[0]}",
         }
 
     url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.parse.quote(credencial)}"
@@ -570,7 +571,10 @@ def autenticar_con_google(datos: SolicitudGoogle, request: Request, db: Session 
         db.rollback()
         raise error_bd(error, "/api/auth/google")
 
-    return {"token": token, "usuario": usuario_publico(usuario), "fusion": {"lecciones": lecciones}}
+    usuario_datos = usuario_publico(usuario)
+    if info_google.get("picture"):
+        usuario_datos["foto"] = info_google["picture"]
+    return {"token": token, "usuario": usuario_datos, "fusion": {"lecciones": lecciones}}
 
 
 @router.post("/cerrar-sesion")
@@ -653,7 +657,7 @@ def reenviar_codigo(datos: SolicitudCorreo, tareas: BackgroundTasks, db: Session
         db.rollback()
         raise error_bd(error, "/api/auth/reenviar-codigo")
     if codigo:
-        tareas.add_task(enviar_codigo, datos.email, codigo, "correo")
+        tareas.add_task(enviar_codigo, datos.email, codigo, "correo", usuario.nombre if usuario else None)
     return con_codigo_dev({"ok": True}, codigo)
 
 
@@ -670,7 +674,7 @@ def recuperar(datos: SolicitudCorreo, tareas: BackgroundTasks, db: Session = Dep
         db.rollback()
         raise error_bd(error, "/api/auth/recuperar")
     if codigo:
-        tareas.add_task(enviar_codigo, datos.email, codigo, "password")
+        tareas.add_task(enviar_codigo, datos.email, codigo, "password", usuario.nombre if usuario else None)
     return con_codigo_dev({"ok": True}, codigo)
 
 
