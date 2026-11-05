@@ -420,7 +420,6 @@ SCRIPT_011 = "sql/011_detalle_instructor.sql"
 SCRIPT_012 = "sql/012_taller.sql"
 SCRIPT_013 = "sql/013_avatares_y_buzon.sql"
 SCRIPT_014 = "sql/014_panel_del_profesor.sql"
-SCRIPT_014_NUBE = "sql/014_nube.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -614,14 +613,14 @@ def solucion(real, otros_esquemas=()):
         return [f"Falta el detalle compartido del instructor: ejecuta {SCRIPT_011}{siguiente} en Database Actions > SQL."]
     if solo_falta_014(real) and falta_014(real):
         return [
-            f"Faltan tablas de 014: ejecuta {SCRIPT_014} y/o {SCRIPT_014_NUBE} en Database Actions > SQL",
-            "con «Ejecutar script» (F5). Solo crean tablas nuevas y se pueden repetir. Sin ellos,",
-            "las funciones correspondientes avisan que se están preparando. NO ejecutes 001: borraría a los alumnos.",
+            f"Faltan las tablas de 014: ejecuta {SCRIPT_014} en Database Actions > SQL",
+            "con «Ejecutar script» (F5). Solo crea cinco tablas nuevas y se puede repetir. Sin él,",
+            "el panel del profesor y nube avisan que se están preparando. NO ejecutes 001: borraría a los alumnos.",
         ]
     if solo_falta_013(real) and falta_013(real):
         return [
             f"Faltan los avatares y el buzón del creador: ejecuta {SCRIPT_013}"
-            + (f" y luego {SCRIPT_014} (o {SCRIPT_014_NUBE})" if falta_014(real) else "") + " en Database Actions > SQL",
+            + (f" y luego {SCRIPT_014}" if falta_014(real) else "") + " en Database Actions > SQL",
             "con «Ejecutar script» (F5). Solo crea tres tablas nuevas y se puede repetir. Sin él, el avatar",
             "se queda en el dispositivo y el buzón no recibe mensajes. NO ejecutes 001: borraría a los alumnos.",
         ]

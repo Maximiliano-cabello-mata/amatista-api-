@@ -247,7 +247,7 @@ def test_base_con_013_pide_solo_014():
     """Todo hasta 013: falta solo la tabla de Amatista Cloud."""
     real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_014}
     recomendacion = " ".join(solucion(real))
-    assert "014_nube.sql" in recomendacion
+    assert "014_panel_del_profesor.sql" in recomendacion
     assert "013_" not in recomendacion and "NO ejecutes 001" in recomendacion
 
 
@@ -255,4 +255,4 @@ def test_base_sin_013_ni_014_pide_los_dos_en_orden():
     real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items()
             if tabla not in diagnostico_oracle.TABLAS_013 + diagnostico_oracle.TABLAS_014}
     recomendacion = " ".join(solucion(real))
-    assert recomendacion.index("013_avatares_y_buzon.sql") < recomendacion.index("014_nube.sql")
+    assert recomendacion.index("013_avatares_y_buzon.sql") < recomendacion.index("014_panel_del_profesor.sql")

@@ -48,7 +48,7 @@ SET DEFINE OFF
 
 DECLARE
   v_cuenta  PLS_INTEGER;
-  v_tablas  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS');
+  v_tablas  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS', 'NUBE_SESIONES');
 
   PROCEDURE ejecutar(p_sql IN VARCHAR2) IS
   BEGIN
@@ -174,7 +174,30 @@ BEGIN
     ejecutar('CREATE INDEX ix_entregas_alumno ON entregas (alumno_id)');
   END IF;
 
-  -- 5. Si ya se usa AMATISTA_APP (004), recibe permisos sobre las tablas nuevas.
+  -- 5. NUBE_SESIONES: una hora de Blender en la nube por fila (Amatista Cloud).
+  crear_tabla('NUBE_SESIONES', '
+    CREATE TABLE nube_sesiones (
+      id               VARCHAR2(40)  NOT NULL,
+      usuario_id       VARCHAR2(100) NOT NULL,
+      nodo             VARCHAR2(60)  NOT NULL,
+      estado           VARCHAR2(20)  DEFAULT ''asignada'' NOT NULL,
+      token_hash       VARCHAR2(64)  NOT NULL,
+      creada_en        TIMESTAMP     DEFAULT SYSTIMESTAMP NOT NULL,
+      expira_en        TIMESTAMP     NOT NULL,
+      terminada_en     TIMESTAMP,
+      motivo_fin       VARCHAR2(40),
+      CONSTRAINT pk_nube_sesiones PRIMARY KEY (id),
+      CONSTRAINT fk_nube_sesiones_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id),
+      CONSTRAINT ck_nube_sesiones_estado CHECK (estado IN (''asignada'', ''lista'', ''terminada'', ''fallida''))
+    )');
+  IF NOT existe_indice('IX_NUBE_SESIONES_USUARIO') THEN
+    ejecutar('CREATE INDEX ix_nube_sesiones_usuario ON nube_sesiones (usuario_id, creada_en)');
+  END IF;
+  IF NOT existe_indice('IX_NUBE_SESIONES_ESTADO') THEN
+    ejecutar('CREATE INDEX ix_nube_sesiones_estado ON nube_sesiones (estado, expira_en)');
+  END IF;
+
+  -- 6. Si ya se usa AMATISTA_APP (004), recibe permisos sobre las tablas nuevas.
   SELECT COUNT(*) INTO v_cuenta FROM all_users WHERE username = 'AMATISTA_APP';
   IF v_cuenta > 0 THEN
     FOR i IN 1 .. v_tablas.COUNT LOOP
@@ -220,7 +243,8 @@ SELECT e.tabla,
         UNION ALL SELECT 'GRUPOS', 6 FROM dual
         UNION ALL SELECT 'GRUPO_ALUMNOS', 3 FROM dual
         UNION ALL SELECT 'ASIGNACIONES', 9 FROM dual
-        UNION ALL SELECT 'ENTREGAS', 15 FROM dual) e
+        UNION ALL SELECT 'ENTREGAS', 15 FROM dual
+        UNION ALL SELECT 'NUBE_SESIONES', 9 FROM dual) e
   LEFT JOIN (SELECT table_name, COUNT(*) AS columnas
                FROM user_tab_columns
               GROUP BY table_name) c
@@ -238,3 +262,5 @@ SELECT COUNT(*) AS asignaciones FROM asignaciones;
 SELECT COUNT(*) AS entregas FROM entregas;
 
 SELECT COUNT(*) AS modelos_en_transito, NVL(SUM(modelo_bytes), 0) AS bytes FROM entregas WHERE modelo IS NOT NULL;
+
+SELECT COUNT(*) AS nube_sesiones FROM nube_sesiones;
