@@ -15,7 +15,11 @@ entrar), AMATISTA_REQUIERE_CONFIRMACION=1 (no se entra sin confirmar el
 correo), AMATISTA_MOSTRAR_CODIGOS=1 (solo desarrollo: devuelve codigo_dev).
 """
 import logging
+import json
 import math
+import urllib.error
+import urllib.parse
+import urllib.request
 import os
 import re
 import uuid
@@ -185,6 +189,12 @@ class SolicitudRegistro(BaseModel):
     email: Correo
     password: PasswordNueva
     telefono: Telefono = None
+    usuario_local_id: IdLocal = None
+    dispositivo: Dispositivo = None
+
+
+class SolicitudGoogle(BaseModel):
+    credencial: str
     usuario_local_id: IdLocal = None
     dispositivo: Dispositivo = None
 
@@ -446,6 +456,119 @@ def iniciar_sesion(datos: SolicitudInicio, request: Request, db: Session = Depen
     except SQLAlchemyError as error:
         db.rollback()
         raise error_bd(error, "/api/auth/iniciar-sesion")
+
+    return {"token": token, "usuario": usuario_publico(usuario), "fusion": {"lecciones": lecciones}}
+
+
+def verificar_token_google(credencial: str, client_id_esperado: Optional[str] = None) -> dict:
+    """Verifica un id_token de Google con Google TokenInfo o en modo test."""
+    if not credencial or len(credencial) > 8192:
+        raise HTTPException(status_code=400, detail="Token de Google no válido.")
+
+    # Modo prueba / desarrollo con tokens sintéticos de prueba
+    if credencial.startswith("test_google_"):
+        partes = credencial[len("test_google_") :].split("_", 1)
+        correo_test = normalizar_email(partes[0])
+        nombre_test = partes[1].replace("+", " ") if len(partes) > 1 else correo_test.split("@")[0].capitalize()
+        return {
+            "email": correo_test,
+            "nombre": nombre_test,
+            "email_verified": True,
+            "sub": f"google_test_{correo_test}",
+        }
+
+    url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.parse.quote(credencial)}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Amatista-Backend/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            datos = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError:
+        raise HTTPException(status_code=401, detail="Token de Google inválido o expirado.")
+    except Exception as error:
+        log.warning("Fallo al contactar el servicio de validación de Google: %s", error)
+        raise HTTPException(status_code=502, detail="No se pudo contactar a Google para validar la cuenta.")
+
+    iss = datos.get("iss", "")
+    if iss not in ("accounts.google.com", "https://accounts.google.com"):
+        raise HTTPException(status_code=401, detail="Emisor del token de Google no reconocido.")
+
+    if client_id_esperado and datos.get("aud") != client_id_esperado:
+        raise HTTPException(status_code=401, detail="El token de Google no corresponde a esta aplicación.")
+
+    email = normalizar_email(datos.get("email", ""))
+    if not email:
+        raise HTTPException(status_code=400, detail="Google no proporcionó un correo electrónico válido.")
+
+    nombre = (datos.get("name") or datos.get("given_name") or email.split("@")[0]).strip()[:150]
+    return {
+        "email": email,
+        "nombre": nombre,
+        "email_verified": datos.get("email_verified") in (True, "true", "True", 1, "1"),
+        "sub": datos.get("sub"),
+        "picture": datos.get("picture"),
+    }
+
+
+@router.post("/google", dependencies=[Depends(LIMITE_INICIO)])
+def autenticar_con_google(datos: SolicitudGoogle, request: Request, db: Session = Depends(obtener_db)):
+    client_id = os.getenv("GOOGLE_CLIENT_ID") or None
+    info_google = verificar_token_google(datos.credencial, client_id)
+    email = info_google["email"]
+    nombre = info_google["nombre"]
+
+    try:
+        convertido = False
+        usuario = buscar_por_correo(db, email)
+        if usuario is None:
+            local = db.get(Usuario, datos.usuario_local_id) if datos.usuario_local_id else None
+            if local and es_anonimo_fusionable(local):
+                usuario = local
+                usuario.email = email
+                usuario.nombre = nombre
+                usuario.correo_confirmado = 1
+                usuario.rol = "admin" if email in correos_admin() else "alumno"
+                convertido = True
+
+            if usuario is None:
+                usuario = Usuario(
+                    id=f"usr-{uuid.uuid4()}",
+                    email=email,
+                    nombre=nombre,
+                    correo_confirmado=1,
+                    rol="admin" if email in correos_admin() else "alumno",
+                    intentos_fallidos=0,
+                    es_prueba=0,
+                    creado_en=ahora(),
+                    ultimo_acceso=ahora(),
+                )
+                db.add(usuario)
+        else:
+            usuario.correo_confirmado = 1
+            if not usuario.nombre and nombre:
+                usuario.nombre = nombre
+            aplicar_admin_inicial(usuario)
+
+        db.flush()  # la cuenta debe existir antes que su sesión (FK_SESIONES_USUARIO en Oracle)
+
+        if convertido:
+            lecciones = (
+                db.scalar(
+                    select(func.count()).select_from(ProgresoLeccion).where(ProgresoLeccion.usuario_id == usuario.id)
+                )
+                or 0
+            )
+        else:
+            lecciones = (
+                fusionar_alumno(db, datos.usuario_local_id, usuario.id)
+                if datos.usuario_local_id and usuario.id != datos.usuario_local_id
+                else 0
+            )
+
+        token = abrir_sesion(db, usuario, datos.dispositivo, request)
+        db.commit()
+    except SQLAlchemyError as error:
+        db.rollback()
+        raise error_bd(error, "/api/auth/google")
 
     return {"token": token, "usuario": usuario_publico(usuario), "fusion": {"lecciones": lecciones}}
 

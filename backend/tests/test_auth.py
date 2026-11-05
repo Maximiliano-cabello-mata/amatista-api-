@@ -839,3 +839,61 @@ def test_crear_admin_sin_cuenta_y_con_crear(cliente, monkeypatch):
     assert datos["usuario"]["nombre"] == "Jefa"
     assert datos["usuario"]["correo_confirmado"] is True
     assert datos["usuario"]["id"].startswith("usr-")
+
+
+# --- Autenticación con Google -------------------------------------------------
+
+
+def test_autenticar_google_nuevo_usuario(cliente):
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": "test_google_carlos@amatista.local_Carlos+Gómez", "dispositivo": "Chrome Linux"},
+    )
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert datos["usuario"]["email"] == "carlos@amatista.local"
+    assert datos["usuario"]["nombre"] == "Carlos Gómez"
+    assert datos["usuario"]["correo_confirmado"] is True
+    assert datos["token"] is not None
+
+    # Verificar que el token abre la sesión correctamente
+    yo = cliente.get("/api/auth/yo", headers=bearer(datos["token"]))
+    assert yo.status_code == 200
+    assert yo.json()["email"] == "carlos@amatista.local"
+
+
+def test_autenticar_google_cuenta_existente(cliente):
+    # Registrar primero por formulario estándar
+    registrar(cliente, email="laura@amatista.local", nombre="Laura")
+
+    # Iniciar con Google con el mismo correo
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": "test_google_laura@amatista.local_Laura+Pérez"},
+    )
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert datos["usuario"]["email"] == "laura@amatista.local"
+    assert datos["usuario"]["correo_confirmado"] is True
+    assert datos["token"] is not None
+
+
+def test_autenticar_google_fusion_anonimo(cliente):
+    anonimo_id = "alumno-google-123"
+    escribir_anonimo(cliente, anonimo_id, "leccion-test-1")
+
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": "test_google_nuevo@amatista.local", "usuario_local_id": anonimo_id},
+    )
+    assert respuesta.status_code == 200
+    datos = respuesta.json()
+    assert datos["fusion"]["lecciones"] >= 1
+
+
+def test_autenticar_google_token_invalido(cliente):
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": ""},
+    )
+    assert respuesta.status_code == 400
