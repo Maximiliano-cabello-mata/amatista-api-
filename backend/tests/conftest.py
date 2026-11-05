@@ -21,6 +21,7 @@ def entorno_pruebas(monkeypatch):
     monkeypatch.setenv("AMATISTA_CACHE_CATALOGO_S", "0")
     monkeypatch.setenv("AMATISTA_CACHE_RESUMEN_S", "0")
     monkeypatch.delenv("AMATISTA_ADMINS", raising=False)
+    monkeypatch.delenv("AMATISTA_REQUIERE_CONFIRMACION", raising=False)
     monkeypatch.delenv("SMTP_HOST", raising=False)
 
 
