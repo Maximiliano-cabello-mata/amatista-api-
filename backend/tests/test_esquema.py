@@ -16,7 +16,9 @@ from database import conexion
 from database.modelos import (
     CATEGORIAS_BLENDER,
     CRITERIOS_RUBRICA,
+    ESTADOS_ASIGNACION,
     ESTADOS_CONTENIDO,
+    ESTADOS_ENTREGA,
     ESTADOS_HABILIDAD,
     ESTADOS_VINCULO,
     LOGROS_RUBRICA,
@@ -240,6 +242,8 @@ def test_email_unico_y_checks_con_las_constantes_de_los_modelos():
     assert valores("CK_VERIFICACIONES_RESULTADO") == set(RESULTADOS_VERIFICACION)
     assert valores("CK_VINCULOS_ESTADO") == set(ESTADOS_VINCULO)
     assert valores("CK_PRACTICAS_ORIGEN") == set(ORIGENES_PRACTICA)
+    assert valores("CK_ASIGNACIONES_ESTADO") == set(ESTADOS_ASIGNACION)
+    assert valores("CK_ENTREGAS_ESTADO") == set(ESTADOS_ENTREGA)
     # La autonomía de una práctica es un estado de habilidad ya practicada.
     assert valores("CK_PROG_PRACTICAS_AUTONOMIA") == set(ESTADOS_HABILIDAD) - {"sin_practicar"}
     for nombre in ("CK_PRACTICAS_DEFINICION", "CK_PRAC_VERSIONES_DEFINICION", "CK_PROG_PRACTICAS_OBJETIVOS"):

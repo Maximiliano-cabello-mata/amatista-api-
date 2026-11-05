@@ -43,7 +43,7 @@ def test_esquema_correcto_no_tiene_problemas():
     assert comparar(real) == []
 
 
-def test_esperado_incluye_las_veinticinco_tablas():
+def test_esperado_incluye_las_tablas_completas():
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -69,7 +69,11 @@ def test_esperado_incluye_las_veinticinco_tablas():
         "PERFILES",
         "SUGERENCIAS",
         "SUGERENCIA_MENSAJES",
-        "NUBE_SESIONES",
+"NUBE_SESIONES",
+        "GRUPOS",
+        "GRUPO_ALUMNOS",
+        "ASIGNACIONES",
+        "ENTREGAS",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
     assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"

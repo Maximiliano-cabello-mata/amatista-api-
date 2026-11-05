@@ -320,6 +320,48 @@ ESPERADO = {
         "TERMINADA_EN": "TIMESTAMP",
         "MOTIVO_FIN": "VARCHAR2",
     },
+    # 014: panel del profesor evaluador.
+    "GRUPOS": {
+        "ID": "VARCHAR2",
+        "PROFESOR_ID": "VARCHAR2",
+        "NOMBRE": "VARCHAR2",
+        "CODIGO": "VARCHAR2",
+        "ARCHIVADO": "NUMBER",
+        "CREADO_EN": "TIMESTAMP",
+    },
+    "GRUPO_ALUMNOS": {
+        "GRUPO_ID": "VARCHAR2",
+        "ALUMNO_ID": "VARCHAR2",
+        "UNIDO_EN": "TIMESTAMP",
+    },
+    "ASIGNACIONES": {
+        "ID": "VARCHAR2",
+        "GRUPO_ID": "VARCHAR2",
+        "PROFESOR_ID": "VARCHAR2",
+        "PRACTICA_ID": "VARCHAR2",
+        "TITULO": "VARCHAR2",
+        "INDICACIONES": "VARCHAR2",
+        "FECHA_LIMITE": "TIMESTAMP",
+        "ESTADO": "VARCHAR2",
+        "CREADA_EN": "TIMESTAMP",
+    },
+    "ENTREGAS": {
+        "ASIGNACION_ID": "VARCHAR2",
+        "ALUMNO_ID": "VARCHAR2",
+        "ESTADO": "VARCHAR2",
+        "PROGRESO": "NUMBER",
+        "COMPLETADA": "NUMBER",
+        "INTENTOS": "NUMBER",
+        "RESUMEN": "VARCHAR2",
+        "MODELO": "CLOB",
+        "MODELO_BYTES": "NUMBER",
+        "ENTREGADA_EN": "TIMESTAMP",
+        "RECOGIDO_EN": "TIMESTAMP",
+        "CALIFICACION": "NUMBER",
+        "COMENTARIO": "VARCHAR2",
+        "EVALUADA_EN": "TIMESTAMP",
+        "VISTA_ALUMNO": "NUMBER",
+    },
 }
 
 # Las tablas que crea 001; las demás llegan con 002, 005, 007, 010 y 012 (008 y 011 solo agregan columnas).
@@ -346,8 +388,8 @@ COLUMNAS_012 = {
 }
 # Lo que agrega 013 (avatares y buzón del creador): solo tablas nuevas.
 TABLAS_013 = ("PERFILES", "SUGERENCIAS", "SUGERENCIA_MENSAJES")
-# Lo que agrega 014 (Amatista Cloud): una tabla nueva.
-TABLAS_014 = ("NUBE_SESIONES",)
+# Lo que agrega 014: tablas de nube y panel del profesor.
+TABLAS_014 = ("NUBE_SESIONES", "GRUPOS", "GRUPO_ALUMNOS", "ASIGNACIONES", "ENTREGAS")
 
 # Largos mínimos (en caracteres) que causarían ORA-12899 si fueran menores.
 # SESIONES.ID guarda el hash SHA-256 del token: 64 caracteres (001 lo creó con 36).
@@ -377,7 +419,8 @@ SCRIPT_010 = "sql/010_enlace_blender.sql"
 SCRIPT_011 = "sql/011_detalle_instructor.sql"
 SCRIPT_012 = "sql/012_taller.sql"
 SCRIPT_013 = "sql/013_avatares_y_buzon.sql"
-SCRIPT_014 = "sql/014_nube.sql"
+SCRIPT_014 = "sql/014_panel_del_profesor.sql"
+SCRIPT_014_NUBE = "sql/014_nube.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -519,12 +562,12 @@ def solo_falta_012(real):
 
 
 def solo_falta_013(real):
-    """True si todo hasta 012 está y solo faltan las tablas de avatares y buzón (013) y quizá la de 014."""
+    """True si todo hasta 012 está y solo faltan las tablas de avatares y buzón (013) y de 014."""
     return _completo_salvo(real, TABLAS_013 + TABLAS_014)
 
 
 def solo_falta_014(real):
-    """True si todo hasta 013 está y solo falta la tabla de Amatista Cloud (014)."""
+    """True si todo hasta 013 está y solo faltan las tablas de 014."""
     return _completo_salvo(real, TABLAS_014)
 
 
@@ -571,14 +614,14 @@ def solucion(real, otros_esquemas=()):
         return [f"Falta el detalle compartido del instructor: ejecuta {SCRIPT_011}{siguiente} en Database Actions > SQL."]
     if solo_falta_014(real) and falta_014(real):
         return [
-            f"Falta Amatista Cloud: ejecuta {SCRIPT_014} en Database Actions > SQL con «Ejecutar script» (F5).",
-            "Solo crea la tabla NUBE_SESIONES y se puede repetir. Sin él, la plataforma funciona igual pero",
-            "Amatista Cloud responde que no está lista. NO ejecutes 001: borraría a los alumnos.",
+            f"Faltan tablas de 014: ejecuta {SCRIPT_014} y/o {SCRIPT_014_NUBE} en Database Actions > SQL",
+            "con «Ejecutar script» (F5). Solo crean tablas nuevas y se pueden repetir. Sin ellos,",
+            "las funciones correspondientes avisan que se están preparando. NO ejecutes 001: borraría a los alumnos.",
         ]
     if solo_falta_013(real) and falta_013(real):
         return [
             f"Faltan los avatares y el buzón del creador: ejecuta {SCRIPT_013}"
-            + (f" y luego {SCRIPT_014}" if falta_014(real) else "") + " en Database Actions > SQL",
+            + (f" y luego {SCRIPT_014} (o {SCRIPT_014_NUBE})" if falta_014(real) else "") + " en Database Actions > SQL",
             "con «Ejecutar script» (F5). Solo crea tres tablas nuevas y se puede repetir. Sin él, el avatar",
             "se queda en el dispositivo y el buzón no recibe mensajes. NO ejecutes 001: borraría a los alumnos.",
         ]
