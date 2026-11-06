@@ -18,9 +18,11 @@ URL_NODO = "http://localhost:8730"
 def nube(monkeypatch):
     from api import nube as mod_nube
     from main import app
+    rutas_antes = list(app.router.routes)
     ya_incluido = any(getattr(r, "path", "").startswith("/api/nube/") for r in app.routes)
     if not ya_incluido:
         app.include_router(mod_nube.router)
+        app.openapi_schema = None
     monkeypatch.setenv("AMATISTA_NUBE_NODOS", "casa:" + hashlib.sha256(TOKEN_NODO.encode()).hexdigest())
     monkeypatch.setenv("AMATISTA_NUBE_DOMINIOS", "utn.mx")
     monkeypatch.delenv("AMATISTA_NUBE_MINUTOS", raising=False)
@@ -28,6 +30,9 @@ def nube(monkeypatch):
     reiniciar_nube()
     yield
     reiniciar_nube()
+    if not ya_incluido:
+        app.router.routes = rutas_antes
+        app.openapi_schema = None
 
 
 def latir(cliente, capacidad=2, sesiones=(), url=URL_NODO, cabeceras=NODO):

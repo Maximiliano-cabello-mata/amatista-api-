@@ -58,7 +58,7 @@ def test_matriz_de_permisos(cliente, crear_cuenta, app):
             assert requisito == "rol", f"{metodo} {ruta} debería exigir rol"
     # Las únicas rutas públicas son estas: una ruta pública nueva debe agregarse aquí a propósito.
     publicas = sorted(f"{m} {r}" for (m, r), q in requisitos.items() if q == "publica")
-    assert publicas == sorted([
+    esperadas = [
         "GET /", "GET /api/salud", "GET /api/g7b/v1/estado",
         "POST /api/auth/registro", "POST /api/auth/iniciar-sesion", "POST /api/auth/google", "POST /api/auth/confirmar-correo",
         "POST /api/auth/reenviar-codigo", "POST /api/auth/recuperar", "POST /api/auth/restablecer",
@@ -70,7 +70,10 @@ def test_matriz_de_permisos(cliente, crear_cuenta, app):
         "GET /api/addon/v1/descargas/{sistema}", "GET /api/addon/v1/extension.zip",
         "GET /api/addon/v1/extensiones/index.json",
         "GET /api/addon/v1/instaladores/{sistema}",
-    ])
+    ]
+    if any(r.startswith("/api/nube/") for (_, r) in requisitos):
+        esperadas.append("GET /api/nube/v1/estado")
+    assert publicas == sorted(esperadas)
 
 
 def test_un_alumno_no_lee_el_progreso_de_otro(cliente, crear_cuenta):
