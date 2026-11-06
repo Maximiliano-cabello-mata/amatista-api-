@@ -289,7 +289,9 @@ app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por h
 app.include_router(perfil.router)  # avatares low poly de cada cuenta (sql/013)
 app.include_router(buzon.router)  # buzón del creador: sugerencias de los alumnos (sql/013)
 app.include_router(evaluacion.router)  # panel del profesor evaluador y «Mi grupo» (sql/014)
-app.include_router(nube.router)  # Amatista Cloud: Blender en la nube para cuentas de la UTN (sql/014)
+# Propuesta Amatista Cloud (docs/propuestas/2026-11-05_propuesta_amatista_cloud.md): no incluida en la versión final.
+if os.getenv("AMATISTA_PROPUESTA_NUBE") == "1":
+    app.include_router(nube.router)
 app.include_router(g7b.router)  # estado agregado G7B -> Geoda (sin Oracle; falla con perfiles locales)
 
 

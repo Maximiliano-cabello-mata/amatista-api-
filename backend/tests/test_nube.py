@@ -16,6 +16,11 @@ URL_NODO = "http://localhost:8730"
 
 @pytest.fixture(autouse=True)
 def nube(monkeypatch):
+    from api import nube as mod_nube
+    from main import app
+    ya_incluido = any(getattr(r, "path", "").startswith("/api/nube/") for r in app.routes)
+    if not ya_incluido:
+        app.include_router(mod_nube.router)
     monkeypatch.setenv("AMATISTA_NUBE_NODOS", "casa:" + hashlib.sha256(TOKEN_NODO.encode()).hexdigest())
     monkeypatch.setenv("AMATISTA_NUBE_DOMINIOS", "utn.mx")
     monkeypatch.delenv("AMATISTA_NUBE_MINUTOS", raising=False)
