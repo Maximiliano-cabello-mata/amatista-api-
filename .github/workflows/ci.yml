@@ -38,6 +38,12 @@ jobs:
           ref="$(grep -v '^#' amatista-api-/MOTOR_VERSION | tr -d '[:space:]')"
           git -C amatista-motor- checkout "$ref"
 
+      # La web que la API valida en test_pasos_lecciones.py (backend/vecinos.py).
+      - uses: actions/checkout@v4
+        with:
+          repository: Maximiliano-cabello-mata/amatista-recuperada-20261106
+          path: amatista-recuperada-20261106
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
