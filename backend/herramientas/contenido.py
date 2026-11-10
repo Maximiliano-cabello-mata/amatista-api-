@@ -30,11 +30,16 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 BACKEND = Path(__file__).resolve().parent.parent
 REPO = BACKEND.parent
-MODULOS = REPO / "frontend" / "src" / "data" / "modulos"
 
 # Permite ejecutarlo como "python herramientas/contenido.py" desde backend/
 # (y que "contenido" sea el paquete backend/contenido, no este archivo).
 sys.path.insert(0, str(BACKEND))
+
+import vecinos  # noqa: E402
+
+# Las lecciones viven en el repositorio de la web (backend/vecinos.py). Si no
+# está, la carpeta no existe y los comandos que la leen lo dicen.
+MODULOS = (vecinos.web() or REPO) / "frontend" / "src" / "data" / "modulos"
 
 from contenido.plantillas import (  # noqa: E402
     CURSOS_BASE,

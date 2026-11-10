@@ -8,6 +8,7 @@ import zipfile
 from datetime import timedelta
 
 import pytest
+import vecinos
 from sqlalchemy.orm import Session
 
 from contenido import motor
@@ -387,7 +388,7 @@ def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
     from api.contenido import asegurar_cursos_base, importar_modulo
 
     _, admin = crear_cuenta(rol="admin")
-    carpeta = motor.RAIZ / "frontend" / "src" / "data" / "modulos"
+    carpeta = vecinos.requerir_web() / "src" / "data" / "modulos"
     with Session(conexion.motor()) as db:
         asegurar_cursos_base(db)
         for archivo in sorted(carpeta.glob("blender_*-modulo-*.json")):
@@ -409,7 +410,7 @@ def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_c
 
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
-    archivo = motor.RAIZ / "frontend" / "src" / "data" / "modulos" / "archivo" / "blender-modulo-2.json"
+    archivo = vecinos.requerir_web() / "src" / "data" / "modulos" / "archivo" / "blender-modulo-2.json"
     with Session(conexion.motor()) as db:
         sembrar_niveles_blender(db)
         resumen = importar_modulo(db, json.loads(archivo.read_text(encoding="utf-8")))

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import vecinos
 
 from contenido.plantillas import (
     CURSOS_BASE,
@@ -29,7 +30,7 @@ from contenido.validacion import (
 from herramientas import contenido as cli
 
 BACKEND = Path(__file__).resolve().parent.parent
-MODULOS = BACKEND.parent / "frontend" / "src" / "data" / "modulos"
+MODULOS = vecinos.requerir_web() / "src" / "data" / "modulos"
 def _como_publicado(ruta: Path) -> Path:
     """El módulo 1 del curso v2 quedó archivado (motor v3); estas pruebas lo usan publicado como ejemplo."""
     import tempfile

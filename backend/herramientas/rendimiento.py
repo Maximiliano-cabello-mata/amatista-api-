@@ -33,7 +33,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-RAIZ = Path(__file__).resolve().parents[2]
+
+import vecinos  # noqa: E402
+
+RAIZ = vecinos.motor()  # repositorio del motor: engine/ y practices/
 TOKENS = Path("rendimiento_tokens.json")
 PREFIJO = "rend-"
 

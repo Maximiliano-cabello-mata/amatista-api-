@@ -2,13 +2,15 @@
 import re
 from pathlib import Path
 
+import vecinos
+
 from api.perfil import AVATAR_CREADOR, AVATARES
 
-CATALOGO_PWA = Path(__file__).resolve().parents[2] / "frontend" / "src" / "avatares" / "catalogo.js"
+CATALOGO_PWA = Path("src") / "avatares" / "catalogo.js"  # dentro de frontend/ (vecinos.requerir_web)
 
 
 def test_los_avatares_son_los_mismos_que_en_la_pwa():
-    ids = set(re.findall(r"\{\s*id:\s*'([a-z_]+)'", CATALOGO_PWA.read_text(encoding="utf-8")))
+    ids = set(re.findall(r"\{\s*id:\s*'([a-z_]+)'", (vecinos.requerir_web() / CATALOGO_PWA).read_text(encoding="utf-8")))
     assert ids == set(AVATARES) | {AVATAR_CREADOR}
 
 

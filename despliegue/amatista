@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# amatista: un solo comando para operar la API en la instancia de Oracle.
+#
+#   amatista instalar            Primera vez: motor, entorno, servicio y este comando en el PATH
+#   amatista actualizar [rama]   Motor + API: descarga, pruebas, esquema, reinicio y comprobación
+#   amatista estado              Versiones, servicio, salud de la API, Caddy y disco
+#   amatista registros [n]       Últimas n líneas del servicio (por defecto 80); -f para seguirlas
+#   amatista diagnostico         Compara el esquema de Oracle con el que espera el código (solo lee)
+#   amatista respaldo            Copia Git de los dos repositorios y exporta la base a ~/respaldos
+#   amatista admin <correo> ...  Da rol de administrador o profesor (herramientas/crear_admin.py)
+#   amatista caddy               Valida /etc/caddy/Caddyfile y lo recarga sin cortar conexiones
+#   amatista reiniciar           Reinicia la API y comprueba que responde
+#
+# Corre como el usuario dueño del repositorio (opc en producción), con sudo
+# disponible para systemctl. No guarda ni muestra contraseñas.
+set -euo pipefail
+
+ORIGEN="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO="${AMATISTA_REPO:-$(cd "$(dirname "$ORIGEN")/.." && pwd)}"
+BACKEND="$REPO/backend"
+PY="$BACKEND/venv/bin/python"
+URL_MOTOR="${AMATISTA_MOTOR_URL:-https://github.com/Maximiliano-cabello-mata/amatista-motor-}"
+URL_SALUD="${AMATISTA_URL_SALUD:-http://127.0.0.1:8000/api/salud}"
+ENV_SISTEMA=/etc/amatista/amatista-api.env
+UNIDAD=/etc/systemd/system/amatista-api.service
+RESPALDOS="${AMATISTA_RESPALDOS:-$HOME/respaldos}"
+
+# El motor (engine/, addon/, practices/): variable, este árbol (monorepo) o carpeta hermana.
+MOTOR="${AMATISTA_MOTOR_DIR:-}"
+if [ -z "$MOTOR" ]; then
+  if [ -d "$REPO/engine" ]; then MOTOR="$REPO"; else MOTOR="$(dirname "$REPO")/amatista-motor-"; fi
+fi
+export AMATISTA_MOTOR_DIR="$MOTOR"
+
+paso() { printf '\n==> %s\n' "$*"; }
+fallar() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
+avisar() { printf 'AVISO: %s\n' "$*" >&2; }
+dato() { printf '  %-22s %s\n' "$1" "$2"; }
+
+# La unidad que corre hoy: amatista-api, o la anterior amatista-backend.
+servicio() {
+  if [ -n "${AMATISTA_SERVICIO:-}" ]; then echo "$AMATISTA_SERVICIO"; return; fi
+  if ! systemctl cat amatista-api >/dev/null 2>&1 && systemctl cat amatista-backend >/dev/null 2>&1; then
+    echo amatista-backend
+  else
+    echo amatista-api
+  fi
+}
+
+# Corre una herramienta de backend/ con las mismas variables que el servicio.
+herramienta() {
+  [ -x "$PY" ] || fallar "falta el entorno de Python ($PY). Corre: amatista instalar"
+  if [ -f "$ENV_SISTEMA" ]; then
+    sudo systemd-run --pipe --wait --collect --quiet \
+      -p EnvironmentFile="$ENV_SISTEMA" -p Environment="AMATISTA_MOTOR_DIR=$MOTOR" \
+      -p WorkingDirectory="$BACKEND" -p User="$(id -un)" "$PY" "$@"
+  else
+    (cd "$BACKEND" && "$PY" "$@")
+  fi
+}
+
+esperar_salud() {
+  local respuesta
+  for _ in $(seq 1 "${1:-30}"); do
+    if respuesta="$(curl -fsS --max-time 5 "$URL_SALUD" 2>/dev/null)"; then
+      echo "$respuesta"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# Pone al día un repositorio sin tocar cambios locales: solo avance rápido.
+avanzar() {
+  local carpeta="$1" rama="$2"
+  git -C "$carpeta" diff --quiet && git -C "$carpeta" diff --cached --quiet \
+    || fallar "hay cambios sin confirmar en $carpeta (git -C $carpeta status)."
+  git -C "$carpeta" fetch --prune origin
+  git -C "$carpeta" rev-parse --verify -q "origin/$rama" >/dev/null || fallar "la rama $rama no existe en el origen de $carpeta."
+  git -C "$carpeta" merge --ff-only "origin/$rama"
+}
+
+corto() { git -C "$1" log -1 --format='%h %ad %s' --date=short 2>/dev/null || echo "(sin repositorio)"; }
+
+cmd_estado() {
+  local svc; svc="$(servicio)"
+  paso "Código"
+  dato "API ($REPO)" "$(corto "$REPO")"
+  if [ -d "$MOTOR/engine" ]; then dato "Motor ($MOTOR)" "$(corto "$MOTOR")"; else dato "Motor" "NO ESTÁ en $MOTOR (amatista instalar)"; fi
+  paso "Servicio $svc"
+  dato "Activo" "$(systemctl is-active "$svc" 2>/dev/null || true)"
+  dato "Desde" "$(systemctl show "$svc" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
+  dato "Carpeta" "$(systemctl show "$svc" -p WorkingDirectory --value 2>/dev/null || true)"
+  paso "API"
+  dato "Salud" "$(curl -fsS --max-time 5 "$URL_SALUD" 2>/dev/null || echo 'NO RESPONDE')"
+  dato "Complemento" "$(curl -fsS --max-time 5 "${URL_SALUD%/api/salud}/api/addon/v1/estado" 2>/dev/null | head -c 200 || echo 'NO RESPONDE')"
+  paso "Caddy"
+  dato "Activo" "$(systemctl is-active caddy 2>/dev/null || true)"
+  paso "Disco y memoria"
+  df -h / "$HOME" 2>/dev/null | awk 'NR==1 || !visto[$1]++' | sed 's/^/  /'
+  free -h 2>/dev/null | sed -n '1,2p' | sed 's/^/  /' || true
+  if [ -d "$RESPALDOS" ]; then
+    paso "Último respaldo"
+    find "$RESPALDOS" -maxdepth 1 -mindepth 1 -printf '%TY-%Tm-%Td %TH:%TM  %f\n' 2>/dev/null | sort | tail -1 | sed 's/^/  /'
+  fi
+}
+
+cmd_actualizar() {
+  local rama="${1:-main}"
+  [ -d "$MOTOR/.git" ] || [ "$MOTOR" = "$REPO" ] || fallar "falta el repositorio del motor en $MOTOR. Corre: amatista instalar"
+  local motor_antes=""
+  if [ "$MOTOR" != "$REPO" ]; then
+    motor_antes="$(git -C "$MOTOR" rev-parse HEAD)"
+    paso "Motor: descargando $rama"
+    avanzar "$MOTOR" "$rama"
+  fi
+  # La API hace el resto: dependencias, pruebas, esquema, reinicio y salud,
+  # y vuelve al commit anterior si algo falla. Si falla, el motor vuelve también.
+  if ! AMATISTA_REPO="$REPO" AMATISTA_MOTOR_DIR="$MOTOR" bash "$REPO/despliegue/actualizar.sh" "$rama"; then
+    if [ -n "$motor_antes" ] && [ "$(git -C "$MOTOR" rev-parse HEAD)" != "$motor_antes" ]; then
+      avisar "la actualización falló: el motor vuelve a ${motor_antes:0:7}."
+      git -C "$MOTOR" reset -q --keep "$motor_antes"
+      sudo systemctl restart "$(servicio)" || true
+    fi
+    exit 1
+  fi
+}
+
+cmd_registros() {
+  local svc; svc="$(servicio)"
+  if [ "${1:-}" = "-f" ]; then exec sudo journalctl -u "$svc" -f; fi
+  sudo journalctl -u "$svc" -n "${1:-80}" --no-pager
+}
+
+cmd_diagnostico() { herramienta diagnostico_oracle.py "$@"; }
+
+cmd_admin() {
+  [ $# -ge 1 ] || fallar "uso: amatista admin correo@dominio.com [--crear --nombre \"Nombre\"] [--rol profesor]"
+  herramienta herramientas/crear_admin.py "$@"
+}
+
+cmd_respaldo() {
+  local destino; destino="$RESPALDOS/amatista-$(date +%Y%m%d-%H%M%S)"
+  umask 077
+  mkdir -p "$destino"
+  paso "Copia Git"
+  git -C "$REPO" bundle create "$destino/api.bundle" --all
+  git -C "$REPO" bundle verify "$destino/api.bundle" >/dev/null
+  if [ "$MOTOR" != "$REPO" ] && [ -d "$MOTOR/.git" ]; then
+    git -C "$MOTOR" bundle create "$destino/motor.bundle" --all
+    git -C "$MOTOR" bundle verify "$destino/motor.bundle" >/dev/null
+  fi
+  paso "Base de datos (solo lee; formato amatista.export/1)"
+  herramienta herramientas/migrar.py exportar "$destino/base"
+  paso "Respaldo guardado en $destino"
+  du -sh "$destino" | sed 's/^/  /'
+  echo "  Contiene datos de personas: cópialo fuera de la VM por scp y no lo subas a un repositorio."
+}
+
+cmd_caddy() {
+  paso "Validando /etc/caddy/Caddyfile"
+  sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+  paso "Recargando por la API de administración (no corta conexiones)"
+  sudo caddy reload --address 127.0.0.1:2019 --config /etc/caddy/Caddyfile --adapter caddyfile
+  echo "Caddy recargado."
+}
+
+cmd_reiniciar() {
+  local svc; svc="$(servicio)"
+  paso "Reiniciando $svc"
+  sudo systemctl restart "$svc"
+  esperar_salud 30 || { sudo journalctl -u "$svc" -n 40 --no-pager >&2; fallar "/api/salud no respondió en 30 s."; }
+}
+
+cmd_instalar() {
+  local usuario grupo anterior=""
+  usuario="$(id -un)"; grupo="$(id -gn)"
+
+  paso "Motor"
+  if [ -d "$MOTOR/engine" ]; then
+    echo "Ya está en $MOTOR."
+  else
+    git clone "$URL_MOTOR" "$MOTOR"
+  fi
+
+  paso "Entorno de Python"
+  [ -x "$PY" ] || python3 -m venv "$BACKEND/venv"
+  "$BACKEND/venv/bin/pip" install -q -r "$BACKEND/requirements-dev.txt"
+
+  paso "Variables"
+  if [ -f "$ENV_SISTEMA" ]; then
+    echo "Se usan las de $ENV_SISTEMA."
+  elif [ -f "$BACKEND/.env" ]; then
+    echo "Se usan las de $BACKEND/.env."
+  else
+    # Instalación anterior (monorepo): se copia su archivo, con los mismos permisos.
+    local viejo; viejo="$(dirname "$REPO")/amatista/backend/.env"
+    if [ -f "$viejo" ]; then
+      cp -p "$viejo" "$BACKEND/.env"
+      echo "Copiadas de $viejo."
+    else
+      fallar "no hay variables: crea $BACKEND/.env a partir de backend/.env.example."
+    fi
+  fi
+
+  paso "Comprobando que la API carga con el motor"
+  herramienta -c 'import main; from contenido import motor; print("API lista · motor", motor.VERSION_MOTOR, "· complemento", motor.VERSION_ADDON)'
+
+  paso "Servicio amatista-api"
+  if systemctl is-active --quiet amatista-backend 2>/dev/null; then anterior=amatista-backend; fi
+  sed -e "s|^User=.*|User=$usuario|" -e "s|^Group=.*|Group=$grupo|" \
+      -e "s|^WorkingDirectory=.*|WorkingDirectory=$BACKEND|" \
+      -e "s|^Environment=AMATISTA_MOTOR_DIR=.*|Environment=AMATISTA_MOTOR_DIR=$MOTOR|" \
+      -e "s|^ExecStart=[^ ]*|ExecStart=$BACKEND/venv/bin/uvicorn|" \
+      "$REPO/despliegue/amatista-api.service" | sudo tee "$UNIDAD" >/dev/null
+  sudo systemctl daemon-reload
+  # Las dos unidades usan el puerto 8000: primero se detiene la anterior.
+  if [ -n "$anterior" ]; then sudo systemctl stop "$anterior"; fi
+  sudo systemctl restart amatista-api
+
+  paso "Probando $URL_SALUD"
+  if ! esperar_salud 30; then
+    sudo journalctl -u amatista-api -n 40 --no-pager >&2 || true
+    sudo systemctl stop amatista-api || true
+    if [ -n "$anterior" ]; then
+      sudo systemctl start "$anterior"
+      fallar "la API nueva no respondió; se volvió a encender $anterior y no se cambió nada más."
+    fi
+    fallar "la API no respondió en 30 s (registros arriba)."
+  fi
+  sudo systemctl enable amatista-api >/dev/null 2>&1
+  if [ -n "$anterior" ]; then sudo systemctl disable "$anterior" >/dev/null 2>&1 || true; fi
+
+  paso "Comando amatista"
+  sudo ln -sfn "$REPO/despliegue/amatista" /usr/local/bin/amatista
+  echo "Listo. Desde ahora: amatista estado · amatista actualizar · amatista respaldo"
+}
+
+cmd_ayuda() { sed -n '2,15p' "$ORIGEN" | sed 's/^# \{0,1\}//'; }
+
+orden="${1:-ayuda}"
+[ $# -gt 0 ] && shift
+case "$orden" in
+  instalar) cmd_instalar "$@" ;;
+  actualizar) cmd_actualizar "$@" ;;
+  estado) cmd_estado "$@" ;;
+  registros) cmd_registros "$@" ;;
+  diagnostico) cmd_diagnostico "$@" ;;
+  respaldo) cmd_respaldo "$@" ;;
+  admin) cmd_admin "$@" ;;
+  caddy) cmd_caddy "$@" ;;
+  reiniciar) cmd_reiniciar "$@" ;;
+  ayuda|-h|--help) cmd_ayuda ;;
+  *) cmd_ayuda; fallar "orden desconocida: $orden" ;;
+esac
