@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.env
+venv/
+.venv/
+.pytest_cache/
+*.db
+/dist/
+.DS_Store
+Thumbs.db
+
+# Instaladores firmados que se copian al servidor
+/backend/instaladores/
+rendimiento_tokens.json
+auditoria*.json
+rendimiento*.json

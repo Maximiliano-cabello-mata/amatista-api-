@@ -2,7 +2,11 @@
 #
 #   Alumno ──HTTPS──> Cloudflare (proxy, nube naranja) ──HTTPS──> Caddy :443 ──> uvicorn 127.0.0.1:8000
 #
-# Dominio oficial: api.amatista-3d.tech. Guía de producción verificada:
+# Dominio oficial: api.amatista-3dt.tech (desde el 10 nov 2026, certificado de
+# origen en /etc/caddy/certs/api-3dt.pem y api-3dt.key). El anterior,
+# api.amatista-3d.tech, sigue activo con origen.pem y origen.key. Ambos sitios
+# comparten la configuración del fragmento (api_amatista). Guías:
+# docs/despliegue/2026-11-10_dominio_amatista_3dt_tech.md
 # docs/despliegue/2026-10-29_despliegue_publico_amatista_3d_tech.md
 # Esta es una plantilla versionada; contrastar con /etc/caddy/Caddyfile de la VM.
 # Guía histórica (DNS, certificados,
@@ -33,10 +37,8 @@
 	}
 }
 
-api.amatista-3d.tech {
-	# Opción A. Para la opción B, borra esta línea.
-	tls /etc/caddy/certs/origen.pem /etc/caddy/certs/origen.key
-
+# Configuración común de la API. Cada sitio solo añade su certificado.
+(api_amatista) {
 	encode zstd gzip
 
 	header {
@@ -80,4 +82,15 @@ api.amatista-3d.tech {
 		}
 		format json
 	}
+}
+
+api.amatista-3dt.tech {
+	# Opción A. Para la opción B, borra esta línea.
+	tls /etc/caddy/certs/api-3dt.pem /etc/caddy/certs/api-3dt.key
+	import api_amatista
+}
+
+api.amatista-3d.tech {
+	tls /etc/caddy/certs/origen.pem /etc/caddy/certs/origen.key
+	import api_amatista
 }

@@ -31,6 +31,15 @@ log = logging.getLogger("amatista.correo")
 ESPERA_SMTP = 10   # segundos: un servidor SMTP lento no deja colgada la API
 ESPERA_BREVO = 10  # segundos para la API REST de Brevo
 
+# Dirección pública de la PWA para los enlaces de los correos. Sale de
+# AMATISTA_URL_PWA (backend/.env) para poder cambiar de dominio sin tocar código.
+PWA_POR_DEFECTO = "https://amatista-3dt.tech"
+
+
+def url_pwa_correo() -> str:
+    """URL base de la PWA (sin barra final) que se escribe en los correos."""
+    return (os.getenv("AMATISTA_URL_PWA", "").strip() or PWA_POR_DEFECTO).rstrip("/")
+
 ASUNTOS = {
     "correo": "Tu código para confirmar tu correo en Amatista",
     "password": "Tu código para recuperar tu cuenta de Amatista",
@@ -72,7 +81,7 @@ def construir_plantilla_html(
     saludo = f"Hola, <strong>{nombre}</strong>:" if nombre else "Hola:"
 
     if es_correo:
-        enlace = f"https://amatista-3d.tech/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
+        enlace = f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -86,7 +95,7 @@ def construir_plantilla_html(
             f"En cuanto confirmes tu correo guardaremos tus insignias y tu avance en todos tus dispositivos.»"
         )
     else:
-        enlace = "https://amatista-3d.tech/#/recuperar"
+        enlace = f"{url_pwa_correo()}/#/recuperar"
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -167,7 +176,7 @@ def armar_mensaje(
 
     saludo_texto = f"Hola, {nombre}:\n\n" if nombre else "Hola:\n\n"
     if proposito == "correo":
-        enlace = f"https://amatista-3d.tech/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
+        enlace = f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
         detalle_enlace = f"O confirma directamente con este enlace:\n{enlace}\n\n"
     else:
         detalle_enlace = ""
@@ -202,7 +211,7 @@ def enviar_via_brevo(
     minutos = int(DURACION_CODIGO.total_seconds() // 60)
     motivo = MOTIVOS.get(proposito, "continuar")
     saludo_texto = f"Hola, {nombre}:\n\n" if nombre else "Hola:\n\n"
-    enlace = f"https://amatista-3d.tech/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}" if proposito == "correo" else ""
+    enlace = f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}" if proposito == "correo" else ""
     detalle_enlace = f"O confirma directamente con este enlace:\n{enlace}\n\n" if enlace else ""
 
     contenido_plano = (
