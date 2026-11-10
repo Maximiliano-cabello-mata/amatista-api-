@@ -73,10 +73,18 @@ git diff --quiet && git diff --cached --quiet \
   || fallar "hay cambios sin confirmar en $REPO; el servidor no debe tener ediciones locales (git status)."
 
 anterior="$(git rev-parse HEAD)"
+motor_antes=""
+if [ "$MOTOR" != "$REPO" ] && [ -d "$MOTOR/.git" ]; then
+  motor_antes="$(git -C "$MOTOR" rev-parse HEAD 2>/dev/null || true)"
+fi
 
 volver() {
   printf '\n==> Volviendo a %s\n' "${anterior:0:7}" >&2
   git -C "$REPO" reset -q --keep "$anterior"
+  if [ -n "$motor_antes" ] && [ "$(git -C "$MOTOR" rev-parse HEAD 2>/dev/null || true)" != "$motor_antes" ]; then
+    printf '==> Motor volviendo a %s\n' "${motor_antes:0:7}" >&2
+    git -C "$MOTOR" checkout -q "$motor_antes" || true
+  fi
   "$REPO/backend/venv/bin/pip" install -q -r "$REPO/backend/requirements.txt" || true
 }
 
@@ -107,6 +115,22 @@ if [ "$nuevo" = "$anterior" ]; then
   echo "Sin cambios: ya estás en ${nuevo:0:7}."
 fi
 git log --oneline -20 "$anterior..$nuevo"
+
+if [ "$MOTOR" != "$REPO" ] && [ -d "$MOTOR/.git" ]; then
+  ref_motor="$(grep -v '^#' "$REPO/MOTOR_VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+  paso "Motor ($MOTOR): sincronizando ${ref_motor:-origin/$RAMA}"
+  git -C "$MOTOR" diff --quiet && git -C "$MOTOR" diff --cached --quiet \
+    || { volver; fallar "hay cambios sin confirmar en $MOTOR (git -C $MOTOR status)."; }
+  git -C "$MOTOR" fetch --prune origin
+  if [ -n "$ref_motor" ]; then
+    git -C "$MOTOR" checkout -q "$ref_motor" \
+      || { volver; fallar "la versión del motor fijada en MOTOR_VERSION ($ref_motor) no existe en $MOTOR."; }
+  else
+    git -C "$MOTOR" merge --ff-only "origin/$RAMA" \
+      || { volver; fallar "no se pudo avanzar $MOTOR a origin/$RAMA."; }
+  fi
+  echo "Motor en $(git -C "$MOTOR" log -1 --format='%h %ad %s' --date=short)"
+fi
 
 cd "$REPO/backend"
 paso "Dependencias"

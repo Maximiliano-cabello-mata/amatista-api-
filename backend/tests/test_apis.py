@@ -118,3 +118,14 @@ def test_error_no_controlado_devuelve_el_identificador(tmp_path, monkeypatch):
     finally:
         main.app.router.routes[:] = [r for r in main.app.router.routes if getattr(r, "path", "") != "/api/addon/v1/_prueba_fallo"]
         conexion.motor.cache_clear()
+
+
+def test_version_motor_fijada_y_sin_respaldo_monorepo():
+    import re
+    import vecinos
+
+    fijada = vecinos.version_motor_fijada()
+    assert fijada and re.fullmatch(r"[0-9a-f]{40}", fijada), f"MOTOR_VERSION inválido: {fijada!r}"
+    assert "amatista" not in vecinos._MOTOR[1]
+    assert "amatista" not in vecinos._WEB[1]
+

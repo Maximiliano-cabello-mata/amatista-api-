@@ -26,10 +26,17 @@ jobs:
           path: amatista-api-
 
       # El motor que la API importa (backend/vecinos.py lo busca en la carpeta hermana).
+      # Se coloca exactamente en la revisión fijada en MOTOR_VERSION.
       - uses: actions/checkout@v4
         with:
           repository: Maximiliano-cabello-mata/amatista-motor-
           path: amatista-motor-
+          fetch-depth: 0
+
+      - name: Fijar versión del motor (MOTOR_VERSION)
+        run: |
+          ref="$(grep -v '^#' amatista-api-/MOTOR_VERSION | tr -d '[:space:]')"
+          git -C amatista-motor- checkout "$ref"
 
       - uses: actions/setup-python@v5
         with:

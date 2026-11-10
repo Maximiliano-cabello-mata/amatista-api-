@@ -102,10 +102,16 @@ avanzar() {
 corto() { git -C "$1" log -1 --format='%h %ad %s' --date=short 2>/dev/null || echo "(sin repositorio)"; }
 
 cmd_estado() {
-  local svc; svc="$(servicio)"
+  local svc ref_motor; svc="$(servicio)"
+  ref_motor="$(grep -v '^#' "$REPO/MOTOR_VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
   paso "Código"
   dato "API ($REPO)" "$(corto "$REPO")"
-  if [ -d "$MOTOR/engine" ]; then dato "Motor ($MOTOR)" "$(corto "$MOTOR")"; else dato "Motor" "NO ESTÁ en $MOTOR (amatista instalar)"; fi
+  if [ -d "$MOTOR/engine" ]; then
+    dato "Motor ($MOTOR)" "$(corto "$MOTOR")"
+    [ -n "$ref_motor" ] && dato "Motor fijado" "${ref_motor:0:12}"
+  else
+    dato "Motor" "NO ESTÁ en $MOTOR (amatista instalar)"
+  fi
   paso "Servicio $svc"
   dato "Activo" "$(systemctl is-active "$svc" 2>/dev/null || true)"
   dato "Desde" "$(systemctl show "$svc" -p ActiveEnterTimestamp --value 2>/dev/null || true)"
@@ -131,22 +137,9 @@ for a in json.load(sys.stdin)["apis"]: print("  %-22s %3d operaciones  %s" % (a[
 cmd_actualizar() {
   local rama="${1:-main}"
   [ -d "$MOTOR/.git" ] || [ "$MOTOR" = "$REPO" ] || fallar "falta el repositorio del motor en $MOTOR. Corre: amatista instalar"
-  local motor_antes=""
-  if [ "$MOTOR" != "$REPO" ]; then
-    motor_antes="$(git -C "$MOTOR" rev-parse HEAD)"
-    paso "Motor: descargando $rama"
-    avanzar "$MOTOR" "$rama"
-  fi
-  # La API hace el resto: dependencias, pruebas, esquema, reinicio y salud,
-  # y vuelve al commit anterior si algo falla. Si falla, el motor vuelve también.
-  if ! AMATISTA_REPO="$REPO" AMATISTA_MOTOR_DIR="$MOTOR" bash "$REPO/despliegue/actualizar.sh" "$rama"; then
-    if [ -n "$motor_antes" ] && [ "$(git -C "$MOTOR" rev-parse HEAD)" != "$motor_antes" ]; then
-      avisar "la actualización falló: el motor vuelve a ${motor_antes:0:7}."
-      git -C "$MOTOR" reset -q --keep "$motor_antes"
-      sudo systemctl restart "$(servicio)" || true
-    fi
-    exit 1
-  fi
+  # actualizar.sh descarga la API, sincroniza el motor a la revisión fijada en
+  # MOTOR_VERSION, corre pruebas y esquema, reinicia y revierte ambos si algo falla.
+  AMATISTA_REPO="$REPO" AMATISTA_MOTOR_DIR="$MOTOR" bash "$REPO/despliegue/actualizar.sh" "$rama"
 }
 
 cmd_registros() {
@@ -222,6 +215,12 @@ cmd_instalar() {
     echo "Ya está en $MOTOR."
   else
     git clone "$URL_MOTOR" "$MOTOR"
+  fi
+  local ref_motor
+  ref_motor="$(grep -v '^#' "$REPO/MOTOR_VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [ -n "$ref_motor" ] && [ -d "$MOTOR/.git" ]; then
+    git -C "$MOTOR" fetch --prune origin
+    git -C "$MOTOR" checkout -q "$ref_motor"
   fi
 
   paso "Entorno de Python"
