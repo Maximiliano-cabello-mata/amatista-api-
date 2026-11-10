@@ -326,9 +326,9 @@ class HabilidadAlumno(Base):
     de antes del taller (solo estado). estado lo sigue escribiendo el backend
     a partir de la fase, para las pantallas de antes.
 
-    Las columnas de 012 solo las leen y escriben api/taller.py (que tolera
+    Las columnas de 012 solo las leen y escriben api/motor/taller.py (que tolera
     que falten) y las pruebas: lo demás usa sentencias con las columnas de 005
-    (api/addon.py, subir_habilidades), así el backend funciona sin 012.
+    (api/motor/addon.py, subir_habilidades), así el backend funciona sin 012.
     """
 
     __tablename__ = "habilidades_alumno"

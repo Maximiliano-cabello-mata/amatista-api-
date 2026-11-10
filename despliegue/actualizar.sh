@@ -110,7 +110,11 @@ git log --oneline -20 "$anterior..$nuevo"
 
 cd "$REPO/backend"
 paso "Dependencias"
-[ -x venv/bin/python ] || python3 -m venv venv
+if [ ! -x venv/bin/python ]; then
+  python3 -m venv venv
+  # SELinux: systemd solo ejecuta el entorno si sus ejecutables son bin_t (ver despliegue/amatista).
+  if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then sudo chcon -R -t bin_t venv/bin || true; fi
+fi
 venv/bin/pip install -q -r requirements-dev.txt \
   || { volver; fallar "no se pudieron instalar las dependencias; el servicio no se reinició."; }
 

@@ -193,8 +193,8 @@ def comando_importar(archivos: Sequence[str]) -> int:
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
-    from api.contenido import asegurar_cursos_base, importar_modulo
-    from api.niveles import sembrar_niveles_blender
+    from api.plataforma.contenido import asegurar_cursos_base, importar_modulo
+    from api.plataforma.niveles import sembrar_niveles_blender
     from contenido.validacion import ContenidoInvalido
 
     rutas = rutas_o_defecto(archivos)
@@ -253,7 +253,7 @@ def comando_exportar(modulo_id: str, salida: Optional[str], borradores: bool) ->
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
-    from api.contenido import exportar_modulo
+    from api.plataforma.contenido import exportar_modulo
 
     try:
         with Session(preparar_base()) as db:
@@ -276,8 +276,8 @@ def comando_sembrar_niveles() -> int:
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
-    from api.contenido import asegurar_cursos_base
-    from api.niveles import sembrar_niveles_blender
+    from api.plataforma.contenido import asegurar_cursos_base
+    from api.plataforma.niveles import sembrar_niveles_blender
 
     try:
         with Session(preparar_base()) as db:
@@ -339,7 +339,7 @@ def comando_practicas(publicar: bool) -> int:
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
-    from api.addon import sincronizar_practicas
+    from api.motor.addon import sincronizar_practicas
 
     try:
         with Session(preparar_base()) as db:

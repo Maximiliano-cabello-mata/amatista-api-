@@ -1,5 +1,5 @@
 """API del add-on de Blender: vínculo, prácticas, intentos evaluados por el
-servidor y descargas armadas al vuelo (api/addon.py, sql/007)."""
+servidor y descargas armadas al vuelo (api/motor/addon.py, sql/007)."""
 import copy
 import hashlib
 import io
@@ -385,7 +385,7 @@ def test_repositorio_de_extensiones(cliente, monkeypatch):
 
 
 def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
-    from api.contenido import asegurar_cursos_base, importar_modulo
+    from api.plataforma.contenido import asegurar_cursos_base, importar_modulo
 
     _, admin = crear_cuenta(rol="admin")
     carpeta = vecinos.requerir_web() / "src" / "data" / "modulos"
@@ -405,8 +405,8 @@ def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
 
 
 def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):
-    from api.contenido import importar_modulo
-    from api.niveles import sembrar_niveles_blender
+    from api.plataforma.contenido import importar_modulo
+    from api.plataforma.niveles import sembrar_niveles_blender
 
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)

@@ -7,7 +7,8 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from api import auth, correo, limites
+from api.plataforma import auth
+from api import correo, limites
 from api.fusion import fusionar_alumno
 from database import conexion
 from database.modelos import EventoAprendizaje, Logro, ProgresoLeccion, Sesion, Usuario, ahora
@@ -267,12 +268,14 @@ def test_iniciar_sesion_no_revela_si_el_correo_existe(cliente):
     incorrecta = entrar(cliente, password="otra-clave-999")
     inexistente = entrar(cliente, email="nadie@amatista.local")
     assert incorrecta.status_code == inexistente.status_code == 401
-    assert incorrecta.json() == inexistente.json() == {"detail": CREDENCIALES}
+    # Los dos cuerpos son idénticos, incluido el bloque de origen del error (api/errores.py).
+    assert incorrecta.json() == inexistente.json()
+    assert incorrecta.json()["detail"] == CREDENCIALES
 
 
 def test_iniciar_sesion_anonimo_sin_password_no_entra(cliente):
     sembrar("alumno-sin-cuenta", email="raro@amatista.local")
-    assert entrar(cliente, email="raro@amatista.local").json() == {"detail": CREDENCIALES}
+    assert entrar(cliente, email="raro@amatista.local").json()["detail"] == CREDENCIALES
 
 
 def test_bloqueo_tras_cinco_fallos(cliente):

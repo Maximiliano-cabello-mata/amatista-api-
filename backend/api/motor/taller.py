@@ -46,7 +46,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api.addon import copia_verificada, definicion_de, es_equipo, politica_copias, version_para, visible
+from api.motor.addon import copia_verificada, definicion_de, es_equipo, politica_copias, version_para, visible
 from api.comun import error_bd
 from api.dependencias import sin_progreso, usuario_requerido
 from api.limites import limitar

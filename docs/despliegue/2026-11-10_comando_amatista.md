@@ -26,6 +26,7 @@ git clone https://github.com/Maximiliano-cabello-mata/amatista-api- ~/amatista-a
 
 1. Clona el motor en `~/amatista-motor-` si no está.
 2. Crea `backend/venv` e instala las dependencias.
+   Con SELinux activo da el tipo `bin_t` a `backend/venv/bin`: sin eso systemd responde `203/EXEC` y «Permission denied» (pasó en la instancia el 10 de noviembre).
 3. Usa `/etc/amatista/amatista-api.env` si existe. Si no, usa `backend/.env`; si tampoco existe, lo copia de `~/amatista/backend/.env` con sus mismos permisos.
 4. Comprueba que la API carga con el motor.
 5. Escribe `/etc/systemd/system/amatista-api.service` con las rutas reales, detiene la unidad anterior (`amatista-backend`) y arranca la nueva.
@@ -41,6 +42,8 @@ Durante el paso 5 la API no responde unos segundos.
 | `amatista actualizar` | Descarga motor y API, instala dependencias, corre las pruebas, compara el esquema de Oracle, reinicia y comprueba `/api/salud`. Si algo falla, vuelve los dos repositorios al commit anterior |
 | `amatista estado` | Commit de cada repositorio, servicio, salud de la API, versión del complemento, Caddy, disco y último respaldo |
 | `amatista registros [n]` | Últimas líneas del servicio. Con `-f` las sigue |
+| `amatista errores [horas]` | Errores internos de las últimas horas, contados por API y operación |
+| `amatista buscar <id>` | Todo lo registrado de una petición, a partir de su `X-Peticion-Id` |
 | `amatista diagnostico` | Compara el esquema de Oracle con el del código. Solo lee |
 | `amatista respaldo` | Copia Git de los dos repositorios y exporta la base a `~/respaldos/amatista-<fecha>/` |
 | `amatista admin correo@dominio.com` | Da rol de administrador. Con `--rol profesor`, de profesor |
@@ -53,4 +56,4 @@ Un cambio de esquema sigue sin aplicarse solo: los scripts de `backend/sql/` se 
 
 Probado el 10 de noviembre en una máquina de desarrollo, con la API sobre SQLite y el motor en la carpeta hermana: `estado`, `respaldo`, `diagnostico` (responde que no hay Oracle, salida 1) y la comprobación de carga del paso 4.
 
-**No probado todavía en la instancia:** `instalar`, `actualizar`, `registros`, `caddy` y `reiniciar`, porque usan systemd y Oracle. La primera ejecución de `instalar` conviene hacerla con tiempo y con un `amatista respaldo` del monorepo hecho antes.
+**No probado todavía en la instancia:** `instalar`, `actualizar`, `registros`, `buscar`, `errores`, `caddy` y `reiniciar`, porque usan systemd y Oracle. La primera ejecución de `instalar` conviene hacerla con tiempo y con un `amatista respaldo` del monorepo hecho antes.

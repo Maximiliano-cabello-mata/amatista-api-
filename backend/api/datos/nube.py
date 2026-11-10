@@ -52,7 +52,7 @@ from sqlalchemy.orm import Session
 from api.comun import error_bd
 from api.dependencias import requiere_rol, usuario_opcional, usuario_requerido
 from api.limites import limitar
-from api.perfil import sin_esquema
+from api.plataforma.perfil import sin_esquema
 from database.conexion import obtener_db
 from database.modelos import NubeSesion, Usuario, ahora
 from seguridad import hash_token, nuevo_token

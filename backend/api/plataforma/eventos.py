@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from api.comun import asegurar_usuario, error_bd
 from api.dependencias import resolver_alumno, usuario_opcional
 from api.limites import limitar
-from api.progreso import a_utc, registrar_acceso
+from api.plataforma.progreso import a_utc, registrar_acceso
 from database.conexion import obtener_db
 from database.modelos import TIPOS_EVENTO, EventoAprendizaje, Usuario, ahora
 

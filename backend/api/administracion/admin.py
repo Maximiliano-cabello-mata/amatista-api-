@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from api.comun import error_bd, usuario_publico
 from api.dependencias import requiere_rol
-from api.progreso import iso, progreso_de
+from api.plataforma.progreso import iso, progreso_de
 from database.conexion import obtener_db
 from database.modelos import (
     ROLES,

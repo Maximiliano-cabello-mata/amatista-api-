@@ -55,7 +55,7 @@ from sqlalchemy.orm import Session, defer
 from api.comun import error_bd
 from api.dependencias import es_cuenta_registrada, requiere_rol, usuario_requerido
 from api.limites import limitar
-from api.perfil import sin_esquema
+from api.plataforma.perfil import sin_esquema
 from contenido import modelo_ligero
 from database.conexion import obtener_db
 from database.modelos import (

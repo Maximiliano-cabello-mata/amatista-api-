@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import vecinos
 
-from api.addon import pasos_de
+from api.motor.addon import pasos_de
 from contenido.motor import practicas_del_repositorio
 
 RAIZ = Path(__file__).resolve().parents[2]

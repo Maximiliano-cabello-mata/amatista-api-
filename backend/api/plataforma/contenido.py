@@ -5,7 +5,7 @@
   304 si el navegador ya tiene la versión vigente (ETag). Con las tablas
   vacías devuelve cursos: [] y la PWA usa su catálogo empaquetado.
 - Edición: solo administradores; los profesores pueden leer (GET) y validar.
-- Reestructuración v3: cada curso tiene niveles (api/niveles.py) y cada
+- Reestructuración v3: cada curso tiene niveles (api/plataforma/niveles.py) y cada
   módulo puede pertenecer a uno (nivel_id). El catálogo los incluye como
   campos nuevos; una PWA que no los conoce los ignora.
 - Los ids son inmutables (el progreso de los alumnos se guarda con ellos) y
@@ -655,7 +655,7 @@ def importar_modulo(db: Session, datos: Any, curso_id: Optional[str] = None) -> 
     db.flush()
     if '"blender_practice"' in json.dumps(modulo.get("lessons") or [], ensure_ascii=False):
         # Solo los módulos con prácticas de Blender tocan PRACTICAS (sql/007).
-        from api.addon import enlazar_lecciones
+        from api.motor.addon import enlazar_lecciones
 
         enlazar_lecciones(db)
     return {

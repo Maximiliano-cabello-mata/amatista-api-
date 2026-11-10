@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from api.comun import error_bd
 from api.dependencias import es_cuenta_registrada, requiere_rol, usuario_requerido
 from api.limites import limitar
-from api.perfil import es_creador, sin_esquema
+from api.plataforma.perfil import es_creador, sin_esquema
 from database.conexion import obtener_db
 from database.modelos import CATEGORIAS_SUGERENCIA, ESTADOS_SUGERENCIA, MensajeSugerencia, Perfil, Sugerencia, Usuario, ahora
 

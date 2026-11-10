@@ -51,9 +51,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api.addon import obtener_practica
+from api.motor.addon import obtener_practica
 from api.comun import error_bd
-from api.contenido import iso
+from api.plataforma.contenido import iso
 from api.dependencias import PREFIJO_ADDON, usuario_requerido
 from api.limites import limitar
 from database.conexion import obtener_db

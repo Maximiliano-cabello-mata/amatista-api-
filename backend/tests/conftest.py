@@ -29,7 +29,7 @@ def entorno_pruebas(monkeypatch):
 def cliente(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'prueba.db'}")
     conexion.motor.cache_clear()
-    from api.contenido import invalidar_catalogo
+    from api.plataforma.contenido import invalidar_catalogo
     from main import app
 
     invalidar_catalogo()

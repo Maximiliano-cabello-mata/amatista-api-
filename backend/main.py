@@ -19,10 +19,9 @@ from sqlalchemy import literal, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import (
-    addon, admin, auth, blender, buzon, contenido, enlace, evaluacion, eventos, g7b, niveles, nube, perfil, progreso, sesiones, sincronizar, taller,
-)
+from api import errores, registro
 from api.comun import error_bd
+from api.motor import addon, taller
 from database.conexion import motor, obtener_db
 from database.modelos import Base
 import observabilidad
@@ -274,25 +273,9 @@ app.add_middleware(
     expose_headers=["ETag"],
 )
 
-app.include_router(auth.router)
-app.include_router(sesiones.router)  # /api/iniciar-sesion heredado (alumnos anónimos)
-app.include_router(progreso.router)
-app.include_router(eventos.router)
-app.include_router(sincronizar.router)  # progreso + eventos en una petición comprimida (poca conectividad)
-app.include_router(admin.router)
-app.include_router(contenido.router)
-app.include_router(niveles.router)  # reestructuración v3: niveles y mapa del curso
-app.include_router(blender.router)  # versiones de Blender y matriz de compatibilidad
-app.include_router(addon.router)  # add-on de Blender y motor de prácticas (sql/007)
-app.include_router(enlace.router)  # enlace en vivo plataforma ↔ Blender (sql/010, motor 3.4)
-app.include_router(taller.router)  # Amatista Taller: el modelo del alumno por habilidad (sql/012, motor 5)
-app.include_router(perfil.router)  # avatares low poly de cada cuenta (sql/013)
-app.include_router(buzon.router)  # buzón del creador: sugerencias de los alumnos (sql/013)
-app.include_router(evaluacion.router)  # panel del profesor evaluador y «Mi grupo» (sql/014)
-# Propuesta Amatista Cloud (docs/propuestas/2026-11-05_propuesta_amatista_cloud.md): no incluida en la versión final.
-if os.getenv("AMATISTA_PROPUESTA_NUBE") == "1":
-    app.include_router(nube.router)
-app.include_router(g7b.router)  # estado agregado G7B -> Geoda (sin Oracle; falla con perfiles locales)
+# Cada API registra sus rutas (api/registro.py) y firma sus errores (api/errores.py).
+registro.registrar(app)
+errores.instalar(app)
 
 
 @app.get("/")
@@ -308,3 +291,15 @@ def salud(db: Session = Depends(obtener_db)):
     except SQLAlchemyError as error:
         raise error_bd(error, "/api/salud", estado=503)
     return {"estado": "ok", "motor": motor().dialect.name}
+
+
+@app.get("/api/apis")
+def apis():
+    """Las API que sirve este proceso, con su responsabilidad y sus prefijos."""
+    from contenido import motor as motor_practicas
+
+    return {
+        "version": VERSION_API,
+        "apis": registro.resumen(),
+        "motor": {"version_motor": motor_practicas.VERSION_MOTOR, "version_addon": motor_practicas.VERSION_ADDON},
+    }

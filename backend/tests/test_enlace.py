@@ -1,4 +1,4 @@
-"""Enlace en vivo plataforma ↔ Blender (api/enlace.py, sql/010, motor 3.4).
+"""Enlace en vivo plataforma ↔ Blender (api/motor/enlace.py, sql/010, motor 3.4).
 
 El add-on manda latidos; la plataforma ve el Blender en vivo, le deja
 órdenes (abrir una práctica, enfocar) y decide cómo se ve Blender.
@@ -352,7 +352,7 @@ def test_detalle_no_se_arrastra_a_otra_practica(cliente, crear_cuenta):
 
 def test_detalle_igual_no_escribe_cada_latido(cliente, crear_cuenta):
     from unittest.mock import patch
-    from api.enlace import Latido, latido
+    from api.motor.enlace import Latido, latido
     from database.modelos import Sesion, Usuario
     from starlette.requests import Request
 
@@ -434,7 +434,7 @@ def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
 
 def test_detalle_leido_de_oracle_como_dict_no_rompe_el_enlace():
     """python-oracledb entrega CHECK (detalle IS JSON) como dict (error 500 visto en Sentry el 31 oct)."""
-    from api.enlace import _leer
+    from api.motor.enlace import _leer
     from database.modelos import AddonEnlace, TextoJSON
 
     columna = AddonEnlace.__table__.c.detalle.type

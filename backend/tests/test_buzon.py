@@ -1,10 +1,10 @@
-"""Avatares (api/perfil.py) y buzón del creador (api/buzon.py), sql/013."""
+"""Avatares (api/plataforma/perfil.py) y buzón del creador (api/plataforma/buzon.py), sql/013."""
 import re
 from pathlib import Path
 
 import vecinos
 
-from api.perfil import AVATAR_CREADOR, AVATARES
+from api.plataforma.perfil import AVATAR_CREADOR, AVATARES
 
 CATALOGO_PWA = Path("src") / "avatares" / "catalogo.js"  # dentro de frontend/ (vecinos.requerir_web)
 

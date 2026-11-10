@@ -7,7 +7,7 @@
 
 El creador es la cuenta cuyo correo está en AMATISTA_CREADOR (backend/.env);
 si la variable está vacía, cualquier admin. Su personaje es el pavo real y es
-quien responde el buzón (api/buzon.py).
+quien responde el buzón (api/plataforma/buzon.py).
 """
 import os
 from typing import Optional, Set

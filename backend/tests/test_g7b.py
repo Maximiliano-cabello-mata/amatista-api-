@@ -1,7 +1,7 @@
 """Contrato G7B consumido por Amatista: aislado de Oracle y de la red real."""
 import pytest
 
-from api import g7b
+from api.datos import g7b
 
 
 def _publicacion():

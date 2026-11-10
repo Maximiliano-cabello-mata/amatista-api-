@@ -23,7 +23,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from api.addon import licencia_valida  # noqa: E402
+from api.motor.addon import licencia_valida  # noqa: E402
 
 
 def archivos_de(ruta: Path) -> dict:

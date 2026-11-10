@@ -9,7 +9,7 @@ formato amatista.skill/1) lo lee el MISMO motor que usa el add-on
   (``practica_de_actividad``), igual que Blender;
 - revisa la foto de la escena con esa práctica: el acierto que sube el
   modelo del alumno lo decide el servidor, no el cliente;
-- calcula el modelo del alumno y el plan de cada taller (api/taller.py).
+- calcula el modelo del alumno y el plan de cada taller (api/motor/taller.py).
 
 Sin base de datos: lo usan la API, la validación de lecciones (bloque
 blender_taller) y las pruebas. El catálogo se vuelve a leer solo si el
