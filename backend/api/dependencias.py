@@ -22,7 +22,7 @@ from seguridad import DURACION_SESION, hash_token
 # ultimo_acceso se escribe como mucho cada 10 minutos por sesión: evita una
 # escritura en Oracle por cada petición.
 REFRESCO_ACCESO = timedelta(minutes=10)
-# Sesiones creadas por el add-on de Blender (api/addon.py) y lo único que pueden usar.
+# Sesiones creadas por el add-on de Blender (api/motor/addon.py) y lo único que pueden usar.
 PREFIJO_ADDON = "blender-addon"
 RUTAS_ADDON = ("/api/addon/", "/api/blender/")
 

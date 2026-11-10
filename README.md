@@ -14,13 +14,17 @@ La API de [Amatista](https://amatista-3dt.tech): cuentas, progreso, contenido, c
 
 ## Las API que sirve
 
-| Prefijo | Para quién | Módulos |
-|---|---|---|
-| `/api/auth`, `/api` (progreso, eventos, sincronizar), `/api/contenido`, `/api/perfil`, `/api/buzon`, `/api/blender` | La web: cuentas, progreso, sincronización, contenido y niveles, perfil, buzón y versiones de Blender | `auth`, `sesiones`, `progreso`, `eventos`, `sincronizar`, `contenido`, `niveles`, `perfil`, `buzon`, `blender` |
-| `/api/admin` | Panel de administración | `admin` |
-| `/api/evaluacion` | Panel del profesor y «Mi clase» | `evaluacion` |
-| `/api/addon/v1` | El complemento de Blender y el motor | `addon`, `enlace`, `taller` |
-| `/api/g7b/v1` | Estado agregado de G7B para Geoda | `g7b` |
+Un proceso, cinco API. Cada una vive en su paquete y firma sus errores con su nombre. Detalle y formato de errores: [docs/api/README.md](docs/api/README.md).
+
+| API | Paquete | Prefijo | Para quién |
+|---|---|---|---|
+| `plataforma` | `backend/api/plataforma/` | `/api/auth`, `/api/contenido`, `/api/perfil`, `/api/buzon`, `/api/blender`, `/api` | La web del alumno |
+| `motor` | `backend/api/motor/` | `/api/addon/v1` | El complemento de Blender |
+| `aula` | `backend/api/aula/` | `/api/evaluacion` | Panel del profesor y «Mi clase» |
+| `administracion` | `backend/api/administracion/` | `/api/admin` | Panel de administración |
+| `datos` | `backend/api/datos/` | `/api/g7b/v1` | Geoda |
+
+Un error dice de dónde sale: `{"detail": "...", "error": {"api": "motor", "operacion": "leer_practica", "codigo": "motor.leer_practica.no_encontrado", "estado": 404}}`, y toda respuesta lleva `X-Peticion-Id`.
 
 ## Responsabilidad
 

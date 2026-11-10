@@ -18,7 +18,7 @@ Prácticas (tabla PRACTICAS, historial en PRACTICA_VERSIONES):
 Progreso (PROGRESO_PRACTICAS):
 - POST /practicas/{id}/abrir: la plataforma (o Blender) marca la práctica
   como la actual; un Blender abierto la recibe al momento como orden del
-  enlace en vivo (api/enlace.py) y uno que arranca la abre con
+  enlace en vivo (api/motor/enlace.py) y uno que arranca la abre con
   GET /practica-actual.
 - POST /intentos: el add-on manda la foto de la escena; el servidor la
   evalúa con el mismo motor y guarda el mejor resultado. Al completarla
@@ -53,10 +53,10 @@ from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
-from api import progreso as api_progreso
-from api.auth import abrir_sesion
+from api.plataforma import progreso as api_progreso
+from api.plataforma.auth import abrir_sesion
 from api.comun import error_bd, usuario_publico
-from api.contenido import confirmar, iso, rechazo
+from api.plataforma.contenido import confirmar, iso, rechazo
 from api.dependencias import PREFIJO_ADDON, requiere_rol, sin_progreso, usuario_opcional, usuario_requerido
 from api.limites import limitar
 from contenido import motor
@@ -902,7 +902,7 @@ def abrir_practica(practica_id: str, cuerpo: Optional[Apertura] = None, db: Sess
     # Motor 3.4: si el alumno tiene Blender abierto, la práctica se abre ahí sola (sql/010).
     # Va después de guardar el avance: sin 010, ordenar_abrir deshace su transacción.
     if cuerpo is None or cuerpo.origen == "plataforma":
-        from api.enlace import ordenar_abrir
+        from api.motor.enlace import ordenar_abrir
 
         if ordenar_abrir(db, usuario.id, practica.id):
             confirmar(db, f"/api/addon/v1/practicas/{practica_id}/abrir")
@@ -949,7 +949,7 @@ def subir_habilidades(db: Session, usuario: Usuario, habilidades, autonomia: str
     if not existentes:
         return subidas
     # Solo las columnas de sql/005: sin 012 (el modelo del alumno de Amatista
-    # Taller, api/taller.py) esto sigue funcionando igual que antes.
+    # Taller, api/motor/taller.py) esto sigue funcionando igual que antes.
     tabla = HabilidadAlumno.__table__
     actuales = dict(db.execute(
         select(tabla.c.habilidad_id, tabla.c.estado).where(

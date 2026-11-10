@@ -9,7 +9,7 @@
   con lo que le falta a la ficha de cada lección (lo mismo que la vista
   V_AMATISTA_MAPA de sql/006, sin depender de Oracle).
 
-El catálogo público (api/contenido.py) solo muestra los niveles publicados.
+El catálogo público (api/plataforma/contenido.py) solo muestra los niveles publicados.
 Asignar un módulo a un nivel: PUT /api/contenido/modulos/{id} {"nivel_id": ...}.
 """
 from collections import defaultdict
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.contenido import confirmar, leer_json, nivel_meta, obtener_curso
+from api.plataforma.contenido import confirmar, leer_json, nivel_meta, obtener_curso
 from api.dependencias import requiere_rol
 from contenido.plantillas import NIVELES_BLENDER
 from contenido.validacion import MAX_ID, PATRON_ID, pendientes_ficha

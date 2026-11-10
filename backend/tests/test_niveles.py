@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import vecinos
 
-from api.niveles import id_nivel
+from api.plataforma.niveles import id_nivel
 from contenido.plantillas import ESTRUCTURA_LECCION, NIVELES_BLENDER, leccion_estructurada, modulo_esqueleto
 from contenido.validacion import pendientes_ficha, validar_leccion, validar_modulo
 from herramientas import contenido as cli

@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from api import eventos as api_eventos
-from api import progreso as api_progreso
+from api.plataforma import eventos as api_eventos
+from api.plataforma import progreso as api_progreso
 from api.comun import error_bd
 from api.dependencias import resolver_alumno, sin_progreso, usuario_opcional
 from api.limites import limitar

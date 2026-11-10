@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, defer
 
-from api.contenido import confirmar, iso, obtener_leccion
+from api.plataforma.contenido import confirmar, iso, obtener_leccion
 from api.dependencias import requiere_rol
 from database.conexion import obtener_db
 from database.modelos import Leccion, Usuario, VerificacionBlender, VersionBlender, ahora

@@ -5,6 +5,8 @@
 #   amatista actualizar [rama]   Motor + API: descarga, pruebas, esquema, reinicio y comprobación
 #   amatista estado              Versiones, servicio, salud de la API, Caddy y disco
 #   amatista registros [n]       Últimas n líneas del servicio (por defecto 80); -f para seguirlas
+#   amatista buscar <id>         Todo lo registrado de una petición (el X-Peticion-Id de un error)
+#   amatista errores [horas]     Errores de las últimas horas (por defecto 24), contados por API y operación
 #   amatista diagnostico         Compara el esquema de Oracle con el que espera el código (solo lee)
 #   amatista respaldo            Copia Git de los dos repositorios y exporta la base a ~/respaldos
 #   amatista admin <correo> ...  Da rol de administrador o profesor (herramientas/crear_admin.py)
@@ -95,6 +97,10 @@ cmd_estado() {
   paso "API"
   dato "Salud" "$(curl -fsS --max-time 5 "$URL_SALUD" 2>/dev/null || echo 'NO RESPONDE')"
   dato "Complemento" "$(curl -fsS --max-time 5 "${URL_SALUD%/api/salud}/api/addon/v1/estado" 2>/dev/null | head -c 200 || echo 'NO RESPONDE')"
+  # Cada API con sus operaciones (GET /api/apis).
+  curl -fsS --max-time 5 "${URL_SALUD%/api/salud}/api/apis" 2>/dev/null \
+    | "$PY" -c 'import json,sys
+for a in json.load(sys.stdin)["apis"]: print("  %-22s %3d operaciones  %s" % (a["api"], a["operaciones"], " ".join(a["prefijos"])))' 2>/dev/null || true
   paso "Caddy"
   dato "Activo" "$(systemctl is-active caddy 2>/dev/null || true)"
   paso "Disco y memoria"
@@ -131,6 +137,24 @@ cmd_registros() {
   local svc; svc="$(servicio)"
   if [ "${1:-}" = "-f" ]; then exec sudo journalctl -u "$svc" -f; fi
   sudo journalctl -u "$svc" -n "${1:-80}" --no-pager
+}
+
+cmd_buscar() {
+  [ $# -eq 1 ] || fallar "uso: amatista buscar <identificador de petición>"
+  case "$1" in *[!0-9a-f]*) fallar "el identificador son 12 caracteres hexadecimales (cabecera X-Peticion-Id)." ;; esac
+  sudo journalctl -u "$(servicio)" --no-pager --since "-30 days" | grep -F -B2 -A25 -- "$1" \
+    || echo "Sin registros de la petición $1 en los últimos 30 días."
+}
+
+# Los errores llevan su código (api.operacion.motivo): api/errores.py.
+cmd_errores() {
+  local horas="${1:-24}"
+  case "$horas" in ''|*[!0-9]*) fallar "uso: amatista errores [horas]" ;; esac
+  paso "Errores internos de las últimas $horas h, por API y operación"
+  sudo journalctl -u "$(servicio)" --no-pager --since "-$horas hours" \
+    | grep -oE '[a-z_]+(\.[A-Za-z_0-9]+)?\.(error_interno|no_disponible|servicio_externo|sin_respuesta) \(' \
+    | sed 's/ ($//' | sort | uniq -c | sort -rn | sed 's/^/  /' || true
+  echo "  (para el detalle de uno: amatista buscar <identificador>)"
 }
 
 cmd_diagnostico() { herramienta diagnostico_oracle.py "$@"; }
@@ -237,7 +261,7 @@ cmd_instalar() {
   echo "Listo. Desde ahora: amatista estado · amatista actualizar · amatista respaldo"
 }
 
-cmd_ayuda() { sed -n '2,15p' "$ORIGEN" | sed 's/^# \{0,1\}//'; }
+cmd_ayuda() { sed -n '2,17p' "$ORIGEN" | sed 's/^# \{0,1\}//'; }
 
 orden="${1:-ayuda}"
 [ $# -gt 0 ] && shift
@@ -246,6 +270,8 @@ case "$orden" in
   actualizar) cmd_actualizar "$@" ;;
   estado) cmd_estado "$@" ;;
   registros) cmd_registros "$@" ;;
+  buscar) cmd_buscar "$@" ;;
+  errores) cmd_errores "$@" ;;
   diagnostico) cmd_diagnostico "$@" ;;
   respaldo) cmd_respaldo "$@" ;;
   admin) cmd_admin "$@" ;;

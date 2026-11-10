@@ -287,7 +287,7 @@ def revisar_cabeceras(cliente, ruta: str = "/api/salud") -> List[Hallazgo]:
 
 def requisito_de(ruta) -> str:
     """'rol' si exige un rol, 'sesion' si exige iniciar sesión, 'nodo' si exige el token de un nodo de
-    Amatista Cloud (api/nube.py), 'publica' si no."""
+    Amatista Cloud (api/datos/nube.py), 'publica' si no."""
     pendientes = [ruta.dependant]
     encontrado = "publica"
     while pendientes:

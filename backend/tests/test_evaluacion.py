@@ -1,4 +1,4 @@
-"""Panel del profesor evaluador y «Mi grupo» del alumno (api/evaluacion.py, sql/014)."""
+"""Panel del profesor evaluador y «Mi grupo» del alumno (api/aula/evaluacion.py, sql/014)."""
 from datetime import timedelta
 
 import pytest

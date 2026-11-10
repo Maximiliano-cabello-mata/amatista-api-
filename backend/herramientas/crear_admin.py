@@ -25,7 +25,7 @@ from sqlalchemy import select  # noqa: E402
 from sqlalchemy.exc import SQLAlchemyError  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from api.auth import problema_correo, problema_password  # noqa: E402
+from api.plataforma.auth import problema_correo, problema_password  # noqa: E402
 from database.conexion import motor  # noqa: E402
 from database.modelos import ROLES, Base, Usuario  # noqa: E402
 from seguridad import hash_password, normalizar_email  # noqa: E402

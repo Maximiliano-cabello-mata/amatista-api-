@@ -59,7 +59,7 @@ def test_matriz_de_permisos(cliente, crear_cuenta, app):
     # Las únicas rutas públicas son estas: una ruta pública nueva debe agregarse aquí a propósito.
     publicas = sorted(f"{m} {r}" for (m, r), q in requisitos.items() if q == "publica")
     esperadas = [
-        "GET /", "GET /api/salud", "GET /api/g7b/v1/estado",
+        "GET /", "GET /api/salud", "GET /api/apis", "GET /api/g7b/v1/estado",
         "POST /api/auth/registro", "POST /api/auth/iniciar-sesion", "POST /api/auth/google", "POST /api/auth/confirmar-correo",
         "POST /api/auth/reenviar-codigo", "POST /api/auth/recuperar", "POST /api/auth/restablecer",
         "POST /api/iniciar-sesion", "POST /api/progreso", "GET /api/progreso/{usuario_id}", "POST /api/eventos",

@@ -41,6 +41,8 @@ Durante el paso 5 la API no responde unos segundos.
 | `amatista actualizar` | Descarga motor y API, instala dependencias, corre las pruebas, compara el esquema de Oracle, reinicia y comprueba `/api/salud`. Si algo falla, vuelve los dos repositorios al commit anterior |
 | `amatista estado` | Commit de cada repositorio, servicio, salud de la API, versión del complemento, Caddy, disco y último respaldo |
 | `amatista registros [n]` | Últimas líneas del servicio. Con `-f` las sigue |
+| `amatista errores [horas]` | Errores internos de las últimas horas, contados por API y operación |
+| `amatista buscar <id>` | Todo lo registrado de una petición, a partir de su `X-Peticion-Id` |
 | `amatista diagnostico` | Compara el esquema de Oracle con el del código. Solo lee |
 | `amatista respaldo` | Copia Git de los dos repositorios y exporta la base a `~/respaldos/amatista-<fecha>/` |
 | `amatista admin correo@dominio.com` | Da rol de administrador. Con `--rol profesor`, de profesor |
@@ -53,4 +55,4 @@ Un cambio de esquema sigue sin aplicarse solo: los scripts de `backend/sql/` se 
 
 Probado el 10 de noviembre en una máquina de desarrollo, con la API sobre SQLite y el motor en la carpeta hermana: `estado`, `respaldo`, `diagnostico` (responde que no hay Oracle, salida 1) y la comprobación de carga del paso 4.
 
-**No probado todavía en la instancia:** `instalar`, `actualizar`, `registros`, `caddy` y `reiniciar`, porque usan systemd y Oracle. La primera ejecución de `instalar` conviene hacerla con tiempo y con un `amatista respaldo` del monorepo hecho antes.
+**No probado todavía en la instancia:** `instalar`, `actualizar`, `registros`, `buscar`, `errores`, `caddy` y `reiniciar`, porque usan systemd y Oracle. La primera ejecución de `instalar` conviene hacerla con tiempo y con un `amatista respaldo` del monorepo hecho antes.

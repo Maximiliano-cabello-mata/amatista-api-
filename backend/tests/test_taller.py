@@ -1,4 +1,4 @@
-"""Amatista Taller en el servidor (api/taller.py, sql/012, motor 5).
+"""Amatista Taller en el servidor (api/motor/taller.py, sql/012, motor 5).
 
 El add-on manda los intentos de cada habilidad (también los guardados sin
 conexión); el servidor vuelve a calcular el modelo del alumno con el mismo
@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.contenido import asegurar_cursos_base
+from api.plataforma.contenido import asegurar_cursos_base
 from contenido import motor
 from contenido.validacion import validar_leccion
 from database import conexion
@@ -58,7 +58,7 @@ def test_sin_intentos_el_alumno_empieza_de_cero(cliente, crear_cuenta):
 
 
 def test_al_arrancar_registra_las_habilidades_del_catalogo(cliente, con_cursos, monkeypatch):
-    from api.taller import sincronizar_al_arrancar
+    from api.motor.taller import sincronizar_al_arrancar
     from contenido.taller import catalogo
 
     with Session(conexion.motor()) as db:

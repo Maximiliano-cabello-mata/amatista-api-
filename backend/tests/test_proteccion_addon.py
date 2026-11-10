@@ -49,7 +49,7 @@ def test_descarga_con_cuenta_trae_marca_de_agua_firmada(cliente, crear_cuenta, m
     personal = cliente.get(f"{API}/descargas/windows", headers=alumno)
     licencia = json.loads(extension_de(personal.content).read("licencia.json"))
     assert licencia["cuenta"] == alumno_id and licencia["firma"]
-    from api.addon import licencia_valida
+    from api.motor.addon import licencia_valida
 
     assert licencia_valida(licencia)
     assert not licencia_valida({**licencia, "cuenta": "otra"})  # no se puede cambiar de dueño
