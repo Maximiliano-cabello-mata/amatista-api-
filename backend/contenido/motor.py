@@ -7,6 +7,9 @@ en Oracle lo calcula el servidor, no el cliente.
 
 El constructor (addon/herramientas/construir.py) arma las descargas al vuelo
 desde el código del repositorio: no hay binarios guardados.
+
+Ese código vive en el repositorio del motor; backend/vecinos.py dice dónde
+buscarlo (AMATISTA_MOTOR_DIR o una carpeta hermana).
 """
 from __future__ import annotations
 
@@ -16,7 +19,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-RAIZ = Path(__file__).resolve().parents[2]
+import vecinos  # noqa: E402
+
+# Raíz del repositorio del motor (engine/, addon/ y practices/): backend/vecinos.py.
+RAIZ = vecinos.motor()
 CARPETA_PRACTICAS = RAIZ / "practices" / "blender"
 
 for _carpeta in (RAIZ / "engine", RAIZ / "addon" / "herramientas"):

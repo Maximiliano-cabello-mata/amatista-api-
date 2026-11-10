@@ -1,0 +1,50 @@
+# CI de la API: pruebas con SQLite temporal (nunca Oracle real) y el motor
+# clonado al lado, como en la instancia de producción.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    env:
+      AMATISTA_SIN_LIMITES: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: amatista-api-
+
+      # El motor que la API importa (backend/vecinos.py lo busca en la carpeta hermana).
+      - uses: actions/checkout@v4
+        with:
+          repository: Maximiliano-cabello-mata/amatista-motor-
+          path: amatista-motor-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: amatista-api-/backend/requirements*.txt
+
+      - name: Instalar dependencias
+        working-directory: amatista-api-/backend
+        run: pip install -r requirements-dev.txt pyyaml Pillow
+
+      - name: Pruebas de la API
+        working-directory: amatista-api-/backend
+        run: python -m pytest -q -rs
+
+      - name: Sintaxis de las herramientas de la instancia
+        working-directory: amatista-api-
+        run: bash -n despliegue/amatista && bash -n despliegue/actualizar.sh

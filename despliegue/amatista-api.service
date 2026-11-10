@@ -5,8 +5,10 @@
 #   sudo systemctl daemon-reload && sudo systemctl enable --now amatista-api
 #   journalctl -u amatista-api -f        # registros (nunca muestran contraseñas ni tokens)
 #
-# Rutas de la VM de producción: repositorio en /home/opc/amatista, venv en
-# backend/venv y usuario opc (bitácora del 3 de octubre, §20). Reemplaza a la
+# `amatista instalar` (despliegue/amatista) escribe esta unidad con las rutas y
+# el usuario reales. Las de abajo son las de la VM de producción: repositorio
+# en /home/opc/amatista-api-, motor en /home/opc/amatista-motor-, venv en
+# backend/venv y usuario opc. Reemplaza a la
 # unidad amatista-backend que ya corre: nunca dejes las dos habilitadas.
 #   sudo systemctl disable --now amatista-backend && sudo systemctl enable --now amatista-api
 # Para un despliegue más aislado (/opt/amatista y un usuario "amatista" sin
@@ -14,7 +16,7 @@
 
 [Unit]
 Description=Amatista API (FastAPI + uvicorn)
-Documentation=https://github.com/Maximiliano-cabello-mata/amatista/blob/main/docs/despliegue/2026-10-04_despliegue_oci.md
+Documentation=https://github.com/Maximiliano-cabello-mata/amatista-api-/blob/main/docs/despliegue/2026-10-04_despliegue_oci.md
 After=network-online.target
 Wants=network-online.target
 # Evita un bucle de reinicios si la configuración está rota (revisa journalctl).
@@ -25,18 +27,20 @@ StartLimitBurst=5
 Type=simple
 User=opc
 Group=opc
-WorkingDirectory=/home/opc/amatista/backend
+WorkingDirectory=/home/opc/amatista-api-/backend
 # Variables de backend/.env.example (Oracle, AMATISTA_*, SMTP_*, CORS_ORIGINS).
 # Opcional ("-"): si no existe, el backend lee backend/.env como hoy. Si
 # existe, es root:root 600 y systemd lo lee antes de bajar a "opc".
 EnvironmentFile=-/etc/amatista/amatista-api.env
+# Repositorio del motor (engine/, addon/, practices/): backend/vecinos.py.
+Environment=AMATISTA_MOTOR_DIR=/home/opc/amatista-motor-
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 # Solo escucha en 127.0.0.1: el único acceso público es Caddy (HTTPS).
 # --proxy-headers con 127.0.0.1: confía en X-Forwarded-* solo si vienen de Caddy.
 # Un solo proceso: los límites por IP (api/limites.py) viven en memoria y
 # las conexiones a Oracle por proceso son DB_POOL + DB_POOL_EXTRA.
-ExecStart=/home/opc/amatista/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+ExecStart=/home/opc/amatista-api-/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20

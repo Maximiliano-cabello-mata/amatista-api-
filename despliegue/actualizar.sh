@@ -3,13 +3,17 @@
 # diagnóstico del esquema → reinicio → prueba de /api/salud → comprobaciones
 # finales. Si algo falla antes de terminar /api/salud, vuelve al commit anterior.
 #
-# Uso (como el usuario dueño del repositorio, opc en producción, con sudo
-# para systemctl):
-#   bash ~/amatista/despliegue/actualizar.sh          # rama main
-#   bash ~/amatista/despliegue/actualizar.sh dev      # otra rama
+# Uso normal: `amatista actualizar` (despliegue/amatista), que primero pone
+# al día el repositorio del motor y después llama a este script.
+#
+# Uso directo (como el usuario dueño del repositorio, opc en producción, con
+# sudo para systemctl):
+#   bash ~/amatista-api-/despliegue/actualizar.sh          # rama main
+#   bash ~/amatista-api-/despliegue/actualizar.sh dev      # otra rama
 #
 # Variables opcionales: AMATISTA_REPO (por defecto, la carpeta de este
-# repositorio; en producción /home/opc/amatista), AMATISTA_SERVICIO,
+# repositorio), AMATISTA_MOTOR_DIR (el repositorio del motor; por defecto la
+# carpeta hermana amatista-motor-, o este mismo árbol en el monorepo), AMATISTA_SERVICIO,
 # AMATISTA_URL_SALUD (http://127.0.0.1:8000/api/salud) y
 # AMATISTA_OMITIR_DIAGNOSTICO=1 (salta diagnostico_oracle.py; solo si sabes
 # que el esquema está al día y la herramienta no puede conectarse).
@@ -32,6 +36,11 @@
 set -euo pipefail
 
 REPO="${AMATISTA_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# El motor (engine/, addon/, practices/): variable, este árbol (monorepo) o carpeta hermana.
+MOTOR="${AMATISTA_MOTOR_DIR:-}"
+if [ -z "$MOTOR" ]; then
+  if [ -d "$REPO/engine" ]; then MOTOR="$REPO"; else MOTOR="$(dirname "$REPO")/amatista-motor-"; fi
+fi
 RAMA="${1:-main}"
 SERVICIO="${AMATISTA_SERVICIO:-amatista-api}"
 if [ -z "${AMATISTA_SERVICIO:-}" ] && ! systemctl cat amatista-api >/dev/null 2>&1 \
@@ -118,8 +127,13 @@ if ! PYTHON_DOTENV_DISABLED=1 env -u AMATISTA_URL_PWA \
   volver
   fallar "las pruebas fallaron: el servicio sigue con la versión anterior (no se reinició)."
 fi
-venv/bin/python herramientas/contenido.py validar >/dev/null \
-  || { volver; fallar "los módulos de contenido no validan (python herramientas/contenido.py validar)."; }
+# Las lecciones viven en el repositorio de la web: solo se validan si está en esta máquina.
+if venv/bin/python -c 'import sys, vecinos; sys.exit(0 if vecinos.web() else 1)'; then
+  venv/bin/python herramientas/contenido.py validar >/dev/null \
+    || { volver; fallar "los módulos de contenido no validan (python herramientas/contenido.py validar)."; }
+else
+  echo "Sin el repositorio de la web en esta máquina: no se validan las lecciones aquí."
+fi
 
 paso "Esquema de la base (diagnostico_oracle.py, solo lee)"
 if [ "${AMATISTA_OMITIR_DIAGNOSTICO:-}" = "1" ]; then
@@ -161,7 +175,7 @@ fi
 # Comprobaciones finales (docs/despliegue/2026-10-09_correcciones_3_5_1.md,
 # paso 3). Solo avisan: el servicio ya responde y no se revierte.
 URL_ESTADO="${URL_SALUD%/api/salud}/api/addon/v1/estado"
-version_addon="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$REPO/addon/amatista_blender/blender_manifest.toml")"
+version_addon="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$MOTOR/addon/amatista_blender/blender_manifest.toml")"
 paso "Probando $URL_ESTADO (debe decir $version_addon)"
 if estado="$(curl -fsS --max-time 5 "$URL_ESTADO" 2>/dev/null)"; then
   echo "$estado"

@@ -7,12 +7,13 @@ import json
 from pathlib import Path
 
 import pytest
+import vecinos
 
 from api.addon import pasos_de
 from contenido.motor import practicas_del_repositorio
 
 RAIZ = Path(__file__).resolve().parents[2]
-MODULOS = sorted((RAIZ / "frontend" / "src" / "data" / "modulos").glob("*.json"))
+MODULOS = sorted((vecinos.requerir_web() / "src" / "data" / "modulos").glob("*.json"))
 
 
 def bloques_practica():

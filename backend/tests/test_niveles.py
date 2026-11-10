@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import vecinos
 
 from api.niveles import id_nivel
 from contenido.plantillas import ESTRUCTURA_LECCION, NIVELES_BLENDER, leccion_estructurada, modulo_esqueleto
@@ -12,7 +13,7 @@ from contenido.validacion import pendientes_ficha, validar_leccion, validar_modu
 from herramientas import contenido as cli
 
 BACKEND = Path(__file__).resolve().parent.parent
-MODULOS = BACKEND.parent / "frontend" / "src" / "data" / "modulos"
+MODULOS = vecinos.requerir_web() / "src" / "data" / "modulos"
 def _como_publicado(ruta: Path) -> Path:
     """El módulo 1 del curso v2 quedó archivado (motor v3); estas pruebas lo usan publicado como ejemplo."""
     import tempfile
