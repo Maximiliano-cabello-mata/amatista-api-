@@ -61,6 +61,22 @@ herramienta() {
   fi
 }
 
+# Con SELinux en modo Enforcing, systemd no ejecuta nada de la carpeta personal
+# (tipo user_home_t): el servicio muere con 203/EXEC y «Permission denied».
+# Los ejecutables del entorno necesitan el tipo bin_t, como el entorno anterior.
+permitir_ejecucion() {
+  command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled || return 0
+  [ -d "$BACKEND/venv/bin" ] || return 0
+  if ! sudo chcon -R -t bin_t "$BACKEND/venv/bin"; then
+    fallar "no se pudo dar el tipo bin_t a $BACKEND/venv/bin (SELinux). Sin eso el servicio no arranca."
+  fi
+  # Regla permanente, para que un «restorecon» no lo deshaga. Si no hay semanage, basta el chcon.
+  if command -v semanage >/dev/null 2>&1; then
+    sudo semanage fcontext -a -t bin_t "$BACKEND/venv/bin(/.*)?" 2>/dev/null \
+      || sudo semanage fcontext -m -t bin_t "$BACKEND/venv/bin(/.*)?" 2>/dev/null || true
+  fi
+}
+
 esperar_salud() {
   local respuesta
   for _ in $(seq 1 "${1:-30}"); do
@@ -211,6 +227,7 @@ cmd_instalar() {
   paso "Entorno de Python"
   [ -x "$PY" ] || python3 -m venv "$BACKEND/venv"
   "$BACKEND/venv/bin/pip" install -q -r "$BACKEND/requirements-dev.txt"
+  permitir_ejecucion
 
   paso "Variables"
   if [ -f "$ENV_SISTEMA" ]; then
@@ -229,7 +246,11 @@ cmd_instalar() {
   fi
 
   paso "Comprobando que la API carga con el motor"
-  herramienta -c 'import main; from contenido import motor; print("API lista · motor", motor.VERSION_MOTOR, "· complemento", motor.VERSION_ADDON)'
+  if ! herramienta -c 'import main; from contenido import motor; print("API lista · motor", motor.VERSION_MOTOR, "· complemento", motor.VERSION_ADDON)'; then
+    # Si falló dentro de systemd, el motivo está en su registro, no en la pantalla.
+    sudo journalctl --since "-2 min" --no-pager 2>/dev/null | grep -E "run-.*(Failed|denied)" | tail -3 >&2 || true
+    fallar "la API no carga desde $BACKEND (ver arriba). No se cambió el servicio: la API anterior sigue funcionando."
+  fi
 
   paso "Servicio amatista-api"
   if systemctl is-active --quiet amatista-backend 2>/dev/null; then anterior=amatista-backend; fi

@@ -26,6 +26,7 @@ git clone https://github.com/Maximiliano-cabello-mata/amatista-api- ~/amatista-a
 
 1. Clona el motor en `~/amatista-motor-` si no está.
 2. Crea `backend/venv` e instala las dependencias.
+   Con SELinux activo da el tipo `bin_t` a `backend/venv/bin`: sin eso systemd responde `203/EXEC` y «Permission denied» (pasó en la instancia el 10 de noviembre).
 3. Usa `/etc/amatista/amatista-api.env` si existe. Si no, usa `backend/.env`; si tampoco existe, lo copia de `~/amatista/backend/.env` con sus mismos permisos.
 4. Comprueba que la API carga con el motor.
 5. Escribe `/etc/systemd/system/amatista-api.service` con las rutas reales, detiene la unidad anterior (`amatista-backend`) y arranca la nueva.
