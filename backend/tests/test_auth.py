@@ -769,7 +769,11 @@ def test_enviar_codigo_por_smtp_con_starttls(monkeypatch):
     assert smtp.mensaje["To"] == "ana@amatista.local"
     assert smtp.mensaje["From"] == "Amatista <no-responder@ejemplo.com>"
     assert "recuperar" in smtp.mensaje["Subject"]
-    assert "123456" in smtp.mensaje.get_content()
+    cuerpo_plano = smtp.mensaje.get_body(preferencelist=("plain",)).get_content()
+    cuerpo_html = smtp.mensaje.get_body(preferencelist=("html",)).get_content()
+    assert "123456" in cuerpo_plano
+    assert "123456" in cuerpo_html
+    assert "AMATISTA" in cuerpo_html
 
 
 def test_enviar_codigo_por_puerto_465_usa_tls_directo(monkeypatch):
@@ -932,7 +936,8 @@ def test_enviar_codigo_personalizado_con_nombre(monkeypatch):
 
     assert correo.enviar_codigo("marcos@amatista.local", "998877", "correo", nombre="Marcos") is True
     smtp = SMTPFalso.enviados[0]
-    assert "Hola, Marcos:" in smtp.mensaje.get_content()
+    assert "Hola, Marcos:" in smtp.mensaje.get_body(preferencelist=("plain",)).get_content()
+    assert "Hola, <strong>Marcos</strong>:" in smtp.mensaje.get_body(preferencelist=("html",)).get_content()
 
     html = correo.construir_plantilla_html("marcos@amatista.local", "998877", "correo", "Marcos")
     assert "Hola, <strong>Marcos</strong>:" in html

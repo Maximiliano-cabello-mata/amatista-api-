@@ -190,7 +190,9 @@ def armar_mensaje(
         f"Si no lo pediste, ignora este mensaje: tu cuenta sigue segura.\n\n"
         f"— Amatista 3D\n"
     )
+    contenido_html = construir_plantilla_html(email, codigo, proposito, nombre)
     mensaje.set_content(contenido_plano)
+    mensaje.add_alternative(contenido_html, subtype="html")
     return mensaje
 
 
