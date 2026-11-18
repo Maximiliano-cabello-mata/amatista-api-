@@ -902,6 +902,18 @@ def test_autenticar_google_token_invalido(cliente):
     assert respuesta.status_code == 400
 
 
+def test_google_rechaza_token_de_prueba_fuera_del_modo_prueba(cliente, monkeypatch):
+    # En producción un "test_google_*" no puede autenticar a nadie ni crear cuentas.
+    monkeypatch.delenv("AMATISTA_MODO_PRUEBA", raising=False)
+    monkeypatch.setenv("AMATISTA_ADMINS", "direccion@amatista.local")
+    respuesta = cliente.post(
+        "/api/auth/google",
+        json={"credencial": "test_google_direccion@amatista.local_Director"},
+    )
+    assert respuesta.status_code == 401
+    assert "token" not in respuesta.json()
+
+
 
 def test_autenticar_google_incluye_foto(cliente):
     respuesta = cliente.post(

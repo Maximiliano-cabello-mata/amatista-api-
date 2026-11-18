@@ -465,7 +465,11 @@ def verificar_token_google(credencial: str, client_id_esperado: Optional[str] = 
     if not credencial or len(credencial) > 8192:
         raise HTTPException(status_code=400, detail="Token de Google no válido.")
 
-    # Modo prueba / desarrollo con tokens sintéticos de prueba
+    # Los tokens sintéticos solo existen con AMATISTA_MODO_PRUEBA=1 (desarrollo y pruebas).
+    # En producción cualquier "test_google_*" se rechaza: de lo contrario permitiría entrar
+    # como cualquier correo, incluidos los administradores.
+    if credencial.startswith("test_google_") and os.getenv("AMATISTA_MODO_PRUEBA") != "1":
+        raise HTTPException(status_code=401, detail="Token de Google inválido o expirado.")
     if credencial.startswith("test_google_"):
         partes = credencial[len("test_google_") :].split("_", 1)
         correo_test = normalizar_email(partes[0])

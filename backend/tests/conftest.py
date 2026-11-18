@@ -15,6 +15,7 @@ def entorno_pruebas(monkeypatch):
     # PBKDF2 rápido en pruebas y sin límites de peticiones por IP.
     monkeypatch.setenv("AMATISTA_PBKDF2_ITER", "1000")
     monkeypatch.setenv("AMATISTA_SIN_LIMITES", "1")
+    monkeypatch.setenv("AMATISTA_MODO_PRUEBA", "1")
     # Las pruebas parten de una base sin prácticas; test_practicas_al_arrancar la prende.
     monkeypatch.setenv("AMATISTA_SINCRONIZAR_PRACTICAS", "0")
     # Las pruebas cambian la base directo: el catálogo se revisa en cada petición.
