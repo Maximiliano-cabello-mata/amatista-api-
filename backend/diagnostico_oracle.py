@@ -362,6 +362,21 @@ ESPERADO = {
         "EVALUADA_EN": "TIMESTAMP",
         "VISTA_ALUMNO": "NUMBER",
     },
+    # 015: registro de lotes MORAL.
+    "SISTEMA_LOTES": {
+        "ID": "VARCHAR2",
+        "LOTE": "VARCHAR2",
+        "REPO": "VARCHAR2",
+        "RAMA": "VARCHAR2",
+        "COMMIT_SHA": "VARCHAR2",
+        "TAG": "VARCHAR2",
+        "MOTOR_VERSION": "VARCHAR2",
+        "GEODA_VERSION": "VARCHAR2",
+        "PUNTAJE_MORAL": "NUMBER",
+        "CONTRATO_OK": "NUMBER",
+        "MANIFIESTO": "CLOB",
+        "REGISTRADO_EN": "TIMESTAMP",
+    },
 }
 
 # Las tablas que crea 001; las demás llegan con 002, 005, 007, 010 y 012 (008 y 011 solo agregan columnas).
@@ -390,6 +405,8 @@ COLUMNAS_012 = {
 TABLAS_013 = ("PERFILES", "SUGERENCIAS", "SUGERENCIA_MENSAJES")
 # Lo que agrega 014: tablas de nube y panel del profesor.
 TABLAS_014 = ("NUBE_SESIONES", "GRUPOS", "GRUPO_ALUMNOS", "ASIGNACIONES", "ENTREGAS")
+# Lo que agrega 015: registro de lotes MORAL.
+TABLAS_015 = ("SISTEMA_LOTES",)
 
 # Largos mínimos (en caracteres) que causarían ORA-12899 si fueran menores.
 # SESIONES.ID guarda el hash SHA-256 del token: 64 caracteres (001 lo creó con 36).
@@ -420,6 +437,7 @@ SCRIPT_011 = "sql/011_detalle_instructor.sql"
 SCRIPT_012 = "sql/012_taller.sql"
 SCRIPT_013 = "sql/013_avatares_y_buzon.sql"
 SCRIPT_014 = "sql/014_panel_del_profesor.sql"
+SCRIPT_015 = "sql/015_moral_lotes.sql"
 
 # Fragmentos de errores comunes y qué significan.
 PISTAS = [
@@ -535,39 +553,48 @@ def _completo_salvo(real, tablas, columnas_extra=frozenset()):
 
 
 def solo_falta_005(real):
-    """True si lo de 002 está completo y lo único que falta es de 005 (y 007, 008, 010, 012)."""
-    return _completo_salvo(real, TABLAS_005 + TABLAS_007 + TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014,
+    """True si lo de 002 está completo y lo único que falta es de 005 (y 007, 008, 010, 012, 013, 014, 015)."""
+    return _completo_salvo(real, TABLAS_005 + TABLAS_007 + TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014 + TABLAS_015,
                            COLUMNAS_005 | COLUMNAS_008 | COLUMNAS_012)
 
 
 def solo_falta_007(real):
-    """True si todo hasta 005 está y solo faltan las tablas del motor (007) y quizá 008, 010 y 012."""
-    return _completo_salvo(real, TABLAS_007 + TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014, COLUMNAS_008 | COLUMNAS_012)
+    """True si todo hasta 005 está y solo faltan las tablas del motor (007) y posteriores."""
+    return _completo_salvo(real, TABLAS_007 + TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014 + TABLAS_015, COLUMNAS_008 | COLUMNAS_012)
 
 
 def solo_falta_008(real):
-    """True si todo hasta 007 está y solo faltan las columnas de cursos por ruta (008) y quizá 010 y 012."""
-    return _completo_salvo(real, TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014, COLUMNAS_008 | COLUMNAS_012)
+    """True si todo hasta 007 está y solo faltan las columnas de cursos por ruta (008) y posteriores."""
+    return _completo_salvo(real, TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014 + TABLAS_015, COLUMNAS_008 | COLUMNAS_012)
 
 
 def solo_falta_010(real):
-    """True si todo hasta 009 está y solo faltan las tablas del enlace en vivo con Blender (010) y quizá 012."""
-    return _completo_salvo(real, TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014, COLUMNAS_012)
+    """True si todo hasta 009 está y solo faltan las tablas del enlace en vivo con Blender (010) y posteriores."""
+    return _completo_salvo(real, TABLAS_010 + TABLAS_012 + TABLAS_013 + TABLAS_014 + TABLAS_015, COLUMNAS_012)
 
 
 def solo_falta_012(real):
-    """True si todo hasta 011 está y solo falta el modelo del alumno de Amatista Taller (012)."""
-    return _completo_salvo(real, TABLAS_012 + TABLAS_013 + TABLAS_014, COLUMNAS_012)
+    """True si todo hasta 011 está y solo falta el modelo del alumno de Amatista Taller (012) y posteriores."""
+    return _completo_salvo(real, TABLAS_012 + TABLAS_013 + TABLAS_014 + TABLAS_015, COLUMNAS_012)
 
 
 def solo_falta_013(real):
-    """True si todo hasta 012 está y solo faltan las tablas de avatares y buzón (013) y de 014."""
-    return _completo_salvo(real, TABLAS_013 + TABLAS_014)
+    """True si todo hasta 012 está y solo faltan las tablas de avatares y buzón (013), 014 y 015."""
+    return _completo_salvo(real, TABLAS_013 + TABLAS_014 + TABLAS_015)
 
 
 def solo_falta_014(real):
-    """True si todo hasta 013 está y solo faltan las tablas de 014."""
-    return _completo_salvo(real, TABLAS_014)
+    """True si todo hasta 013 está y solo faltan las tablas de 014 y 015."""
+    return _completo_salvo(real, TABLAS_014 + TABLAS_015)
+
+
+def solo_falta_015(real):
+    """True si todo hasta 014 está y solo falta la tabla de 015."""
+    return _completo_salvo(real, TABLAS_015)
+
+
+def falta_015(real):
+    return any(t not in real for t in TABLAS_015)
 
 
 def falta_014(real):
@@ -598,7 +625,7 @@ def solucion(real, otros_esquemas=()):
         return [
             "Base vacía: en Database Actions > SQL ejecuta con «Ejecutar script» (F5), en orden,",
             f"{SCRIPT_001}, {SCRIPT_002}, {SCRIPT_003}, {SCRIPT_005}, {SCRIPT_006}, {SCRIPT_007}, {SCRIPT_008}, {SCRIPT_010}, "
-            f"{SCRIPT_011}, {SCRIPT_012}, {SCRIPT_013} y {SCRIPT_014} "
+            f"{SCRIPT_011}, {SCRIPT_012}, {SCRIPT_013}, {SCRIPT_014} y {SCRIPT_015} "
             "(ver sql/LEEME.txt).",
         ]
     numericos = ids_numericos(real)
@@ -611,9 +638,16 @@ def solucion(real, otros_esquemas=()):
     if "ADDON_ENLACES" in real and "DETALLE" not in real["ADDON_ENLACES"]:
         siguiente = f" y luego {SCRIPT_012}" if falta_012(real) else ""
         return [f"Falta el detalle compartido del instructor: ejecuta {SCRIPT_011}{siguiente} en Database Actions > SQL."]
+    if solo_falta_015(real) and falta_015(real):
+        return [
+            f"Falta la tabla de registro MORAL: ejecuta {SCRIPT_015} en Database Actions > SQL",
+            "con «Ejecutar script» (F5) o vía backend/herramientas/aplicar_015_oracle.py. "
+            "Solo crea una tabla nueva y se puede repetir. NO ejecutes 001: borraría a los alumnos.",
+        ]
     if solo_falta_014(real) and falta_014(real):
         return [
-            f"Faltan las tablas de 014: ejecuta {SCRIPT_014} en Database Actions > SQL",
+            f"Faltan las tablas de 014: ejecuta {SCRIPT_014}"
+            + (f" y luego {SCRIPT_015}" if falta_015(real) else "") + " en Database Actions > SQL",
             "con «Ejecutar script» (F5). Solo crea cinco tablas nuevas y se puede repetir. Sin él,",
             "el panel del profesor y nube avisan que se están preparando. NO ejecutes 001: borraría a los alumnos.",
         ]

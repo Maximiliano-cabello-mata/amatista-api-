@@ -721,3 +721,26 @@ class Entrega(Base):
     evaluada_en: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP)
     # 1 cuando el alumno ya vio la evaluación (o no hay nada nuevo que ver).
     vista_alumno: Mapped[int] = mapped_column(Integer, default=1)
+
+
+# --- Organización MORAL (015) -------------------------------------------------
+
+
+class SistemaLote(Base):
+    """Registro de manifiestos `amatista.moral/1` transmitidos desde los repos."""
+
+    __tablename__ = "sistema_lotes"
+    __table_args__ = (Index("ix_sistema_lotes_repo_fecha", "repo", "registrado_en"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    lote: Mapped[str] = mapped_column(String(40))
+    repo: Mapped[str] = mapped_column(String(60))
+    rama: Mapped[str] = mapped_column(String(60))
+    commit_sha: Mapped[str] = mapped_column(String(40))
+    tag: Mapped[Optional[str]] = mapped_column(String(60))
+    motor_version: Mapped[Optional[str]] = mapped_column(String(40))
+    geoda_version: Mapped[Optional[str]] = mapped_column(String(40))
+    puntaje_moral: Mapped[int] = mapped_column(Integer, default=0)
+    contrato_ok: Mapped[int] = mapped_column(Integer, default=0)
+    manifiesto: Mapped[Optional[str]] = mapped_column(TextoJSON)
+    registrado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

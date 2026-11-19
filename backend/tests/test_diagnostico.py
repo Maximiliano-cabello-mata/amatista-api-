@@ -74,6 +74,7 @@ def test_esperado_incluye_las_tablas_completas():
         "GRUPO_ALUMNOS",
         "ASIGNACIONES",
         "ENTREGAS",
+        "SISTEMA_LOTES",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
     assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"
@@ -256,3 +257,11 @@ def test_base_sin_013_ni_014_pide_los_dos_en_orden():
             if tabla not in diagnostico_oracle.TABLAS_013 + diagnostico_oracle.TABLAS_014}
     recomendacion = " ".join(solucion(real))
     assert recomendacion.index("013_avatares_y_buzon.sql") < recomendacion.index("014_panel_del_profesor.sql")
+
+
+def test_base_con_014_pide_solo_015():
+    """Todo hasta 014: falta solo la tabla SISTEMA_LOTES de MORAL."""
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_015}
+    recomendacion = " ".join(solucion(real))
+    assert "015_moral_lotes.sql" in recomendacion
+    assert "014_" not in recomendacion and "NO ejecutes 001" in recomendacion

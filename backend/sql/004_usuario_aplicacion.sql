@@ -73,12 +73,15 @@ DECLARE
                 -- 013 (avatares y buzón del creador)
                 'PERFILES', 'SUGERENCIAS', 'SUGERENCIA_MENSAJES',
                 -- 014 (Amatista Cloud y panel del profesor)
-                'NUBE_SESIONES', 'GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS');
+                'NUBE_SESIONES', 'GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS',
+                -- 015 (registro de lotes MORAL)
+                'SISTEMA_LOTES');
   v_opcional  SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
                 'ADDON_VINCULOS', 'PRACTICAS', 'PRACTICA_VERSIONES', 'PROGRESO_PRACTICAS',
                 'ADDON_ENLACES', 'ADDON_AJUSTES', 'TALLERES_ALUMNO',
                 'PERFILES', 'SUGERENCIAS', 'SUGERENCIA_MENSAJES',
-                'NUBE_SESIONES', 'GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS');
+                'NUBE_SESIONES', 'GRUPOS', 'GRUPO_ALUMNOS', 'ASIGNACIONES', 'ENTREGAS',
+                'SISTEMA_LOTES');
 
   FUNCTION existe(p_tabla IN VARCHAR2) RETURN BOOLEAN IS
     v_n PLS_INTEGER;

@@ -22,6 +22,24 @@ CREATE TABLE cursos (
 	CONSTRAINT ck_cursos_estado CHECK (estado IN ('borrador', 'publicado', 'archivado'))
 );
 
+CREATE TABLE sistema_lotes (
+	id VARCHAR(64) NOT NULL, 
+	lote VARCHAR(40) NOT NULL, 
+	repo VARCHAR(60) NOT NULL, 
+	rama VARCHAR(60) NOT NULL, 
+	commit_sha VARCHAR(40) NOT NULL, 
+	tag VARCHAR(60), 
+	motor_version VARCHAR(40), 
+	geoda_version VARCHAR(40), 
+	puntaje_moral INTEGER NOT NULL, 
+	contrato_ok INTEGER NOT NULL, 
+	manifiesto TEXT, 
+	registrado_en TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+	PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_sistema_lotes_repo_fecha ON sistema_lotes (repo, registrado_en);
+
 CREATE TABLE usuarios (
 	id VARCHAR(100) NOT NULL, 
 	nombre VARCHAR(150), 
