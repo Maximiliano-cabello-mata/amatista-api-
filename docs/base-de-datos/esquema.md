@@ -859,7 +859,7 @@ Además, Oracle crea un índice por cada PRIMARY KEY (21) y por cada UNIQUE: `UQ
 
 ## 6. Vistas
 
-Todas con `CREATE OR REPLACE VIEW`; son de solo lectura y solo existen en Oracle (en SQLite no hay equivalente; ver [`02_manual_oracle.md`](../reestructuracion/02_manual_oracle.md), sección 6).
+Todas con `CREATE OR REPLACE VIEW`; son de solo lectura y solo existen en Oracle (en SQLite no hay equivalente; ver [`02_manual_oracle.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md), sección 6).
 
 ### V_AMATISTA_ESPACIO (003)
 
@@ -909,7 +909,7 @@ Columnas: `ID`, `TITULO`, `NIVEL`, `ESTADO`, `VERSION`, `VERSION_PUBLICADA`, `OR
 
 ## 7. Paquete AMATISTA_AUTOR
 
-Creado por 006 (`CREATE OR REPLACE PACKAGE` y `PACKAGE BODY`). Sirve para crear y revisar contenido desde Database Actions sin escribir JSON a mano. **Cada procedimiento valida y hace `COMMIT`.** A propósito **no publica lecciones**: publicar pasa por la validación de `backend/contenido/validacion.py` (panel o `python herramientas/contenido.py importar`). Ejemplos de uso: [`02_manual_oracle.md`](../reestructuracion/02_manual_oracle.md), sección 5.
+Creado por 006 (`CREATE OR REPLACE PACKAGE` y `PACKAGE BODY`). Sirve para crear y revisar contenido desde Database Actions sin escribir JSON a mano. **Cada procedimiento valida y hace `COMMIT`.** A propósito **no publica lecciones**: publicar pasa por la validación de `backend/contenido/validacion.py` (panel o `python herramientas/contenido.py importar`). Ejemplos de uso: [`02_manual_oracle.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md), sección 5.
 
 ### Especificación pública
 

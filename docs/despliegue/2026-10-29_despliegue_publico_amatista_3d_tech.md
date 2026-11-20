@@ -40,7 +40,7 @@ Proyecto Cloudflare Workers conectado a GitHub:
 | Dominio personalizado | `amatista-3d.tech` |
 | Subdominio de Worker observado | `amatista.233242024.workers.dev` |
 
-Configuración versionada en `wrangler.jsonc` y `.node-version` (raíz). Por qué falló el check de vista previa del PR #39 y qué revisar en el panel: [Cloudflare Workers Builds](2026-10-29_cloudflare_workers_builds.md).
+Configuración versionada en `wrangler.jsonc` y `.node-version` (raíz). Por qué falló el check de vista previa del PR #39 y qué revisar en el panel: [Cloudflare Workers Builds](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-29_cloudflare_workers_builds.md).
 
 La compilación reportó creación de PWA (precache de 76 recursos) y publicación satisfactoria. **`VITE_API_URL` es una variable de compilación**, por lo que cambiarla exige recompilar/republicar el frontend. No debe incluir credenciales.
 
@@ -205,9 +205,9 @@ curl -fsS https://api.amatista-3d.tech/api/salud
 
 ## 9. Relación con documentos anteriores
 
-- [Plan original del dominio .me (histórico)](2026-10-04_dominio_amatista-3d.md): documenta una intención anterior (Pages, antiguo dominio), **no** el despliegue vigente.
+- [Plan original del dominio .me (histórico)](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-04_dominio_amatista-3d.md): documenta una intención anterior (Pages, antiguo dominio), **no** el despliegue vigente.
 - [Guía OCI inicial](2026-10-04_despliegue_oci.md): antecedentes de infraestructura.
-- [Prerrequisitos de Motor 5.2/SQL 012](2026-10-11_auditoria_y_motor_5_2.md): guía del estado del código del 18 de octubre; cotejar con los endpoints antes de reutilizar versiones.
-- [README principal](../../README.md) e [índice de documentación](../README.md): referencias actuales de acceso y operación.
+- [Prerrequisitos de Motor 5.2/SQL 012](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-11_auditoria_y_motor_5_2.md): guía del estado del código del 18 de octubre; cotejar con los endpoints antes de reutilizar versiones.
+- [README principal](../../README.md) e [índice de documentación](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/README.md): referencias actuales de acceso y operación.
 
 **Alcance de esta actualización:** documentación y alineación de configuración versionada. No modifica por sí sola los servicios ya instalados ni verifica el estado actual del DNS/Oracle en fecha posterior a las evidencias indicadas.

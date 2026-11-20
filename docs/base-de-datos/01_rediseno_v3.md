@@ -22,7 +22,7 @@ El esquema de 18 tablas se queda: el plan v3 cabe en él con **dos columnas nuev
 
 ## 2. El modelo de cursos del plan v3
 
-El plan de estudios de Blender ([`plan_de_estudios_blender.txt`](../cursos/plan_de_estudios_blender.txt)) se reparte en cuatro cursos seguidos. Cada curso tiene 3 módulos, y cada módulo tiene teoría en la plataforma y termina con una práctica guiada dentro de Blender.
+El plan de estudios de Blender ([`plan_de_estudios_blender.txt`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/cursos/plan_de_estudios_blender.txt)) se reparte en cuatro cursos seguidos. Cada curso tiene 3 módulos, y cada módulo tiene teoría en la plataforma y termina con una práctica guiada dentro de Blender.
 
 | Curso (CURSOS.ID) | Ruta | Requisito | Estado | Módulos |
 |---|---|---|---|---|

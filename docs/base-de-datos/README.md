@@ -91,7 +91,7 @@ El detalle de cada tabla, columna y restricción está en [`esquema.md`](esquema
 
 ## 5. Estado en producción
 
-Según [`backend/sql/LEEME.txt`](../../backend/sql/LEEME.txt) (líneas 60-64) y la bitácora [`docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md`](../bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) (secciones 14 a 22), al 3 de octubre de 2026:
+Según [`backend/sql/LEEME.txt`](../../backend/sql/LEEME.txt) (líneas 60-64) y la bitácora [`docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) (secciones 14 a 22), al 3 de octubre de 2026:
 
 | Script | Estado en producción |
 |---|---|
@@ -101,14 +101,14 @@ Según [`backend/sql/LEEME.txt`](../../backend/sql/LEEME.txt) (líneas 60-64) y 
 | 004 | **No aplicado.** El backend sigue conectándose como `ADMIN` (T-004). |
 | 005 | Aplicado. |
 | 006 | Aplicado. |
-| 007 | **Pendiente.** Se ejecuta después del piloto del 8 de octubre y antes de desplegar el backend del motor de prácticas (T-055 en [`tablero/tareas.yml`](../../tablero/tareas.yml)). Sin 007 las rutas `/api/addon/v1/...` responden 503; el resto funciona igual. |
+| 007 | **Pendiente.** Se ejecuta después del piloto del 8 de octubre y antes de desplegar el backend del motor de prácticas (T-055 en [`tablero/tareas.yml`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/tablero/tareas.yml)). Sin 007 las rutas `/api/addon/v1/...` responden 503; el resto funciona igual. |
 | 008 | **Pendiente.** Después del piloto, con la importación de los cursos nuevos (T-064). |
 | 009 | **Pendiente.** Después de importar los cursos nuevos (T-064). |
 | 010 | **Pendiente.** Después del piloto (T-087). Sin 010 la API responde «sin enlace en vivo» y lo demás funciona igual. |
-| 011 | **Pendiente.** Va después de 010 y antes del backend 3.5.1 ([correcciones 3.5.1](../despliegue/2026-10-09_correcciones_3_5_1.md)). |
-| 012 | **Pendiente.** Va después de 011 y antes del backend del motor 5 ([Amatista Taller](../despliegue/2026-10-10_amatista_taller_motor_5.md)). |
-| 013 | **Pendiente** (T-149). Va después de 012; con `AMATISTA_CREADOR` en `backend/.env` ([avatares y buzón](../plataforma/16_avatares_y_buzon.md)). |
-| 014 | **Pendiente** (T-150). Va después de 013 ([panel del profesor](../plataforma/17_panel_del_profesor.md)). |
+| 011 | **Pendiente.** Va después de 010 y antes del backend 3.5.1 ([correcciones 3.5.1](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-09_correcciones_3_5_1.md)). |
+| 012 | **Pendiente.** Va después de 011 y antes del backend del motor 5 ([Amatista Taller](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-10_amatista_taller_motor_5.md)). |
+| 013 | **Pendiente** (T-149). Va después de 012; con `AMATISTA_CREADOR` en `backend/.env` ([avatares y buzón](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/plataforma/16_avatares_y_buzon.md)). |
+| 014 | **Pendiente** (T-150). Va después de 013 ([panel del profesor](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/plataforma/17_panel_del_profesor.md)). |
 
 **Verificación de los números contra el SQL** (hecha leyendo los `CREATE TABLE` de cada script):
 
@@ -152,8 +152,8 @@ No se corrigen aquí (los scripts ejecutados no se editan); se anotan para quien
 ## 8. Documentación relacionada
 
 - [`backend/sql/LEEME.txt`](../../backend/sql/LEEME.txt) — orden, ejecución, verificación y reglas para scripts nuevos.
-- [`docs/despliegue/2026-10-02_oracle_paso_a_paso.md`](../despliegue/2026-10-02_oracle_paso_a_paso.md) — guía paso a paso de la base real.
-- [`docs/reestructuracion/02_manual_oracle.md`](../reestructuracion/02_manual_oracle.md) — aplicar 005, 006 y 007, usar el paquete `AMATISTA_AUTOR` (sección 5) y el motor de prácticas (sección 10).
-- [`docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md`](../bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) — registro de la aplicación de 005 y 006 en producción.
+- [`docs/despliegue/2026-10-02_oracle_paso_a_paso.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-02_oracle_paso_a_paso.md) — guía paso a paso de la base real.
+- [`docs/reestructuracion/02_manual_oracle.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md) — aplicar 005, 006 y 007, usar el paquete `AMATISTA_AUTOR` (sección 5) y el motor de prácticas (sección 10).
+- [`docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) — registro de la aplicación de 005 y 006 en producción.
 - [`backend/README.md`](../../backend/README.md) — cómo correr el backend con SQLite u Oracle.
-- [`docs/motor/`](../motor/README.md) — el motor de prácticas que usan las tablas de 007.
+- [`docs/motor/`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/motor/README.md) — el motor de prácticas que usan las tablas de 007.

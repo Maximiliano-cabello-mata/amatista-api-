@@ -29,7 +29,7 @@ Actualizado: 4 de octubre de 2026 (main en c730c0e)
 
 En esta guía cada paso lleva una de dos marcas:
 
-- **[Comprobado]**: ya se hizo en la VM real y está registrado en la [bitácora técnica del 3 de octubre](../bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) o en la incidencia [INC-010](../incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt) (2 de octubre).
+- **[Comprobado]**: ya se hizo en la VM real y está registrado en la [bitácora técnica del 3 de octubre](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/bitacora/2026-10-03_bitacora_tecnica_v3_servidor.md) o en la incidencia [INC-010](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt) (2 de octubre).
 - **[Sin ejecutar]**: procedimiento escrito a partir de los archivos de [`despliegue/`](../../despliegue/) y del código; nadie lo ha corrido todavía en producción.
 
 | Pieza | Estado | Fuente |
@@ -50,7 +50,7 @@ En esta guía cada paso lleva una de dos marcas:
 | SMTP y primer administrador | **[Sin ejecutar]** | T-032; INC-010 §4 |
 | PWA en Cloudflare Pages | **[Sin ejecutar]** | T-024 (depende de T-005) |
 | Script 007 (motor de prácticas) | **[Sin ejecutar]**: después del piloto | T-055 |
-| Scripts 008, 009, 010 y 011 (cursos por ruta, archivo de la v2, enlace en vivo y detalle del instructor) | **[Sin ejecutar]**: después del piloto | T-064, T-087 y la [guía de 3.5.1](2026-10-09_correcciones_3_5_1.md) |
+| Scripts 008, 009, 010 y 011 (cursos por ruta, archivo de la v2, enlace en vivo y detalle del instructor) | **[Sin ejecutar]**: después del piloto | T-064, T-087 y la [guía de 3.5.1](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-09_correcciones_3_5_1.md) |
 | `despliegue/actualizar.sh` en la VM | **[Sin ejecutar]** (no hay registro de que se haya usado) | — |
 
 Otro dato que conviene saber antes de empezar: el 3 de octubre la VM trabajaba en una rama **local** llamada `despliegue/v3-2026-10-03` (bitácora §11). Revisa en qué rama está con `git -C ~/amatista status` antes de seguir (ver [§11](#11-actualizar-a-una-versión-nueva-y-revertir)).
@@ -71,7 +71,7 @@ flowchart LR
 Ideas clave:
 
 - **El navegador nunca habla con Oracle.** Solo la VM puede: la base tiene una ACL que admite únicamente la IP de la VM (INC-008; [`backend/README.md`](../../backend/README.md), «Errores de Oracle frecuentes», ORA-12506).
-- **La PWA funciona aunque la API esté caída.** El progreso se guarda en IndexedDB y se sincroniza cuando el servidor responde ([`frontend/README.md`](../../frontend/README.md), «Progreso»).
+- **La PWA funciona aunque la API esté caída.** El progreso se guarda en IndexedDB y se sincroniza cuando el servidor responde ([`frontend/README.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/frontend/README.md), «Progreso»).
 - **Una página `https://` no puede llamar a una API `http://`** (contenido mixto). Por eso Caddy/HTTPS (T-005) es requisito para publicar la PWA (T-024). `frontend/src/services/api.js:9-11` ni siquiera intenta sincronizar en ese caso.
 - **uvicorn solo debería escuchar en `127.0.0.1`**: el único acceso público es Caddy. Así lo hace `amatista-api.service` (línea 35). Si la unidad `amatista-backend` escucha en `0.0.0.0`, ver [§7.1](#71-opción-a-adoptar-amatista-backend-la-que-ya-corre).
 
@@ -79,13 +79,13 @@ Ideas clave:
 
 | Requisito | Detalle | Estado |
 |---|---|---|
-| VM de OCI | La VM ARM existente (Always Free según el [plan de lanzamiento](../planeacion/2026-10-01_plan_lanzamiento.txt), §5, opción A). Acceso SSH como `opc` con `sudo`. | **[Comprobado]** que existe y corre la API |
+| VM de OCI | La VM ARM existente (Always Free según el [plan de lanzamiento](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/planeacion/2026-10-01_plan_lanzamiento.txt), §5, opción A). Acceso SSH como `opc` con `sudo`. | **[Comprobado]** que existe y corre la API |
 | Autonomous Database | Free Tier, 20 GB, Oracle 23.26 (la documentación la llama 23ai/26ai). | **[Comprobado]** |
-| Conexión TLS sin wallet | La base se configuró con ACL por IP y **mTLS no obligatorio**, para conectar con TLS normal sin descargar el wallet ([`docs/arquitectura/2026-09-27_backend_y_base_de_datos.txt`](../arquitectura/2026-09-27_backend_y_base_de_datos.txt), fase 1). El backend no usa wallet: `database/conexion.py` solo pasa `user`, `password` y `dsn`. Si alguien vuelve a exigir mTLS, el diagnóstico muestra `ORA-28759` y recomienda desactivarlo o usar el wallet (`diagnostico_oracle.py:291`). | **[Comprobado]** (la conexión funciona) |
+| Conexión TLS sin wallet | La base se configuró con ACL por IP y **mTLS no obligatorio**, para conectar con TLS normal sin descargar el wallet ([`docs/arquitectura/2026-09-27_backend_y_base_de_datos.txt`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/arquitectura/2026-09-27_backend_y_base_de_datos.txt), fase 1). El backend no usa wallet: `database/conexion.py` solo pasa `user`, `password` y `dsn`. Si alguien vuelve a exigir mTLS, el diagnóstico muestra `ORA-28759` y recomienda desactivarlo o usar el wallet (`diagnostico_oracle.py:291`). | **[Comprobado]** (la conexión funciona) |
 | Cadena de conexión | La cadena **TLS** de nivel *high* de la consola (*Autonomous Database › Conexión a la base de datos › TLS*) en `DB_DSN`, o `DB_HOST` + `DB_PORT` (1522) + `DB_SERVICE`, con los que el backend arma `tcps://host:1522/servicio` (`database/conexion.py:27-45`). | **[Comprobado]** |
 | Puertos 80 y 443 abiertos en OCI | *Networking › Virtual Cloud Networks › tu VCN › Security Lists* (o el NSG de la VM): reglas de entrada TCP 80 y 443 desde `0.0.0.0/0`. El 80 solo sirve para emitir el certificado y redirigir (comentario del `Caddyfile`, líneas 9-12). | **[Sin ejecutar]** |
 | Puertos 80 y 443 en `firewalld` | La VM tiene su propio cortafuegos además de la lista de seguridad (ver [§4](#4-preparar-la-vm)). | **[Sin ejecutar]** |
-| Puerto 8000 cerrado al público | Mientras se usó `http://158.101.118.222:8000` desde la PWA local ([INC-002](../incidencias/2026-09-27_puerto-ocupado-y-cors.txt)) el 8000 estuvo expuesto. Con Caddy delante hay que quitar esa regla de la lista de seguridad y de `firewalld`. | **[Sin ejecutar]** |
+| Puerto 8000 cerrado al público | Mientras se usó `http://158.101.118.222:8000` desde la PWA local ([INC-002](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-09-27_puerto-ocupado-y-cors.txt)) el 8000 estuvo expuesto. Con Caddy delante hay que quitar esa regla de la lista de seguridad y de `firewalld`. | **[Sin ejecutar]** |
 | Nombre DNS para la API | Dominio propio con un registro A a la IP pública, o `sslip.io` sin dominio: `<ip-con-guiones>.sslip.io` (p. ej. `158-101-118-222.sslip.io`). | **[Sin ejecutar]** |
 | Cuenta de Cloudflare Pages | Para la PWA (`*.pages.dev` sirve sin comprar dominio, según el plan §5). | **[Sin ejecutar]** |
 
@@ -129,7 +129,7 @@ Las dos capas (lista de seguridad de OCI y `firewalld`) tienen que permitir el p
 
 ## 5. Variables de producción (`backend/.env`)
 
-El backend lee las variables del entorno; `database/conexion.py:20` llama a `load_dotenv()`, que busca `backend/.env` y **no sobrescribe** variables que ya vengan del entorno (por ejemplo, de un `EnvironmentFile` de systemd). La lista completa con sus valores por defecto está en [`backend/.env.example`](../../backend/.env.example) y en el [manual del backend, §1.2](../manual-del-codigo/03_backend.md#12-variables-de-entorno-backendenv).
+El backend lee las variables del entorno; `database/conexion.py:20` llama a `load_dotenv()`, que busca `backend/.env` y **no sobrescribe** variables que ya vengan del entorno (por ejemplo, de un `EnvironmentFile` de systemd). La lista completa con sus valores por defecto está en [`backend/.env.example`](../../backend/.env.example) y en el [manual del backend, §1.2](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/manual-del-codigo/03_backend.md#12-variables-de-entorno-backendenv).
 
 Dónde viven en producción:
 
@@ -138,7 +138,7 @@ Dónde viven en producción:
 
 | Variable | Valor en producción | Por qué |
 |---|---|---|
-| `DB_USER` / `DB_PASSWORD` | Hoy `ADMIN`. Tras T-004: `AMATISTA_APP` y su contraseña | Con `AMATISTA_APP` un `.env` filtrado solo da acceso a filas, no a la estructura ([Oracle paso a paso, paso 5](2026-10-02_oracle_paso_a_paso.md#paso-5--ejecutar-004-usuario-de-la-aplicación)) |
+| `DB_USER` / `DB_PASSWORD` | Hoy `ADMIN`. Tras T-004: `AMATISTA_APP` y su contraseña | Con `AMATISTA_APP` un `.env` filtrado solo da acceso a filas, no a la estructura ([Oracle paso a paso, paso 5](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-02_oracle_paso_a_paso.md#paso-5--ejecutar-004-usuario-de-la-aplicación)) |
 | `DB_DSN` | Cadena TLS *high* de la consola | Opción recomendada en `.env.example`; con `DB_DSN` vacío se usa `DB_HOST`/`DB_PORT`/`DB_SERVICE` |
 | `DB_ESQUEMA` | Vacío con `ADMIN`; `ADMIN` con `AMATISTA_APP` | Sin él, `AMATISTA_APP` busca sus propias tablas y falla con `ORA-00942` |
 | `DB_POOL` / `DB_POOL_EXTRA` | Por defecto 5 + 5 | El Free Tier admite pocas sesiones; procesos × (pool + extra) debe dejar margen para Database Actions y la purga |
@@ -150,17 +150,17 @@ Dónde viven en producción:
 | `AMATISTA_PROXY_CONFIABLE` | `1` **solo** cuando Caddy esté delante y el 8000 no sea público | Toma la IP del alumno de la última entrada de `X-Forwarded-For` (`api/limites.py:75-83`). Si el 8000 queda abierto, cualquiera falsearía su IP para saltarse los límites |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Los de tu proveedor | Ver [§10](#10-correo-smtp) |
 | `CORS_ORIGINS` | `https://<tu-proyecto>.pages.dev` (y tu dominio de la PWA si tienes) | `localhost` en cualquier puerto ya está permitido (`main.py:44`); el origen de Pages no |
-| `AMATISTA_URL_API` / `AMATISTA_URL_PWA` | `https://<tu API>` y `https://<tu PWA>` | Las escribe el instalador del add-on; detrás de Caddy la URL de la petición sería la interna. Se necesitan con 007 ([manual de Oracle §10](../reestructuracion/02_manual_oracle.md#10-motor-de-prácticas-de-blender-007-4-de-octubre-de-2026), paso 3) |
+| `AMATISTA_URL_API` / `AMATISTA_URL_PWA` | `https://<tu API>` y `https://<tu PWA>` | Las escribe el instalador del add-on; detrás de Caddy la URL de la petición sería la interna. Se necesitan con 007 ([manual de Oracle §10](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md#10-motor-de-prácticas-de-blender-007-4-de-octubre-de-2026), paso 3) |
 
-Cuidados al editar ([INC-010](../incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt), incidencia B): las variables se escriben **dentro del archivo** con un editor (`nano ~/amatista/backend/.env`), nunca pegadas en la terminal. Los marcadores `<...>` de los ejemplos son para reemplazar: en Bash `<` y `>` son redirecciones y dejan la consola en el prompt `>` (sal con `Ctrl+C`). El archivo no se sube al repositorio (`.gitignore`) y debería tener permisos `600`.
+Cuidados al editar ([INC-010](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt), incidencia B): las variables se escriben **dentro del archivo** con un editor (`nano ~/amatista/backend/.env`), nunca pegadas en la terminal. Los marcadores `<...>` de los ejemplos son para reemplazar: en Bash `<` y `>` son redirecciones y dejan la consola en el prompt `>` (sal con `Ctrl+C`). El archivo no se sube al repositorio (`.gitignore`) y debería tener permisos `600`.
 
 ## 6. Base de datos
 
 Los scripts de [`backend/sql/`](../../backend/sql/) se ejecutan **a mano** en *Database Actions › SQL*, como `ADMIN`, pegando el archivo completo y pulsando **Ejecutar script (F5)**. Ni el backend ni `actualizar.sh` los aplican. El detalle está en:
 
 - [`backend/sql/LEEME.txt`](../../backend/sql/LEEME.txt): qué hace cada script y el orden.
-- [Oracle paso a paso](2026-10-02_oracle_paso_a_paso.md): 002, 003 y 004, `.env`, importar el contenido y crear el primer admin.
-- [Manual de Oracle v3](../reestructuracion/02_manual_oracle.md): 005, 006 y 007, y las herramientas de autor.
+- [Oracle paso a paso](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-02_oracle_paso_a_paso.md): 002, 003 y 004, `.env`, importar el contenido y crear el primer admin.
+- [Manual de Oracle v3](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md): 005, 006 y 007, y las herramientas de autor.
 - [Manual de 008 y 009](../base-de-datos/02_manual_008_009.md): 008, 009, 010 y 011, con la importación de los cursos nuevos.
 
 Orden de scripts (de `LEEME.txt`, sección 2, más 011, que según su nota en el mismo archivo va después de 010):
@@ -183,7 +183,7 @@ python herramientas/contenido.py importar     # solo si cambió el contenido; re
 
 ## 7. Servicio systemd: dos opciones
 
-El servicio evita el error del puerto ocupado ([INC-002](../incidencias/2026-09-27_puerto-ocupado-y-cors.txt), `Errno 98`): un solo uvicorn, que systemd reinicia si se cae. Elegir entre las dos opciones es justo el bloqueo de **T-003**. Nunca dejes las dos habilitadas a la vez: compiten por el puerto 8000.
+El servicio evita el error del puerto ocupado ([INC-002](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-09-27_puerto-ocupado-y-cors.txt), `Errno 98`): un solo uvicorn, que systemd reinicia si se cae. Elegir entre las dos opciones es justo el bloqueo de **T-003**. Nunca dejes las dos habilitadas a la vez: compiten por el puerto 8000.
 
 | | Opción A: adoptar `amatista-backend` | Opción B: instalar `amatista-api.service` |
 |---|---|---|
@@ -298,7 +298,7 @@ Pasos:
 
 ## 9. PWA en Cloudflare Pages
 
-**[Sin ejecutar]** (T-024, depende de T-005). Comandos y estructura en [`frontend/README.md`](../../frontend/README.md); plan del despliegue en el [plan de lanzamiento](../planeacion/2026-10-01_plan_lanzamiento.txt), §6, pasos 9 a 12.
+**[Sin ejecutar]** (T-024, depende de T-005). Comandos y estructura en [`frontend/README.md`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/frontend/README.md); plan del despliegue en el [plan de lanzamiento](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/planeacion/2026-10-01_plan_lanzamiento.txt), §6, pasos 9 a 12.
 
 Configuración del proyecto en Cloudflare Pages (conectado al repositorio de GitHub):
 
@@ -309,7 +309,7 @@ Configuración del proyecto en Cloudflare Pages (conectado al repositorio de Git
 | Comando de compilación | `npm run build` (Pages instala dependencias con el `package-lock.json`) | `frontend/package.json` (`"build": "vite build"`) |
 | Directorio de salida | `dist` | Vite; `frontend/README.md` |
 | Versión de Node | 22 (variable `NODE_VERSION=22`) | La que usa CI (`.github/workflows/ci.yml`) |
-| `VITE_API_URL` | `https://<tu-nombre-de-la-API>`, **sin barra al final** | [`frontend/.env.example`](../../frontend/.env.example) |
+| `VITE_API_URL` | `https://<tu-nombre-de-la-API>`, **sin barra al final** | [`frontend/.env.example`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/frontend/.env.example) |
 
 Detalles que importan:
 
@@ -336,7 +336,7 @@ SMTP_FROM=Amatista <no-responder@tudominio>   # si falta, se usa SMTP_USER
 
 - Si el envío falla, el registro dice `No se pudo enviar el código de ... por SMTP (<Tipo>: <mensaje>)`, sin la contraseña ni el código. Míralo con `journalctl -u <servicio> -n 50`.
 - Cuando el correo llegue, activa `AMATISTA_REQUIERE_CONFIRMACION=1`. La aceptación de T-032 es: «Registro con `AMATISTA_REQUIERE_CONFIRMACION=1` recibe el código por correo».
-- Primer administrador: `AMATISTA_ADMINS=tu-correo` y registrarte con ese correo, o `python herramientas/crear_admin.py tu-correo` en la VM ([Oracle paso a paso, paso 9](2026-10-02_oracle_paso_a_paso.md#paso-9--reiniciar-el-backend-y-crear-el-primer-administrador)).
+- Primer administrador: `AMATISTA_ADMINS=tu-correo` y registrarte con ese correo, o `python herramientas/crear_admin.py tu-correo` en la VM ([Oracle paso a paso, paso 9](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-02_oracle_paso_a_paso.md#paso-9--reiniciar-el-backend-y-crear-el-primer-administrador)).
 - Revisa la política del proveedor de la VM sobre el envío de correo saliente: si el puerto elegido está bloqueado, el registro mostrará un error de conexión o de tiempo de espera.
 
 ## 11. Actualizar a una versión nueva y revertir
@@ -365,7 +365,7 @@ Variables opcionales: `AMATISTA_REPO` (por defecto la carpeta padre del script, 
 Antes de usarlo en la VM actual:
 
 - **Rama local.** Si la VM sigue en `despliegue/v3-2026-10-03` (bitácora §11), el script (desde el motor v3) se cambia solo a `main` cuando todos los commits de esa rama ya están en `origin/main`. Si la rama tiene commits propios, se detiene y los lista: respáldalos (`git branch respaldo-...`) y decide a mano.
-- **No actualices a `main` antes de 007.** El código actual de `main` incluye el motor de prácticas, y `LEEME.txt` (sección 2) y T-055 piden ejecutar 007 en Oracle **antes** de desplegar ese código, después del piloto. Es la regla general del [manual de Oracle §2](../reestructuracion/02_manual_oracle.md#2-el-orden-importa-primero-oracle-después-el-código): primero Oracle, después el código.
+- **No actualices a `main` antes de 007.** El código actual de `main` incluye el motor de prácticas, y `LEEME.txt` (sección 2) y T-055 piden ejecutar 007 en Oracle **antes** de desplegar ese código, después del piloto. Es la regla general del [manual de Oracle §2](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md#2-el-orden-importa-primero-oracle-después-el-código): primero Oracle, después el código.
 - **`sudo`.** El script llama `sudo systemctl restart` y `sudo journalctl`: córrelo como `opc`, que tiene `sudo`.
 
 **Revertir a mano** (por ejemplo, si el problema aparece horas después):
@@ -379,7 +379,7 @@ sudo systemctl restart amatista-backend  # o amatista-api
 sleep 2; curl -s http://127.0.0.1:8000/api/salud
 ```
 
-Revertir el código **no revierte la base**. Los scripts SQL solo agregan cosas, así que el código anterior sigue funcionando sobre una base más nueva ([manual de Oracle §9](../reestructuracion/02_manual_oracle.md#9-volver-atrás)). Lo inverso no funciona: código v3 sobre una base sin 005 da 503 en el catálogo.
+Revertir el código **no revierte la base**. Los scripts SQL solo agregan cosas, así que el código anterior sigue funcionando sobre una base más nueva ([manual de Oracle §9](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md#9-volver-atrás)). Lo inverso no funciona: código v3 sobre una base sin 005 da 503 en el catálogo.
 
 ## 12. Verificación final
 
@@ -411,10 +411,10 @@ Marca cada línea solo si la ejecutaste y viste el resultado (regla del plan, §
 
 | Síntoma | Causa | Qué hacer | Referencia |
 |---|---|---|---|
-| `[Errno 98] ... address already in use` en el 8000 | Otro uvicorn corriendo: uno manual además del servicio, o las dos unidades habilitadas | `sudo ss -ltnp \| grep 8000`; detén el sobrante (`sudo systemctl disable --now <unidad>`). Como último recurso, `sudo fuser -k 8000/tcp` y reinicia el servicio | [INC-002](../incidencias/2026-09-27_puerto-ocupado-y-cors.txt) |
+| `[Errno 98] ... address already in use` en el 8000 | Otro uvicorn corriendo: uno manual además del servicio, o las dos unidades habilitadas | `sudo ss -ltnp \| grep 8000`; detén el sobrante (`sudo systemctl disable --now <unidad>`). Como último recurso, `sudo fuser -k 8000/tcp` y reinicia el servicio | [INC-002](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-09-27_puerto-ocupado-y-cors.txt) |
 | El navegador bloquea por CORS (`No 'Access-Control-Allow-Origin'`) | Origen de la PWA fuera de `CORS_ORIGINS`, o responde un proceso viejo | Agrega el origen exacto (`https://...pages.dev`) y reinicia. Comprueba qué proceso tiene el puerto | INC-002; `main.py:39-48` |
 | La PWA no sincroniza y no hay error | PWA en `https` y `VITE_API_URL` en `http` (o sin definir) | API con HTTPS (§8) y vuelve a compilar con `VITE_API_URL=https://...` | `frontend/src/services/api.js:9-11` |
-| `curl` vacío justo después de `systemctl restart` | Uvicorn todavía arranca y abre el pool TLS con Oracle | Espera unos segundos (`sleep 2`); `actualizar.sh` ya reintenta 30 s | [INC-010](../incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt), incidencia D |
+| `curl` vacío justo después de `systemctl restart` | Uvicorn todavía arranca y abre el pool TLS con Oracle | Espera unos segundos (`sleep 2`); `actualizar.sh` ya reintenta 30 s | [INC-010](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/incidencias/2026-10-02_despliegue-sql-v2.2-en-produccion.txt), incidencia D |
 | `-bash: syntax error near unexpected token 'newline'` o prompt `>` | Se pegaron líneas `VAR=<valor>` en la terminal | `Ctrl+C`; edita el archivo con un editor | INC-010, incidencia B |
 | `git` no encuentra una rama o un archivo nuevo | Remoto antiguo (`MAXIMILIANO1234345/amatista`) | `git remote set-url origin https://github.com/Maximiliano-cabello-mata/amatista.git && git fetch origin --prune` | INC-010, incidencia C |
 | Se reinicia una unidad que no es la activa | La documentación hablaba de `amatista-api` y la VM corre `amatista-backend` | `systemctl list-unit-files 'amatista-*'`; ver §7 | INC-012; bitácora §20, §23.1 |
@@ -422,9 +422,9 @@ Marca cada línea solo si la ejecutaste y viste el resultado (regla del plan, §
 | `Errno 104 Connection reset` | Conexión sin TLS al 1522 | Usa la cadena TLS en `DB_DSN` o deja que el backend arme `tcps://` | `database/conexion.py:43-45` |
 | `ORA-12506` o tiempo de espera | La ACL no incluye la IP desde donde te conectas | Ejecuta en la VM; si cambió la IP pública de la VM, actualiza la ACL | INC-008 |
 | `ORA-28759` | La base volvió a exigir mTLS | Desactiva el requisito mTLS (con ACL) o usa el wallet | `diagnostico_oracle.py:291` |
-| `ORA-00942` con `AMATISTA_APP` | Falta `DB_ESQUEMA=ADMIN` | Agrégalo | [Oracle paso a paso](2026-10-02_oracle_paso_a_paso.md#problemas-frecuentes) |
+| `ORA-00942` con `AMATISTA_APP` | Falta `DB_ESQUEMA=ADMIN` | Agrégalo | [Oracle paso a paso](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-02_oracle_paso_a_paso.md#problemas-frecuentes) |
 | `PLS-00103` al correr un script | Se ejecutó una parte, o con Ctrl+Enter | Pega el archivo completo y usa **F5** | Bitácora §23.2 |
-| Catálogo 503 tras actualizar | Código v3 sobre una base sin 005 (o código del motor sin 007) | Ejecuta el script que falta; el diagnóstico dice cuál | [Manual de Oracle §2](../reestructuracion/02_manual_oracle.md#2-el-orden-importa-primero-oracle-después-el-código) |
+| Catálogo 503 tras actualizar | Código v3 sobre una base sin 005 (o código del motor sin 007) | Ejecuta el script que falta; el diagnóstico dice cuál | [Manual de Oracle §2](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/reestructuracion/02_manual_oracle.md#2-el-orden-importa-primero-oracle-después-el-código) |
 | Caddy no obtiene el certificado | 80/443 cerrados en la lista de seguridad o en `firewalld`, o el DNS no apunta a la VM | Revisa las dos capas (§3, §4) y `journalctl -u caddy` | — |
 | Todos los alumnos chocan con el límite de intentos (429) | Detrás de Caddy sin `AMATISTA_PROXY_CONFIABLE=1`: todos llegan como `127.0.0.1` | Activa la variable (solo con el 8000 cerrado al público) | `api/limites.py:75-83` |
 | `amatista-api` no arranca (`status=200/CHDIR` o `203/EXEC`) | Rutas de `/opt/amatista` o `ProtectHome=true` con el repositorio en `/home` | Ajusta la unidad (§7.2) | `amatista-api.service` |
@@ -432,7 +432,7 @@ Marca cada línea solo si la ejecutaste y viste el resultado (regla del plan, §
 
 ## 14. Qué falta para el piloto
 
-Piloto por invitación: **8 de octubre, 18:00** (plan §1). Decisión de apertura el 7. Pendientes de despliegue según [`tablero/tareas.yml`](../../tablero/tareas.yml):
+Piloto por invitación: **8 de octubre, 18:00** (plan §1). Decisión de apertura el 7. Pendientes de despliegue según [`tablero/tareas.yml`](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/tablero/tareas.yml):
 
 | Tarea | Qué falta | Sección |
 |---|---|---|

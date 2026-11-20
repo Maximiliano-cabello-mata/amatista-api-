@@ -21,13 +21,13 @@ jobs:
     env:
       AMATISTA_SIN_LIMITES: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: amatista-api-
 
       # El motor que la API importa (backend/vecinos.py lo busca en la carpeta hermana).
       # Se coloca exactamente en la revisión fijada en MOTOR_VERSION.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: Maximiliano-cabello-mata/amatista-motor-
           path: amatista-motor-
@@ -43,14 +43,14 @@ jobs:
       # Con el secreto AMATISTA_WEB_TOKEN (un token con lectura de ese repositorio) se
       # clona y corren las pruebas de contrato con las lecciones. Sin él, este paso
       # falla sin detener el trabajo y esas pruebas se saltan con su aviso.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         continue-on-error: true
         with:
           repository: Maximiliano-cabello-mata/amatista-recuperada-20261106
           path: amatista-recuperada-20261106
           token: ${{ secrets.AMATISTA_WEB_TOKEN || github.token }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip

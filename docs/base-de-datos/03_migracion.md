@@ -21,7 +21,7 @@ Actualizado: 4 de octubre de 2026
 Hoy **no** hace falta. Oracle Free Tier da 20 GB, y Amatista usa ~32 KB permanentes por alumno más los eventos con retención (cálculo en el encabezado de `sql/007`). Señales de que llegó el momento:
 
 - `V_AMATISTA_ESPACIO` pasa del 70 % aun con la retención de eventos en 180 días.
-- La ACL de Oracle (solo la IP de la VM) estorba para desplegar la API en otro lado (por ejemplo, Fly.io: ver [despliegue con dominio](../despliegue/2026-10-04_dominio_amatista-3d.md), apéndice).
+- La ACL de Oracle (solo la IP de la VM) estorba para desplegar la API en otro lado (por ejemplo, Fly.io: ver [despliegue con dominio](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/despliegue/2026-10-04_dominio_amatista-3d.md), apéndice).
 - Se necesitan más sesiones simultáneas de las que permite el Free Tier, o réplicas en otra región.
 
 ## 2. A qué base: recomendación
