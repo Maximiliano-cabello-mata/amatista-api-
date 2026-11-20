@@ -35,14 +35,16 @@ sys.path.insert(0, str(BACKEND))
 
 from sqlalchemy import TIMESTAMP, CheckConstraint, MetaData, Table, create_engine, func, inspect, select  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
 from sqlalchemy.schema import CreateIndex, CreateTable  # noqa: E402
 
 from database import modelos  # noqa: E402
-from database.modelos import Base  # noqa: E402
+from database.modelos import Base, EsquemaMigracion, ahora  # noqa: E402
 
 FORMATO = "amatista.export/1"
 LOTE = 500
 DIALECTOS = ("postgresql", "mysql", "sqlite", "oracle")
+CARPETA_SQL = BACKEND / "sql"
 
 # Valores permitidos (los mismos CHECK que crean los scripts de backend/sql/).
 # Así el esquema de otra base rechaza lo mismo que Oracle.
@@ -62,6 +64,7 @@ CHECKS = (
     ("verificaciones_blender", "resultado", modelos.RESULTADOS_VERIFICACION),
     ("addon_vinculos", "estado", modelos.ESTADOS_VINCULO),
     ("progreso_practicas", "autonomia", tuple(e for e in modelos.ESTADOS_HABILIDAD if e != "sin_practicar")),
+    ("esquema_migraciones", "origen", modelos.ORIGENES_MIGRACION),
 )
 
 
@@ -285,6 +288,125 @@ def verificar(motor: Engine, carpeta: Path, manifiesto: Optional[dict] = None) -
     return reales
 
 
+# --- Control de migraciones (016) -----------------------------------------------
+
+
+def scripts_sql(carpeta_sql: Optional[Path] = None) -> List[Dict[str, str]]:
+    """Lista ordenada de scripts numerados (``001_*.sql`` .. ``016_*.sql``) y su SHA-256."""
+    carpeta = carpeta_sql or CARPETA_SQL
+    archivos = sorted(p for p in carpeta.glob("[0-9][0-9][0-9]_*.sql") if p.is_file())
+    return [
+        {
+            "version": p.name[:3],
+            "archivo": p.name,
+            "sha256": _huella(p),
+        }
+        for p in archivos
+    ]
+
+
+def estado_migraciones(motor: Engine, carpeta_sql: Optional[Path] = None) -> dict:
+    """Compara los scripts de ``sql/`` contra la tabla ``ESQUEMA_MIGRACIONES``."""
+    scripts = scripts_sql(carpeta_sql)
+    existentes = {t.lower() for t in inspect(motor).get_table_names()}
+    if "esquema_migraciones" not in existentes:
+        return {
+            "tabla_existe": False,
+            "total_scripts": len(scripts),
+            "aplicadas": [],
+            "pendientes": [s["version"] for s in scripts],
+            "modificadas": [],
+            "extras_en_db": [],
+            "detalle": [
+                {
+                    "version": s["version"],
+                    "archivo": s["archivo"],
+                    "sha256_disco": s["sha256"],
+                    "sha256_db": None,
+                    "origen": None,
+                    "estado": "pendiente",
+                }
+                for s in scripts
+            ],
+        }
+
+    with Session(motor) as sesion:
+        filas = sesion.scalars(select(EsquemaMigracion).order_by(EsquemaMigracion.version)).all()
+    en_db = {fila.version: fila for fila in filas}
+
+    aplicadas: List[str] = []
+    pendientes: List[str] = []
+    modificadas: List[str] = []
+    detalle: List[Dict[str, Optional[str]]] = []
+
+    for script in scripts:
+        ver = script["version"]
+        fila = en_db.get(ver)
+        if fila is None:
+            estado = "pendiente"
+            pendientes.append(ver)
+        elif fila.sha256 != script["sha256"]:
+            estado = "modificada"
+            modificadas.append(ver)
+        else:
+            estado = "aplicada"
+            aplicadas.append(ver)
+        detalle.append(
+            {
+                "version": ver,
+                "archivo": script["archivo"],
+                "sha256_disco": script["sha256"],
+                "sha256_db": fila.sha256 if fila else None,
+                "origen": fila.origen if fila else None,
+                "estado": estado,
+            }
+        )
+
+    versiones_disco = {s["version"] for s in scripts}
+    extras = sorted(ver for ver in en_db if ver not in versiones_disco)
+    return {
+        "tabla_existe": True,
+        "total_scripts": len(scripts),
+        "aplicadas": aplicadas,
+        "pendientes": pendientes,
+        "modificadas": modificadas,
+        "extras_en_db": extras,
+        "detalle": detalle,
+    }
+
+
+def registrar_linea_base(
+    motor: Engine,
+    carpeta_sql: Optional[Path] = None,
+    notas: str = "Registro inicial en produccion",
+) -> List[str]:
+    """Registra de forma idempotente los scripts aún ausentes con origen ``linea_base``."""
+    scripts = scripts_sql(carpeta_sql)
+    registradas: List[str] = []
+    marca = ahora()
+    nota_corta = notas[:255] if notas else None
+
+    with Session(motor) as sesion:
+        existentes = set(sesion.scalars(select(EsquemaMigracion.version)).all())
+        for script in scripts:
+            if script["version"] in existentes:
+                continue
+            sesion.add(
+                EsquemaMigracion(
+                    version=script["version"],
+                    archivo=script["archivo"],
+                    sha256=script["sha256"],
+                    origen="linea_base",
+                    notas=nota_corta,
+                    aplicada_en=marca,
+                )
+            )
+            registradas.append(script["version"])
+        if registradas:
+            sesion.commit()
+    return registradas
+
+
 # --- Terminal -------------------------------------------------------------------
 
 
@@ -317,6 +439,11 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
     p_ver.add_argument("carpeta", type=Path)
     p_ver.add_argument("--url", required=True)
 
+    p_est = comandos.add_parser("estado", help="compara sql/ contra ESQUEMA_MIGRACIONES")
+    p_est.add_argument("--url", help="URL de SQLAlchemy (por defecto, la configuración actual)")
+    p_est.add_argument("--json", action="store_true", help="imprime el estado en formato JSON")
+    p_est.add_argument("--estricto", action="store_true", help="sale con código 1 si falta la tabla o hay pendientes/modificadas")
+
     args = parser.parse_args(argumentos)
     try:
         if args.comando == "ddl":
@@ -335,9 +462,36 @@ def main(argumentos: Optional[Sequence[str]] = None) -> int:
         elif args.comando == "importar":
             filas = importar(_motor(args.url), args.carpeta, args.crear_tablas)
             print(f"Importadas {sum(filas.values())} filas en {len(filas)} tablas. Conteos verificados.")
-        else:
+        elif args.comando == "verificar":
             filas = verificar(_motor(args.url), args.carpeta)
             print(f"OK: {len(filas)} tablas con las mismas filas que el respaldo.")
+        else:
+            motor = _motor(args.url)
+            try:
+                resumen = estado_migraciones(motor)
+            finally:
+                if args.url:
+                    motor.dispose()
+            if args.json:
+                print(json.dumps(resumen, ensure_ascii=False, indent=2))
+            else:
+                if not resumen["tabla_existe"]:
+                    print("ESQUEMA_MIGRACIONES no existe aún; pendientes:", ", ".join(resumen["pendientes"]))
+                else:
+                    print(
+                        f"Migraciones: {len(resumen['aplicadas'])}/{resumen['total_scripts']} aplicadas | "
+                        f"pendientes={len(resumen['pendientes'])} | modificadas={len(resumen['modificadas'])}"
+                    )
+                    if resumen["pendientes"]:
+                        print("  Pendientes:", ", ".join(resumen["pendientes"]))
+                    if resumen["modificadas"]:
+                        print("  Modificadas (SHA distinto):", ", ".join(resumen["modificadas"]))
+                    if resumen["extras_en_db"]:
+                        print("  Solo en DB:", ", ".join(resumen["extras_en_db"]))
+            if args.estricto and (
+                not resumen["tabla_existe"] or resumen["pendientes"] or resumen["modificadas"]
+            ):
+                return 1
     except ErrorMigracion as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

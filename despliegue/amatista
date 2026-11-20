@@ -8,7 +8,8 @@
 #   amatista buscar <id>         Todo lo registrado de una petición (el X-Peticion-Id de un error)
 #   amatista errores [horas]     Errores de las últimas horas (por defecto 24), contados por API y operación
 #   amatista diagnostico         Compara el esquema de Oracle con el que espera el código (solo lee)
-#   amatista respaldo            Copia Git de los dos repositorios y exporta la base a ~/respaldos
+#   amatista migraciones         Compara sql/ contra ESQUEMA_MIGRACIONES en Oracle (solo lee)
+#   amatista respaldo            Copia Git y exporta la base a ~/respaldos con prueba de restauración
 #   amatista admin <correo> ...  Da rol de administrador o profesor (herramientas/crear_admin.py)
 #   amatista caddy               Valida /etc/caddy/Caddyfile y lo recarga sin cortar conexiones
 #   amatista reiniciar           Reinicia la API y comprueba que responde
@@ -168,6 +169,8 @@ cmd_errores() {
 
 cmd_diagnostico() { herramienta diagnostico_oracle.py "$@"; }
 
+cmd_migraciones() { herramienta herramientas/migrar.py estado "$@"; }
+
 cmd_admin() {
   [ $# -ge 1 ] || fallar "uso: amatista admin correo@dominio.com [--crear --nombre \"Nombre\"] [--rol profesor]"
   herramienta herramientas/crear_admin.py "$@"
@@ -186,7 +189,9 @@ cmd_respaldo() {
   fi
   paso "Base de datos (solo lee; formato amatista.export/1)"
   herramienta herramientas/migrar.py exportar "$destino/base"
-  paso "Respaldo guardado en $destino"
+  paso "Prueba de restauración en SQLite temporal"
+  herramienta herramientas/respaldar_y_probar.py --solo-verificar "$destino/base"
+  paso "Respaldo verificado en $destino"
   du -sh "$destino" | sed 's/^/  /'
   echo "  Contiene datos de personas: cópialo fuera de la VM por scp y no lo subas a un repositorio."
 }
@@ -293,6 +298,7 @@ case "$orden" in
   buscar) cmd_buscar "$@" ;;
   errores) cmd_errores "$@" ;;
   diagnostico) cmd_diagnostico "$@" ;;
+  migraciones) cmd_migraciones "$@" ;;
   respaldo) cmd_respaldo "$@" ;;
   admin) cmd_admin "$@" ;;
   caddy) cmd_caddy "$@" ;;

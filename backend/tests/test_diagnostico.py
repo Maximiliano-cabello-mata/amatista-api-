@@ -75,6 +75,7 @@ def test_esperado_incluye_las_tablas_completas():
         "ASIGNACIONES",
         "ENTREGAS",
         "SISTEMA_LOTES",
+        "ESQUEMA_MIGRACIONES",
     }
     assert ESPERADO["LECCIONES"]["CONTENIDO"] == "CLOB"
     assert ESPERADO["PRACTICAS"]["DEFINICION"] == "CLOB"
@@ -261,7 +262,16 @@ def test_base_sin_013_ni_014_pide_los_dos_en_orden():
 
 def test_base_con_014_pide_solo_015():
     """Todo hasta 014: falta solo la tabla SISTEMA_LOTES de MORAL."""
-    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_015}
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_015 + diagnostico_oracle.TABLAS_016}
     recomendacion = " ".join(solucion(real))
     assert "015_moral_lotes.sql" in recomendacion
+    assert "016_migraciones.sql" in recomendacion
     assert "014_" not in recomendacion and "NO ejecutes 001" in recomendacion
+
+
+def test_base_con_015_pide_solo_016():
+    """Todo hasta 015: falta solo ESQUEMA_MIGRACIONES (016)."""
+    real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items() if tabla not in diagnostico_oracle.TABLAS_016}
+    recomendacion = " ".join(solucion(real))
+    assert "016_migraciones.sql" in recomendacion
+    assert "015_" not in recomendacion and "NO ejecutes 001" in recomendacion

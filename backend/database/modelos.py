@@ -43,6 +43,8 @@ RESULTADOS_VERIFICACION = ("verificada", "con_diferencias", "falla")
 ESTADOS_VINCULO = ("pendiente", "listo", "canjeado")
 # Quién subió la versión vigente de una práctica.
 ORIGENES_PRACTICA = ("repositorio", "addon", "panel")
+# Cómo quedó registrada una migración SQL en Oracle.
+ORIGENES_MIGRACION = ("aplicada", "linea_base", "manual")
 # Buzón del creador (sql/013): de qué trata una conversación y en qué va.
 CATEGORIAS_SUGERENCIA = ("error", "idea", "contenido", "otra")
 ESTADOS_SUGERENCIA = ("abierta", "respondida", "resuelta")
@@ -744,3 +746,19 @@ class SistemaLote(Base):
     contrato_ok: Mapped[int] = mapped_column(Integer, default=0)
     manifiesto: Mapped[Optional[str]] = mapped_column(TextoJSON)
     registrado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
+
+
+# --- Control de migraciones (016) ---------------------------------------------
+
+
+class EsquemaMigracion(Base):
+    """Registro de scripts SQL (001–016+) aplicados en la base de datos."""
+
+    __tablename__ = "esquema_migraciones"
+
+    version: Mapped[str] = mapped_column(String(10), primary_key=True)
+    archivo: Mapped[str] = mapped_column(String(120))
+    sha256: Mapped[str] = mapped_column(String(64))
+    origen: Mapped[str] = mapped_column(String(40), default="aplicada")
+    notas: Mapped[Optional[str]] = mapped_column(String(255))
+    aplicada_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)

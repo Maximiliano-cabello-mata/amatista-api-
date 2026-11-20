@@ -1,0 +1,12 @@
+[Unit]
+Description=Respaldo diario verificado de Amatista (Oracle JSONL + prueba de restauracion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=opc
+Group=opc
+WorkingDirectory=/home/opc/amatista-api-/backend
+EnvironmentFile=/etc/amatista/amatista-api.env
+ExecStart=/home/opc/amatista-api-/backend/venv/bin/python -m herramientas.respaldar_y_probar --destino /home/opc/respaldos --mantener 14

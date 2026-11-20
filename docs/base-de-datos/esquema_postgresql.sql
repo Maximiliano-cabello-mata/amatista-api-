@@ -22,6 +22,17 @@ CREATE TABLE cursos (
 	CONSTRAINT ck_cursos_estado CHECK (estado IN ('borrador', 'publicado', 'archivado'))
 );
 
+CREATE TABLE esquema_migraciones (
+	version VARCHAR(10) NOT NULL, 
+	archivo VARCHAR(120) NOT NULL, 
+	sha256 VARCHAR(64) NOT NULL, 
+	origen VARCHAR(40) NOT NULL, 
+	notas VARCHAR(255), 
+	aplicada_en TIMESTAMP WITHOUT TIME ZONE NOT NULL, 
+	PRIMARY KEY (version), 
+	CONSTRAINT ck_esquema_migraciones_origen CHECK (origen IN ('aplicada', 'linea_base', 'manual'))
+);
+
 CREATE TABLE sistema_lotes (
 	id VARCHAR(64) NOT NULL, 
 	lote VARCHAR(40) NOT NULL, 
