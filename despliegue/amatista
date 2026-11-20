@@ -225,7 +225,7 @@ cmd_instalar() {
 
   paso "Entorno de Python"
   [ -x "$PY" ] || python3 -m venv "$BACKEND/venv"
-  "$BACKEND/venv/bin/pip" install -q -r "$BACKEND/requirements-dev.txt"
+  "$BACKEND/venv/bin/pip" install -q -r "$BACKEND/requirements.lock"
   permitir_ejecucion
 
   paso "Variables"

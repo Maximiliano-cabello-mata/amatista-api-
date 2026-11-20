@@ -85,7 +85,11 @@ volver() {
     printf '==> Motor volviendo a %s\n' "${motor_antes:0:7}" >&2
     git -C "$MOTOR" checkout -q "$motor_antes" || true
   fi
-  "$REPO/backend/venv/bin/pip" install -q -r "$REPO/backend/requirements.txt" || true
+  if [ -f "$REPO/backend/requirements.lock" ]; then
+    "$REPO/backend/venv/bin/pip" install -q -r "$REPO/backend/requirements.lock" || true
+  else
+    "$REPO/backend/venv/bin/pip" install -q -r "$REPO/backend/requirements.txt" || true
+  fi
 }
 
 paso "Descargando $RAMA"
@@ -139,7 +143,7 @@ if [ ! -x venv/bin/python ]; then
   # SELinux: systemd solo ejecuta el entorno si sus ejecutables son bin_t (ver despliegue/amatista).
   if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then sudo chcon -R -t bin_t venv/bin || true; fi
 fi
-venv/bin/pip install -q -r requirements-dev.txt \
+venv/bin/pip install -q -r requirements.lock \
   || { volver; fallar "no se pudieron instalar las dependencias; el servicio no se reinició."; }
 
 paso "Pruebas (SQLite temporal, no tocan Oracle)"

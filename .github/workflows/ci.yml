@@ -58,7 +58,7 @@ jobs:
 
       - name: Instalar dependencias
         working-directory: amatista-api-/backend
-        run: pip install -r requirements-dev.txt pyyaml Pillow
+        run: pip install -r requirements.lock pyyaml Pillow
 
       - name: Pruebas de la API
         working-directory: amatista-api-/backend

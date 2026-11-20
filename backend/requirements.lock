@@ -1,38 +1,37 @@
-# Versiones exactas con las que pasaron las 446 pruebas del backend
-# (3 de noviembre de 2026, Python 3.12.10, Windows).
-# Referencia para reproducir un entorno que se sabe que funciona:
-#   pip install -r requirements.lock
-# El despliegue y CI siguen usando requirements.txt / requirements-dev.txt.
-# Si una actualización rompe algo, compara contra este archivo.
+# Versiones exactas congeladas desde el entorno de producción de la VM
+# (19 de noviembre de 2026, Python 3.9.25, compatibles con Python 3.12 en CI).
+# Fuente única usada en despliegue (despliegue/actualizar.sh, despliegue/amatista)
+# y en CI (.github/workflows/ci.yml) para evitar deriva de versiones mayores.
 annotated-doc==0.0.5
-annotated-types==0.8.0
-anyio==4.16.0
+annotated-types==0.7.0
+anyio==4.12.1
 certifi==2026.10.23
-cffi==2.1.1
-click==8.5.0
+cffi==2.0.0
+click==8.1.8
 cryptography==50.0.2
-fastapi==0.162.0
+exceptiongroup==1.3.1; python_version < "3.11"
+fastapi==0.128.8
+greenlet==3.2.5
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.20
-iniconfig==2.3.1
-opentelemetry-api==1.45.2
-oracledb==26.1.0
+iniconfig==2.1.0
+oracledb==4.0.2
 packaging==26.3
-pluggy==1.7.0
-pycparser==3.12
-pydantic==2.14.2
-pydantic_core==2.50.2
+pluggy==1.6.0
+pycparser==2.23
+pydantic==2.13.5
+pydantic_core==2.46.5
 Pygments==2.21.0
-pytest==9.2.0
-python-dotenv==1.2.4
-PyYAML==6.0.3
-sentry-sdk==2.73.0
-SQLAlchemy==2.1.6
-starlette==1.10.0
-typing-inspection==0.4.4
+pytest==8.4.2
+python-dotenv==1.2.1
+sentry-sdk==2.74.0
+SQLAlchemy==2.0.57
+starlette==0.49.3
+tomli==2.5.0; python_version < "3.11"
+typing-inspection==0.4.2
 typing_extensions==4.16.0
 tzdata==2026.6
-urllib3==2.8.0
-uvicorn==0.54.0
+urllib3==2.6.3
+uvicorn==0.39.0
