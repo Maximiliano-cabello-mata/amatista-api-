@@ -26,6 +26,10 @@ Un proceso, cinco API. Cada una vive en su paquete y firma sus errores con su no
 
 Un error dice de dónde sale: `{"detail": "...", "error": {"api": "motor", "operacion": "leer_practica", "codigo": "motor.leer_practica.no_encontrado", "estado": 404}}`, y toda respuesta lleva `X-Peticion-Id`.
 
+## Lugar en la base del proyecto
+
+Es la **API de Amatista**: la aduana de la frontera de privacidad. Los datos personales se quedan aquí; hacia G7B solo salen mediciones agregadas y con permiso, y desde Geoda solo entran recomendaciones. Piezas, flujo y prioridades: [base oficial](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/BASE.md). Instrucciones para agentes: [`AGENTS.md`](AGENTS.md).
+
 ## Responsabilidad
 
 Este repositorio decide **qué se guarda y quién puede verlo**. No decide si una práctica está bien hecha: para eso importa el motor.
