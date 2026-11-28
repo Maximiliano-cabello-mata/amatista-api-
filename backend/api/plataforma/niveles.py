@@ -42,6 +42,7 @@ def id_nivel(curso_id: str, numero: int, rama: Optional[str]) -> str:
 
 
 def obtener_nivel(db: Session, nivel_id: str) -> Nivel:
+    """Nivel por id o 404 con mensaje para el panel."""
     nivel = db.get(Nivel, nivel_id)
     if nivel is None:
         raise HTTPException(status_code=404, detail=f"No existe el nivel «{nivel_id}».")
@@ -49,6 +50,7 @@ def obtener_nivel(db: Session, nivel_id: str) -> Nivel:
 
 
 class NivelNuevo(BaseModel):
+    """Cuerpo de POST /api/contenido/niveles. `rama` solo se permite en el nivel 5."""
     curso_id: str = Field(min_length=1, max_length=MAX_ID)
     numero: int = Field(ge=1, le=5)
     rama: Optional[str] = Field(default=None, min_length=1, max_length=30, pattern=PATRON_RAMA)
@@ -59,6 +61,7 @@ class NivelNuevo(BaseModel):
 
 
 class CambiosNivel(BaseModel):
+    """Cuerpo de PUT /api/contenido/niveles/{nivel_id}: solo se aplican los campos enviados."""
     titulo: Optional[str] = Field(default=None, min_length=1, max_length=100)
     perfil: Optional[str] = Field(default=None, max_length=500)
     proyecto: Optional[str] = Field(default=None, max_length=300)
@@ -68,6 +71,11 @@ class CambiosNivel(BaseModel):
 
 @router.get("/niveles")
 def listar_niveles(curso_id: Optional[str] = None, db: Session = Depends(obtener_db), _: Usuario = Depends(lector)):
+    """GET /api/contenido/niveles?curso_id=. Profesor o admin.
+
+    Respuesta: {niveles: [...]} en todos los estados (también borradores),
+    filtrados por curso si se indica. Errores: 401/403.
+    """
     consulta = select(Nivel).order_by(Nivel.curso_id, Nivel.numero, Nivel.rama, Nivel.id)
     if curso_id:
         consulta = consulta.where(Nivel.curso_id == curso_id)
@@ -76,6 +84,12 @@ def listar_niveles(curso_id: Optional[str] = None, db: Session = Depends(obtener
 
 @router.post("/niveles", status_code=201)
 def crear_nivel(cuerpo: NivelNuevo, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/niveles. Solo admin. Responde 201.
+
+    Crea el nivel en borrador con id derivado (blender-n1, blender-n5-web).
+    Respuesta: nivel_meta. Errores: 401/403; 404 curso inexistente;
+    422 rama en un nivel distinto del 5 o id demasiado largo; 409 nivel repetido.
+    """
     curso = obtener_curso(db, cuerpo.curso_id)
     if cuerpo.rama and cuerpo.numero != 5:
         raise HTTPException(status_code=422, detail="Solo el nivel 5 tiene ramas (web, animacion, producto...).")
@@ -97,6 +111,11 @@ def crear_nivel(cuerpo: NivelNuevo, db: Session = Depends(obtener_db), _: Usuari
 
 @router.put("/niveles/{nivel_id}")
 def editar_nivel(nivel_id: str, cuerpo: CambiosNivel, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """PUT /api/contenido/niveles/{nivel_id}. Solo admin.
+
+    Cuerpo: CambiosNivel (titulo y estado no se pueden vaciar con null).
+    Respuesta: nivel_meta. Errores: 401/403; 404 nivel inexistente.
+    """
     nivel = obtener_nivel(db, nivel_id)
     for campo, valor in cuerpo.model_dump(exclude_unset=True).items():
         if campo in ("titulo", "estado") and valor is None:
@@ -125,6 +144,11 @@ def sembrar_niveles_blender(db: Session) -> List[str]:
 
 @router.post("/niveles/sembrar")
 def sembrar(db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/niveles/sembrar. Solo admin.
+
+    Crea en borrador los niveles de Blender de la propuesta que falten.
+    Respuesta: {creados: [ids]}. Errores: 401/403; 409 si no existe el curso «blender».
+    """
     if db.get(Curso, "blender") is None:
         raise HTTPException(status_code=409, detail="Falta el curso «blender»: importa antes el catálogo.")
     creados = sembrar_niveles_blender(db)
@@ -163,6 +187,7 @@ def mapa(curso_id: str, db: Session = Depends(obtener_db), _: Usuario = Depends(
         )
 
     def modulo_mapa(modulo: Modulo) -> dict:
+        """Resumen de un módulo con sus lecciones y cuántas tienen la ficha completa."""
         suyas = lecciones[modulo.id]
         return {
             "id": modulo.id,

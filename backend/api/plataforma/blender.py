@@ -44,6 +44,7 @@ def clave_version(version: str) -> Tuple[int, ...]:
 
 
 def version_meta(fila: VersionBlender) -> dict:
+    """Serializa una fila de VERSIONES_BLENDER al JSON que consumen la PWA y el add-on."""
     return {
         "version": fila.version,
         "categoria": fila.categoria,
@@ -55,6 +56,7 @@ def version_meta(fila: VersionBlender) -> dict:
 
 
 def verificacion_meta(fila: VerificacionBlender) -> dict:
+    """Serializa una fila de VERIFICACIONES_BLENDER (prueba de una lección en una versión y sistema)."""
     return {
         "id": fila.id,
         "curso_id": fila.curso_id,
@@ -73,12 +75,18 @@ def verificacion_meta(fila: VerificacionBlender) -> dict:
 
 @router.get("/versiones")
 def versiones(db: Session = Depends(obtener_db)):
+    """GET /api/blender/versiones. Público.
+
+    Respuesta: {principal, versiones: [...]} ordenadas de la más nueva a la más
+    vieja; `principal` es None mientras no se haya decidido.
+    """
     filas = sorted(db.scalars(select(VersionBlender)), key=lambda f: clave_version(f.version), reverse=True)
     principal = next((f.version for f in filas if f.categoria == "principal"), None)
     return {"principal": principal, "versiones": [version_meta(f) for f in filas]}
 
 
 class CambiosVersion(BaseModel):
+    """Cuerpo de PUT /api/blender/versiones/{version}: categoría, LTS, fin de soporte y notas."""
     categoria: Categoria = "sin_verificar"
     es_lts: bool = False
     soporte_hasta: Optional[date] = None
@@ -89,6 +97,14 @@ class CambiosVersion(BaseModel):
 def guardar_version(
     version: str, cuerpo: CambiosVersion, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)
 ):
+    """PUT /api/blender/versiones/{version}. Solo admin.
+
+    Crea o actualiza la versión. Si se marca como "principal", la principal
+    anterior pasa a "compatible" (solo puede haber una).
+    Cuerpo: CambiosVersion. Respuesta: version_meta de la fila.
+    Errores: 401/403 sin sesión o sin rol; 422 versión con formato distinto de 4.2 o 4.2.3;
+    error de base de datos al confirmar.
+    """
     if len(version) > 20 or not PATRON_VERSION.match(version):
         raise HTTPException(status_code=422, detail="La versión debe ser como 4.2 o 4.2.3.")
     momento = ahora()
@@ -112,6 +128,7 @@ def guardar_version(
 
 
 class VerificacionNueva(BaseModel):
+    """Cuerpo de POST /api/blender/verificaciones: lección, versión, sistema y resultado de la prueba."""
     curso_id: str = Field(min_length=1, max_length=50)
     leccion_id: str = Field(min_length=1, max_length=50)
     version_blender: str = Field(min_length=1, max_length=20)
@@ -126,6 +143,13 @@ class VerificacionNueva(BaseModel):
 def registrar_verificacion(
     cuerpo: VerificacionNueva, db: Session = Depends(obtener_db), usuario: Usuario = Depends(lector)
 ):
+    """POST /api/blender/verificaciones. Profesor o admin. Responde 201.
+
+    Anota que una lección se probó en una versión de Blender y un sistema;
+    guarda la versión de la lección y quién la probó.
+    Respuesta: verificacion_meta. Errores: 401/403; 404 si la lección no existe;
+    409 si la versión de Blender aún no está registrada.
+    """
     leccion = obtener_leccion(db, cuerpo.curso_id, cuerpo.leccion_id)
     if db.get(VersionBlender, cuerpo.version_blender) is None:
         raise HTTPException(

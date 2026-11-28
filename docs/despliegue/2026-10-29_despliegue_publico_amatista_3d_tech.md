@@ -6,6 +6,7 @@
 - **API pública:** https://api.amatista-3d.tech
 - **Estado API:** https://api.amatista-3d.tech/api/salud
 - **Estado del add-on:** https://api.amatista-3d.tech/api/addon/v1/estado
+<!-- [REVISION-ROTO] Repositorio inexistente (404) y dominio amatista-3d.tech sin DNS desde nov 2026; ver 2026-11-10_dominio_amatista_3dt_tech.md. -->
 - **Repositorio:** https://github.com/Maximiliano-cabello-mata/amatista
 
 > **Importante:** el antiguo dominio `amatista-3d.me`, Cloudflare Pages y GitHub Pages aparecen en documentos *históricos* del repositorio; **no** son el dominio ni el alojamiento vigentes de esta instalación. El despliegue vigente usa **Cloudflare Workers con assets estáticos**. No reescribir la historia: usar este documento para operación actual.

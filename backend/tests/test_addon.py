@@ -34,6 +34,7 @@ def escena_mesa(guardada=True, patas=4, sin_roles=False):
     """Foto de la escena como la manda el add-on (snapshot.scene_to_dict)."""
 
     def obj(nombre, rol, ubicacion, medidas):
+        """Objeto de malla de la escena con su caja envolvente calculada a partir de ubicación y medidas."""
         caja = [[u - m / 2 for u, m in zip(ubicacion, medidas)], [u + m / 2 for u, m in zip(ubicacion, medidas)]]
         return SceneObject(nombre, "MESH", roles=() if sin_roles else (rol,), location=ubicacion,
                            dimensions=medidas, bbox_min=tuple(caja[0]), bbox_max=tuple(caja[1]))
@@ -60,6 +61,7 @@ def sembrar(monkeypatch, tmp_path):
     monkeypatch.setattr(motor, "CARPETA_PRACTICAS", tmp_path / "blender")
 
     def hacer(cliente, admin):
+        """Crea el curso «blender» si falta y registra/publica las prácticas del repositorio vía la API."""
         with Session(conexion.motor()) as db:
             if db.get(Curso, "blender") is None:
                 db.add(Curso(id="blender", titulo="Blender", estado="publicado"))
@@ -76,6 +78,7 @@ def sembrar(monkeypatch, tmp_path):
 
 
 def vincular(cliente, cabeceras_alumno, dispositivo="blender-addon 0.2.0 · Blender 5.1.1 · Linux"):
+    """Vincula un Blender a la cuenta (pide código, lo confirma escrito en minúsculas y lo canjea) y devuelve sus cabeceras."""
     pedido = cliente.post(f"{API}/vinculos", json={"dispositivo": dispositivo}).json()
     confirmado = cliente.post(f"{API}/vinculos/confirmar", json={"codigo": pedido["codigo"].lower().replace("-", " ")},
                               headers=cabeceras_alumno)
@@ -89,6 +92,7 @@ def vincular(cliente, cabeceras_alumno, dispositivo="blender-addon 0.2.0 · Blen
 
 
 def test_vinculo_completo_y_de_un_solo_uso(cliente, crear_cuenta):
+    """Comprueba el vínculo completo add-on ↔ cuenta y que el vínculo solo se canjea una vez."""
     alumno_id, cabeceras = crear_cuenta()
     pedido = cliente.post(f"{API}/vinculos", json={"dispositivo": "Blender 5.1.1"}, headers={"Origin": "http://localhost:5173"})
     assert pedido.status_code == 201
@@ -121,6 +125,7 @@ def test_vinculo_completo_y_de_un_solo_uso(cliente, crear_cuenta):
 
 
 def test_codigo_invalido_vencido_o_de_otra_cuenta(cliente, crear_cuenta):
+    """Comprueba que códigos inexistentes o vencidos dan 404 y uno ya confirmado por otra cuenta da 409."""
     _, uno = crear_cuenta()
     _, otro = crear_cuenta()
     assert cliente.post(f"{API}/vinculos/confirmar", json={"codigo": "ZZZZ-ZZZZ"}, headers=uno).status_code == 404
@@ -136,6 +141,7 @@ def test_codigo_invalido_vencido_o_de_otra_cuenta(cliente, crear_cuenta):
 
 
 def test_vinculos_viejos_se_purgan(cliente):
+    """Comprueba que los vínculos vencidos hace más de un día se borran al crear uno nuevo."""
     datos = cliente.post(f"{API}/vinculos", json={}).json()
     with Session(conexion.motor()) as db:
         db.get(AddonVinculo, datos["vinculo_id"]).expira_en = ahora() - timedelta(days=2)
@@ -149,6 +155,7 @@ def test_vinculos_viejos_se_purgan(cliente):
 
 
 def test_sincronizar_publica_y_los_alumnos_ven_solo_lo_publicado(cliente, crear_cuenta, sembrar):
+    """Comprueba que sincronizar publica las prácticas y que los alumnos solo ven las publicadas."""
     _, admin = crear_cuenta(rol="admin")
     _, profesor = crear_cuenta(rol="profesor")
     _, alumno = crear_cuenta()
@@ -190,6 +197,7 @@ def test_sincronizar_publica_y_los_alumnos_ven_solo_lo_publicado(cliente, crear_
 
 
 def test_subir_practica_invalida_o_sin_permiso(cliente, crear_cuenta):
+    """Comprueba que un alumno no sube prácticas (403) y que una práctica que no compila da 422 con errores."""
     _, profesor = crear_cuenta(rol="profesor")
     _, alumno = crear_cuenta()
     assert cliente.post(f"{API}/practicas", json={"definicion": MESA}, headers=alumno).status_code == 403
@@ -208,6 +216,7 @@ def test_subir_practica_invalida_o_sin_permiso(cliente, crear_cuenta):
 
 
 def test_sincronizar_el_plan_de_estudios_v3(cliente, crear_cuenta):
+    """Comprueba que sincronizar registra sin errores todas las prácticas del plan v3."""
     _, admin = crear_cuenta(rol="admin")
     resumen = cliente.post(f"{API}/practicas/sincronizar", headers=admin).json()
     assert resumen["errores"] == []
@@ -222,6 +231,7 @@ def test_sincronizar_el_plan_de_estudios_v3(cliente, crear_cuenta):
 
 
 def test_intentos_evaluados_por_el_servidor(cliente, crear_cuenta, sembrar):
+    """Comprueba que el servidor evalúa la escena, guarda el mejor progreso, marca la lección y anota el evento."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, alumno = crear_cuenta()
     sembrar(cliente, admin)
@@ -273,6 +283,7 @@ def test_intentos_evaluados_por_el_servidor(cliente, crear_cuenta, sembrar):
 
 
 def test_autonomia_de_la_habilidad_tiene_tope(cliente, crear_cuenta, sembrar):
+    """Comprueba que completar una práctica sube la habilidad como mucho a «con_pistas»."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, alumno = crear_cuenta()
     sembrar(cliente, admin)
@@ -290,6 +301,7 @@ def test_autonomia_de_la_habilidad_tiene_tope(cliente, crear_cuenta, sembrar):
     {"objetos": [{"n": str(i)} for i in range(501)]},
 ])
 def test_intento_con_escena_invalida(cliente, crear_cuenta, sembrar, escena):
+    """Comprueba que una escena inválida responde 422."""
     _, admin = crear_cuenta(rol="admin")
     _, alumno = crear_cuenta()
     sembrar(cliente, admin)
@@ -298,6 +310,7 @@ def test_intento_con_escena_invalida(cliente, crear_cuenta, sembrar, escena):
 
 
 def test_intento_sin_sesion_o_practica_en_borrador(cliente, crear_cuenta):
+    """Comprueba que sin sesión el intento da 401 y que un alumno no ve una práctica en borrador (404)."""
     _, profesor = crear_cuenta(rol="profesor")
     _, alumno = crear_cuenta()
     cliente.post(f"{API}/practicas", json={"definicion": MESA}, headers=profesor)
@@ -350,6 +363,7 @@ def test_la_descarga_es_amatista_motor_6_con_todo_lo_nuevo(cliente):
 
 
 def test_descarga_publica_y_personal(cliente, crear_cuenta, monkeypatch):
+    """Comprueba la descarga pública (sin vínculo, caché pública) y la personal (vínculo de un solo uso, sin caché)."""
     monkeypatch.setenv("AMATISTA_URL_API", "https://api.amatista.test")
     monkeypatch.setenv("AMATISTA_URL_PWA", "https://amatista.test")
     alumno_id, alumno = crear_cuenta()
@@ -374,6 +388,7 @@ def test_descarga_publica_y_personal(cliente, crear_cuenta, monkeypatch):
 
 
 def test_repositorio_de_extensiones(cliente, monkeypatch):
+    """Comprueba que el índice del repositorio de extensiones apunta a extension.zip del servidor."""
     monkeypatch.setenv("AMATISTA_URL_API", "https://api.amatista.test")
     indice = cliente.get(f"{API}/extensiones/index.json").json()
     entrada = indice["data"][0]
@@ -385,6 +400,7 @@ def test_repositorio_de_extensiones(cliente, monkeypatch):
 
 
 def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
+    """Comprueba que al importar el plan v3 cada práctica queda enlazada con la lección que la usa."""
     from api.plataforma.contenido import asegurar_cursos_base, importar_modulo
 
     _, admin = crear_cuenta(rol="admin")
@@ -405,6 +421,7 @@ def test_el_plan_v3_enlaza_cada_practica_con_su_leccion(cliente, crear_cuenta):
 
 
 def test_importar_el_modulo_2_enlaza_la_practica_con_su_leccion(cliente, crear_cuenta, sembrar):
+    """Comprueba que importar el módulo 2 enlaza su práctica con la lección correspondiente."""
     from api.plataforma.contenido import importar_modulo
     from api.plataforma.niveles import sembrar_niveles_blender
 
@@ -444,6 +461,7 @@ def test_el_alumno_no_se_evalua_con_un_borrador(cliente, crear_cuenta, sembrar):
 
 
 def test_desconectar_no_acepta_comodines(cliente, crear_cuenta):
+    """Comprueba que DELETE /dispositivos no acepta comodines LIKE (_ o %) en el id."""
     _, alumno = crear_cuenta()
     uno, _ = vincular(cliente, alumno)
     otro, _ = vincular(cliente, alumno)

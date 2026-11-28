@@ -32,6 +32,7 @@ from seguridad import hash_password, normalizar_email  # noqa: E402
 
 
 def pedir_password() -> Optional[str]:
+    """Pide en la terminal (sin eco) una contraseña nueva válida y su confirmación; hasta 3 intentos, None si no se logra."""
     for _ in range(3):
         password = getpass.getpass("Contraseña nueva: ")
         problema = problema_password(password)
@@ -46,6 +47,11 @@ def pedir_password() -> Optional[str]:
 
 
 def main(argumentos: Optional[List[str]] = None) -> int:
+    """CLI: asigna el rol (admin por defecto) a la cuenta del correo; con --crear la crea con contraseña pedida en terminal.
+
+    Devuelve 0 si todo salió bien, 1 si la cuenta no existe o falla la base de
+    datos y 2 si el correo es inválido. Efecto: escribe en USUARIOS (commit).
+    """
     parser = argparse.ArgumentParser(description="Da el rol de administrador a una cuenta de Amatista.")
     parser.add_argument("email", help="correo de la cuenta")
     parser.add_argument("--crear", action="store_true", help="crea la cuenta si no existe (pide la contraseña)")

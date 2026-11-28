@@ -98,6 +98,7 @@ LIMITE_ORDENES = limitar(30, por="cuenta")
 
 
 def _sesion_addon(request: Request, db: Session, usuario: Usuario) -> Sesion:
+    """Sesión de la petición si es del add-on de Blender del mismo usuario; 403 si el latido no viene del add-on."""
     sesion = db.get(Sesion, getattr(request.state, "sesion_id", ""))
     if sesion is None or sesion.usuario_id != usuario.id or not (sesion.dispositivo or "").startswith(PREFIJO_ADDON):
         raise HTTPException(status_code=403, detail="El latido solo lo manda el add-on de Blender.")
@@ -105,6 +106,7 @@ def _sesion_addon(request: Request, db: Session, usuario: Usuario) -> Sesion:
 
 
 def _leer(texto: Any) -> Any:
+    """Lee una columna JSON: acepta dict/list ya decodificados (IS JSON en python-oracledb) o texto; None si vacía o inválida."""
     if not texto:
         return None
     if isinstance(texto, (dict, list)):  # columna IS JSON leída por python-oracledb
@@ -116,6 +118,7 @@ def _leer(texto: Any) -> Any:
 
 
 def _compactar(datos: Any) -> str:
+    """JSON compacto con acentos sin escapar para las columnas ORDEN, DETALLE y DATOS de sql/010."""
     return json.dumps(datos, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -140,6 +143,10 @@ def _sin_tablas(error: SQLAlchemyError) -> bool:
 
 
 def _enlace_publico(fila: AddonEnlace, momento, titulos: Dict[str, str]) -> Dict[str, Any]:
+    """Serializa un Blender conectado para la plataforma: en línea (latido < 25 s), práctica, paso y orden pendiente.
+
+    El `detalle` del instructor solo se envía si el Blender sigue en línea.
+    """
     detalle = _leer(fila.detalle) if momento - fila.visto_en <= EN_LINEA else None
     return {
         "id": fila.sesion_id[:16],
@@ -158,6 +165,7 @@ def _enlace_publico(fila: AddonEnlace, momento, titulos: Dict[str, str]) -> Dict
 
 
 def enlaces_de(db: Session, usuario_id: str) -> List[AddonEnlace]:
+    """Enlaces (un registro por sesión del add-on) del alumno, del latido más reciente al más viejo."""
     return list(db.scalars(
         select(AddonEnlace).where(AddonEnlace.usuario_id == usuario_id).order_by(AddonEnlace.visto_en.desc())
     ).all())
@@ -175,6 +183,7 @@ def cola_de(fila: AddonEnlace) -> List[Dict[str, Any]]:
 
 
 def _guardar_cola(fila: AddonEnlace, cola: List[Dict[str, Any]], momento, cambio_primera: bool) -> None:
+    """Escribe la cola de órdenes en la fila (o la vacía); reinicia orden_en cuando cambia la orden que se entrega."""
     if not cola:
         fila.orden, fila.orden_en = None, None
         return
@@ -232,6 +241,7 @@ def ordenar_abrir(db: Session, usuario_id: str, practica_id: str) -> int:
 
 
 class ItemLista(BaseModel):
+    """Un renglón de la lista del instructor en Blender (lo que se cumple y lo que falta, con consejo)."""
     texto: str = Field(max_length=60)
     ok: bool = False
     estado: str = Field(default="", max_length=20)
@@ -262,12 +272,14 @@ class ActividadVivo(BaseModel):
 
 
 class PiezaVivo(BaseModel):
+    """La pieza del molde que toca en el taller (motor 5): nombre, estado falta|cerca|lista y mensaje."""
     nombre: str = Field(default="", max_length=60)
     estado: str = Field(default="", max_length=12)  # falta | cerca | lista
     mensaje: str = Field(default="", max_length=200)
 
 
 class PistaVivo(BaseModel):
+    """La pista que Blender muestra ahora en el taller (nivel 1-4, texto y teclas)."""
     nivel: int = Field(default=0, ge=0, le=9)  # 1 qué falta · 2 con qué · 3 cómo · 4 mírame
     titulo: str = Field(default="", max_length=40)
     texto: str = Field(default="", max_length=300)
@@ -275,6 +287,7 @@ class PistaVivo(BaseModel):
 
 
 class HabilidadVivo(BaseModel):
+    """Dominio en vivo de una habilidad del taller (0-1) y su fase de aprendizaje."""
     id: str = Field(default="", max_length=60)
     titulo: str = Field(default="", max_length=60)
     p: float = Field(default=0.0, ge=0.0, le=1.0)  # dominio
@@ -282,6 +295,7 @@ class HabilidadVivo(BaseModel):
 
 
 class FichaVivo(BaseModel):
+    """Motor 6.1: la herramienta nueva que Blender está presentando con su ficha."""
     id: str = Field(default="", max_length=40)
     nombre: str = Field(default="", max_length=60)
 
@@ -318,6 +332,7 @@ class TallerVivo(BaseModel):
 
 
 class ParadaVivo(BaseModel):
+    """Una parada de un recorrido de «Conoce Amatista Motor» y si ya se hizo."""
     titulo: str = Field(default="", max_length=60)
     ok: bool = False
 
@@ -366,6 +381,7 @@ class Detalle(BaseModel):
 
 
 class Latido(BaseModel):
+    """Cuerpo de POST /api/addon/v1/enlace: estado del Blender abierto, la orden ya cumplida y el detalle del instructor."""
     practica_id: Optional[str] = Field(default=None, max_length=80)
     paso: Optional[str] = Field(default=None, max_length=80)
     progreso: Optional[int] = Field(default=None, ge=0, le=100)
@@ -447,6 +463,11 @@ def ver_enlace(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usu
 
 
 class Orden(BaseModel):
+    """Cuerpo de POST /api/addon/v1/ordenes: el tipo de orden (ORDENES) y los datos que cada tipo necesita.
+
+    Los campos de taller, recorrido y lección solo se usan con sus órdenes; el
+    resto se ignora. «reiniciar» exige confirmar=true.
+    """
     tipo: Literal["abrir_practica", "enfocar", "ver_todo", "actualizar", "comprobar", "pista", "hazlo_conmigo",
                   "guardar", "reiniciar", "ver_ejemplo", "volver_practica", "entregar",
                   "taller_abrir", "taller_continuar", "taller_pausa", "taller_pista", "taller_mirame",
@@ -547,6 +568,7 @@ def nueva_orden(cuerpo: Orden, request: Request, db: Session = Depends(obtener_d
 
 
 class Ajustes(BaseModel):
+    """Cuerpo de PUT /api/addon/v1/ajustes: preferencias de «Mi Blender»; los null no cambian nada."""
     enfoque: Optional[Literal["auto", "siempre", "nunca"]] = None
     acompanamiento: Optional[Literal["acompanado", "tarjeta", "silencioso"]] = None
     avisos_herramientas: Optional[bool] = None
@@ -555,6 +577,12 @@ class Ajustes(BaseModel):
 
 @router.get("/ajustes")
 def leer_ajustes(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
+    """GET /api/addon/v1/ajustes. Requiere sesión.
+
+    Respuesta: {enlace, ajustes} con lo elegido por el alumno sobre los valores
+    por defecto; sin sql/010 responde enlace=false y los valores por defecto.
+    Errores: 401; 500 de base de datos.
+    """
     try:
         return {"enlace": True, "ajustes": ajustes_de(db, usuario.id)}
     except SQLAlchemyError as error:

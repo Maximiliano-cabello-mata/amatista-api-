@@ -4,6 +4,7 @@ from tests.test_enlace import latir, vincular
 
 
 def test_la_leccion_trae_el_ejemplo_resuelto(cliente, crear_cuenta):
+    """Comprueba que GET de una práctica publicada incluye su ejemplo resuelto (motor 3.5)."""
     _, admin = crear_cuenta(rol="admin")
     assert cliente.post(f"{API}/practicas/sincronizar?publicar=true", headers=admin).json()["errores"] == []
     _, alumno = crear_cuenta()
@@ -21,6 +22,7 @@ def test_la_leccion_trae_el_ejemplo_resuelto(cliente, crear_cuenta):
 
 
 def test_ver_el_ejemplo_desde_la_plataforma(cliente, crear_cuenta):
+    """Comprueba que las órdenes ver_ejemplo y volver_practica llegan al Blender conectado."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, practica_id="blender.bp.m2.espada")
@@ -33,6 +35,7 @@ def test_ver_el_ejemplo_desde_la_plataforma(cliente, crear_cuenta):
 
 
 def test_la_lista_llega_agrupada_por_aspecto(cliente, crear_cuenta):
+    """Comprueba que el detalle del latido conserva el «aspecto» de cada renglón de la lista del ejemplo."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     detalle = {"titulo": "Tu práctica coincide con el ejemplo", "modo": "EJEMPLO", "lista": [

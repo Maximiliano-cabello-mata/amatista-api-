@@ -51,6 +51,7 @@ MOTIVOS = {
 
 
 def mostrar_codigos() -> bool:
+    """Indica si AMATISTA_MOSTRAR_CODIGOS=1: modo desarrollo que muestra el código en consola/respuesta en vez de exigir correo real."""
     return os.getenv("AMATISTA_MOSTRAR_CODIGOS") == "1"
 
 
@@ -78,6 +79,8 @@ def construir_plantilla_html(
         else "RECUPERACIÓN DE ACCESO · SEGURIDAD"
     )
     motivo = MOTIVOS.get(proposito, "continuar")
+    # [REVISION-SEGURIDAD] nombre (lo escribe quien se registra) entra sin html.escape() al HTML del correo, aquí y en frase_goliat:
+    # permite registrar el correo de un tercero con un 'nombre' que inyecta enlaces/HTML de phishing enviado desde el remitente oficial.
     saludo = f"Hola, <strong>{nombre}</strong>:" if nombre else "Hola:"
 
     if es_correo:
@@ -164,6 +167,13 @@ def armar_mensaje(
     remitente: str,
     nombre: Optional[str] = None,
 ) -> EmailMessage:
+    """Construye el EmailMessage del código de verificación (texto plano + HTML).
+
+    `proposito` es "correo" (confirmar cuenta; incluye enlace directo a
+    #/confirmar de la PWA) o "password" (recuperar contraseña). Pone asunto,
+    remitente, fecha y Message-ID con el dominio del remitente. No envía nada:
+    lo usa enviar_codigo para la vía SMTP.
+    """
     minutos = int(DURACION_CODIGO.total_seconds() // 60)
     motivo = MOTIVOS.get(proposito, "continuar")
     mensaje = EmailMessage()
@@ -277,12 +287,15 @@ def enviar_codigo(
     proposito: 'correo' (confirmar el correo) o 'password' (recuperar la cuenta).
     """
     if mostrar_codigos():
+        # [REVISION-SEGURIDAD] Con AMATISTA_MOSTRAR_CODIGOS=1 el código y el correo completo quedan en journalctl; nunca activarlo en producción.
         log.warning("[MODO DESARROLLO] Código de %s para %s: %s", proposito, email, codigo)
 
     # 1. Intentar Brevo API v3 si está configurado BREVO_API_KEY
+    # [REVISION-ROTO] BREVO_API_KEY no está documentada en backend/.env.example (sí se usa aquí).
     brevo_key = os.getenv("BREVO_API_KEY", "").strip()
     remitente_config = os.getenv("SMTP_FROM", "").strip() or os.getenv("SMTP_USER", "").strip()
     if brevo_key:
+        # [REVISION-ROTO] Remitente por defecto con el dominio viejo amatista-3d.tech (sin DNS desde nov 2026): Brevo lo rechazará o irá a spam.
         remitente = remitente_config or "no-responder@amatista-3d.tech"
         if enviar_via_brevo(brevo_key, email, codigo, proposito, remitente, nombre):
             return True

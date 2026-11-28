@@ -40,6 +40,7 @@ def es_anonimo_fusionable(usuario: Optional[Usuario]) -> bool:
 
 
 def _minimo_no_nulo(a: Optional[datetime], b: Optional[datetime]) -> Optional[datetime]:
+    """La fecha más antigua de las dos ignorando None (None si ambas lo son)."""
     fechas = [f for f in (a, b) if f is not None]
     return min(fechas) if fechas else None
 

@@ -13,6 +13,7 @@ CARPETA_DOCS = migrar.BACKEND.parent / "docs" / "base-de-datos"
 
 
 def base_con_datos(ruta):
+    """Crea una base SQLite con cursos (uno que requiere a otro), un usuario y progreso para probar la migración."""
     motor = create_engine(f"sqlite:///{ruta}")
     Base.metadata.create_all(motor)
     with Session(motor) as db:
@@ -31,6 +32,7 @@ def base_con_datos(ruta):
 
 @pytest.mark.parametrize("dialecto", migrar.DIALECTOS)
 def test_ddl_trae_todas_las_tablas_y_los_checks(dialecto):
+    """Comprueba que el DDL generado incluye todas las tablas, los CHECK de valores y los índices."""
     texto = migrar.ddl(dialecto)
     for tabla in Base.metadata.tables:
         assert f"CREATE TABLE {tabla}" in texto, tabla
@@ -39,12 +41,14 @@ def test_ddl_trae_todas_las_tablas_y_los_checks(dialecto):
 
 
 def test_cada_check_apunta_a_una_columna_real():
+    """Comprueba que cada CHECK de migrar.CHECKS apunta a una columna existente de modelos.py."""
     for tabla, columna, valores in migrar.CHECKS:
         assert columna in Base.metadata.tables[tabla].columns, f"{tabla}.{columna}"
         assert valores
 
 
 def test_el_esquema_postgresql_del_repositorio_esta_al_dia():
+    """Comprueba que docs/base-de-datos/esquema_postgresql.sql coincide con el DDL que se genera hoy."""
     archivo = CARPETA_DOCS / "esquema_postgresql.sql"
     assert archivo.read_text("utf-8") == migrar.ddl("postgresql"), (
         "Regenera: python herramientas/migrar.py ddl --dialecto postgresql --salida ../docs/base-de-datos/esquema_postgresql.sql"
@@ -52,6 +56,7 @@ def test_el_esquema_postgresql_del_repositorio_esta_al_dia():
 
 
 def test_exportar_e_importar_de_ida_y_vuelta(tmp_path):
+    """Comprueba que exportar e importar en otra base conserva todas las filas y el orden de requisitos."""
     origen = base_con_datos(tmp_path / "origen.db")
     respaldo = tmp_path / "respaldo"
     manifiesto = migrar.exportar(origen, respaldo)
@@ -72,6 +77,7 @@ def test_exportar_e_importar_de_ida_y_vuelta(tmp_path):
 
 
 def test_importar_nunca_escribe_sobre_datos(tmp_path):
+    """Comprueba que importar se niega a escribir en una base que ya tiene filas."""
     origen = base_con_datos(tmp_path / "origen.db")
     migrar.exportar(origen, tmp_path / "respaldo")
     with pytest.raises(migrar.ErrorMigracion, match="ya tiene filas"):
@@ -79,6 +85,7 @@ def test_importar_nunca_escribe_sobre_datos(tmp_path):
 
 
 def test_importar_detecta_un_archivo_alterado(tmp_path):
+    """Comprueba que importar detecta un .jsonl modificado después de exportar (huella distinta)."""
     origen = base_con_datos(tmp_path / "origen.db")
     respaldo = tmp_path / "respaldo"
     migrar.exportar(origen, respaldo)
@@ -90,6 +97,7 @@ def test_importar_detecta_un_archivo_alterado(tmp_path):
 
 
 def test_terminal(tmp_path, capsys):
+    """Comprueba los subcomandos exportar, importar y verificar de la CLI de migrar."""
     base_con_datos(tmp_path / "origen.db")
     url_origen = f"sqlite:///{tmp_path / 'origen.db'}"
     url_destino = f"sqlite:///{tmp_path / 'destino.db'}"

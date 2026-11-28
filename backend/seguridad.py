@@ -26,6 +26,7 @@ MAX_INTENTOS_CODIGO = 5
 
 
 def iteraciones() -> int:
+    """Iteraciones PBKDF2 para hashes nuevos: AMATISTA_PBKDF2_ITER (mínimo 1000) o 600 000 por defecto."""
     try:
         return max(1_000, int(os.getenv("AMATISTA_PBKDF2_ITER", ITERACIONES_POR_DEFECTO)))
     except ValueError:
@@ -33,6 +34,11 @@ def iteraciones() -> int:
 
 
 def hash_password(password: str) -> str:
+    """Deriva el hash PBKDF2-HMAC-SHA256 con sal aleatoria de 16 bytes.
+
+    Devuelve "pbkdf2_sha256$<iteraciones>$<sal hex>$<hash hex>", lo que se guarda
+    en USUARIOS.PASSWORD_HASH. Es lento a propósito (cientos de ms).
+    """
     sal = secrets.token_bytes(16)
     n = iteraciones()
     derivada = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), sal, n)
@@ -67,6 +73,11 @@ _HASH_SEÑUELO: Optional[str] = None
 
 
 def verificar_password_señuelo(password: str) -> None:
+    """Gasta el mismo tiempo que una verificación real contra un hash aleatorio.
+
+    Se llama cuando el correo no existe para que el tiempo de respuesta no revele
+    qué cuentas están registradas. El hash señuelo se crea una vez por proceso.
+    """
     global _HASH_SEÑUELO
     _HASH_SEÑUELO = _HASH_SEÑUELO or hash_password(secrets.token_hex(8))
     verificar_password(password, _HASH_SEÑUELO)
@@ -93,8 +104,10 @@ def hash_codigo(email: str, codigo: str) -> str:
 
 
 def codigos_iguales(a: Optional[str], b: Optional[str]) -> bool:
+    """Compara dos hashes de código en tiempo constante; False si alguno falta."""
     return bool(a and b) and hmac.compare_digest(a, b)
 
 
 def normalizar_email(email: str) -> str:
+    """Forma canónica del correo (sin espacios y en minúsculas) con la que se guarda y busca en USUARIOS."""
     return email.strip().lower()

@@ -13,15 +13,18 @@ from tests.test_addon import API, escena_mesa, sembrar, vincular  # noqa: F401  
 
 
 def contar(modelo, *condiciones):
+    """Cuenta las filas de `modelo` que cumplen las condiciones (ayudante de las pruebas)."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo).where(*condiciones))
 
 
 def avance(**campos):
+    """Un avance de progreso de ejemplo para la lección les_001, con los campos que se quieran cambiar."""
     return {"curso_id": "blender", "leccion_id": "les_001", "completada": True, "puntaje": 90, **campos}
 
 
 def test_el_administrador_no_guarda_ni_lee_progreso(cliente, crear_cuenta):
+    """Comprueba que un admin no guarda progreso ni insignias y que al leer recibe todo vacío (motor 7)."""
     admin_id, admin = crear_cuenta(rol="admin")
     guardado = cliente.post("/api/progreso", json={"eventos": [avance()], "insignias": ["primeros_pasos"]},
                             headers=admin)
@@ -44,6 +47,7 @@ def test_el_administrador_no_guarda_ni_lee_progreso(cliente, crear_cuenta):
 
 
 def test_el_alumno_si_guarda_su_progreso(cliente, crear_cuenta):
+    """Comprueba que un alumno normal sí guarda y lee su progreso."""
     alumno_id, alumno = crear_cuenta()
     guardado = cliente.post("/api/progreso", json={"eventos": [avance()]}, headers=alumno).json()
     assert guardado["guardados"] == 1 and "sin_progreso" not in guardado
@@ -51,6 +55,7 @@ def test_el_alumno_si_guarda_su_progreso(cliente, crear_cuenta):
 
 
 def test_el_administrador_practica_en_blender_sin_dejar_rastro(cliente, crear_cuenta, sembrar):
+    """Comprueba que los intentos del admin en Blender se evalúan pero no dejan filas de progreso ni eventos."""
     admin_id, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
     token, _ = vincular(cliente, admin)
@@ -66,6 +71,7 @@ def test_el_administrador_practica_en_blender_sin_dejar_rastro(cliente, crear_cu
 
 
 def test_el_taller_del_administrador_empieza_de_cero(cliente, crear_cuenta):
+    """Comprueba que el taller del admin responde estado vacío y que sus intentos no se guardan."""
     _, admin = crear_cuenta(rol="admin")
     habilidades = cliente.get(f"{API}/habilidades", headers=admin)
     assert habilidades.status_code == 200, habilidades.text

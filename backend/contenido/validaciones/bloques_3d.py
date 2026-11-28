@@ -30,6 +30,11 @@ from .comun import (
 
 
 def _mesh_viewer(c: _Contexto, b: dict) -> None:
+    """Bloque mesh_viewer (visor de malla): forma de FORMAS_MALLA con segmentos/anillos/subdivisiones acotados.
+
+    Con «shape» = «custom» exige «mesh» con 3-MAX_VERTICES_MALLA vértices [x, y, z]
+    y caras de 3 o más índices válidos.
+    """
     c.texto(b, "title", obligatorio=False)
     forma = c.opcion(b, "shape", FORMAS_MALLA)
     c.entero(b, "segments", obligatorio=False, minimo=3, maximo=64)
@@ -62,6 +67,10 @@ def _mesh_viewer(c: _Contexto, b: dict) -> None:
 
 
 def _conectores(c: _Contexto, nodo: dict, campo: str, prefijo: str, entradas: bool) -> set:
+    """Revisa las entradas o salidas de un nodo (hasta 8, id único, etiqueta y tipo de socket) y devuelve sus ids.
+
+    En las entradas admite «value» numérico o texto corto (el valor por defecto del socket).
+    """
     valor = _valor(nodo, campo)
     if valor is _FALTA:
         return set()
@@ -89,6 +98,10 @@ def _conectores(c: _Contexto, nodo: dict, campo: str, prefijo: str, entradas: bo
 
 
 def _node_graph(c: _Contexto, b: dict) -> None:
+    """Bloque node_graph (editor de nodos): nodos con conectores y enlaces «nodo.salida» → «nodo.entrada».
+
+    Cada entrada recibe a lo sumo un enlace y el grafo no puede tener ciclos.
+    """
     c.texto(b, "title", obligatorio=False)
     nodos = c.objetos(b, "nodes", 1, MAX_NODOS)
     salidas: Dict[str, str] = {}
@@ -133,6 +146,7 @@ def _node_graph(c: _Contexto, b: dict) -> None:
     estado: Dict[str, int] = {}
 
     def ciclo(nodo: str) -> bool:
+        """DFS con marcas (1 = en curso, 2 = visto): True si desde `nodo` se vuelve a él siguiendo las entradas."""
         if estado.get(nodo) == 1:
             return True
         if estado.get(nodo) == 2:
@@ -149,11 +163,13 @@ def _node_graph(c: _Contexto, b: dict) -> None:
 
 
 def _axis_gizmo(c: _Contexto, b: dict) -> None:
+    """Bloque axis_gizmo: solo título y pie opcionales (el gizmo de ejes no tiene configuración)."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "caption", obligatorio=False)
 
 
 def _cumple(valor: Any, operador: str, meta: Any) -> bool:
+    """Evalúa `valor operador meta` para los operadores de la meta (<=, >=, ==, !=)."""
     if operador == "<=":
         return valor <= meta
     if operador == ">=":
@@ -164,6 +180,11 @@ def _cumple(valor: Any, operador: str, meta: Any) -> bool:
 
 
 def _scene_explorer(c: _Contexto, b: dict) -> None:
+    """Bloque scene_explorer: primitiva con controles (range, color o toggle) y una meta opcional.
+
+    Comprueba que los rangos sean coherentes, que la meta use un control existente
+    del tipo adecuado, que sea alcanzable y que no se cumpla ya con el valor inicial.
+    """
     c.texto(b, "title", obligatorio=False)
     c.opcion(b, "primitive", PRIMITIVAS)
     controles = c.objetos(b, "controls", 1, len(PARAMETROS_ESCENA))
@@ -244,6 +265,7 @@ def _scene_explorer(c: _Contexto, b: dict) -> None:
 
 
 def _viewport_sim(c: _Contexto, b: dict) -> None:
+    """Bloque viewport_sim: título y pie opcionales y «missions» (sin repetir) de MISIONES_VISTA."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "caption", obligatorio=False)
     misiones = _valor(b, "missions")
@@ -260,6 +282,7 @@ def _viewport_sim(c: _Contexto, b: dict) -> None:
 
 
 def _keyframe_sim(c: _Contexto, b: dict) -> None:
+    """Bloque keyframe_sim: 2-6 metas (cuadro dentro de «frames», altura 0-1) sin cuadros repetidos."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "caption", obligatorio=False)
     cuadros = c.entero(b, "frames", obligatorio=False, minimo=12, maximo=120) or 60
@@ -275,6 +298,11 @@ def _keyframe_sim(c: _Contexto, b: dict) -> None:
 
 
 def _motor_scene(c: _Contexto, b: dict) -> None:
+    """Bloque motor_scene (escena del motor web): entorno, objetos, zonas, generadores y retos.
+
+    Los ids de objetos y zonas deben ser únicos y los retos solo pueden referirse
+    a elementos que existen en la escena.
+    """
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "instructions", obligatorio=False, maximo=600)
     c.texto(b, "success", obligatorio=False, maximo=300)

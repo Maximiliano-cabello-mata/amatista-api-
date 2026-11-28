@@ -1,3 +1,4 @@
+"""Pruebas generales de la API sobre SQLite temporal (cabecera añadida en la revisión 2026-11-27)."""
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -8,15 +9,18 @@ from seguridad import hash_token
 
 
 def contar(modelo):
+    """Cuenta las filas de la tabla del `modelo`."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo))
 
 
 def test_inicio(cliente):
+    """Comprueba que GET / responde {"estado": "Backend activo"}."""
     assert cliente.get("/").json() == {"estado": "Backend activo"}
 
 
 def test_salud(cliente):
+    """Comprueba que GET /api/salud responde ok con el motor sqlite."""
     respuesta = cliente.get("/api/salud")
     assert respuesta.status_code == 200
     assert respuesta.json() == {"estado": "ok", "motor": "sqlite"}
@@ -26,6 +30,7 @@ def test_salud(cliente):
 
 
 def test_iniciar_sesion_crea_usuario_una_vez(cliente):
+    """Comprueba que el /api/iniciar-sesion heredado crea el usuario la primera vez y lo reutiliza después."""
     datos = {"email": "alumno_prueba@amatista.local", "dispositivo": "Mozilla/5.0"}
     primera = cliente.post("/api/iniciar-sesion", json=datos).json()
     segunda = cliente.post("/api/iniciar-sesion", json=datos).json()
@@ -41,12 +46,14 @@ def test_iniciar_sesion_crea_usuario_una_vez(cliente):
 
 
 def test_iniciar_sesion_heredado_no_sirve_como_token(cliente):
+    """Comprueba que el sesion_id del endpoint heredado no sirve como token Bearer ni X-Sesion-Id (401)."""
     sesion_id = cliente.post("/api/iniciar-sesion", json={"usuario_id": "alumno-viejo-1"}).json()["sesion_id"]
     for cabeceras in ({"Authorization": f"Bearer {sesion_id}"}, {"X-Sesion-Id": sesion_id}):
         assert cliente.get("/api/auth/yo", headers=cabeceras).status_code == 401
 
 
 def test_iniciar_sesion_heredado_rechaza_cuentas_registradas(cliente, crear_cuenta):
+    """Comprueba que el endpoint heredado responde 409 con el id o el correo de una cuenta registrada."""
     usuario_id, _ = crear_cuenta(email="ana@amatista.local")
     for cuerpo in (
         {"usuario_id": usuario_id},
@@ -61,6 +68,7 @@ def test_iniciar_sesion_heredado_rechaza_cuentas_registradas(cliente, crear_cuen
 
 
 def test_iniciar_sesion_sin_usuario(cliente):
+    """Comprueba que el endpoint heredado sin usuario_id ni email responde 422."""
     assert cliente.post("/api/iniciar-sesion", json={}).status_code == 422
 
 
@@ -68,9 +76,11 @@ def test_iniciar_sesion_sin_usuario(cliente):
 
 
 def test_progreso_nunca_retrocede(cliente):
+    """Comprueba que una lección completada no vuelve a pendiente y se conserva el mejor puntaje."""
     usuario = "alumno-123"
 
     def enviar(**evento):
+        """Envía un evento de progreso del alumno anónimo para les_004 y exige 200."""
         base = {"curso_id": "blender", "leccion_id": "les_004"}
         respuesta = cliente.post("/api/progreso", json={"usuario_id": usuario, "eventos": [{**base, **evento}]})
         assert respuesta.status_code == 200, respuesta.text
@@ -87,6 +97,7 @@ def test_progreso_nunca_retrocede(cliente):
 
 
 def test_progreso_combina_eventos_repetidos(cliente):
+    """Comprueba que eventos repetidos de la misma lección en un lote se combinan en una fila."""
     eventos = [
         {"curso_id": "aframe", "leccion_id": "les_af_001", "completada": True},
         {"curso_id": "aframe", "leccion_id": "les_af_001", "completada": False},
@@ -100,12 +111,14 @@ def test_progreso_combina_eventos_repetidos(cliente):
 
 
 def test_progreso_valida_datos(cliente):
+    """Comprueba que POST /api/progreso rechaza puntajes fuera de rango y solicitudes vacías (422)."""
     evento = {"curso_id": "blender", "leccion_id": "les_004", "puntaje": 150}
     assert cliente.post("/api/progreso", json={"usuario_id": "a", "eventos": [evento]}).status_code == 422
     assert cliente.post("/api/progreso", json={"usuario_id": "a", "eventos": []}).status_code == 422
 
 
 def test_error_de_base_de_datos_no_revela_la_base(cliente, caplog):
+    """Comprueba que un error de base de datos responde con código ORA/folio sin revelar tablas ni el SQL."""
     with conexion.motor().begin() as c:
         c.execute(text("DROP TABLE progreso_lecciones"))
     evento = {"curso_id": "blender", "leccion_id": "les_001", "completada": True}
@@ -120,6 +133,7 @@ def test_error_de_base_de_datos_no_revela_la_base(cliente, caplog):
 
 
 def test_cors_permite_localhost_en_cualquier_puerto(cliente):
+    """Comprueba que CORS acepta http://localhost en cualquier puerto."""
     respuesta = cliente.options(
         "/api/progreso",
         headers={"Origin": "http://localhost:5176", "Access-Control-Request-Method": "POST"},
@@ -128,11 +142,13 @@ def test_cors_permite_localhost_en_cualquier_puerto(cliente):
 
 
 def test_cors_rechaza_origen_desconocido(cliente):
+    """Comprueba que CORS no autoriza un origen desconocido."""
     respuesta = cliente.get("/", headers={"Origin": "https://sitio-extrano.example"})
     assert "access-control-allow-origin" not in respuesta.headers
 
 
 def test_dsn_oracle(monkeypatch):
+    """Comprueba que sin DB_DSN se arma la cadena tcps://host:1522/servicio de Oracle."""
     monkeypatch.delenv("DB_DSN", raising=False)
     monkeypatch.setenv("DB_HOST", "adb.us-ashburn-1.oraclecloud.com")
     monkeypatch.setenv("DB_SERVICE", "mi_servicio_high.adb.oraclecloud.com")

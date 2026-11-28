@@ -76,6 +76,7 @@ class ErrorMigracion(Exception):
 
 
 def _dialecto(nombre: str):
+    """Dialecto de SQLAlchemy para generar DDL (postgresql, mysql, sqlite u oracle); ErrorMigracion si no se admite."""
     if nombre == "postgresql":
         from sqlalchemy.dialects import postgresql
 
@@ -114,6 +115,7 @@ def _orden_estable(sentencia: str) -> str:
     lineas = sentencia.split("\n")
 
     def grupo(linea: str) -> int:
+        """Grupo de orden de una línea del CREATE TABLE: 0 FOREIGN KEY, 1 UNIQUE, 2 CHECK, -1 el resto (no se mueve)."""
         texto = linea.strip()
         if texto.startswith("FOREIGN KEY"):
             return 0
@@ -135,6 +137,7 @@ def _orden_estable(sentencia: str) -> str:
 
 
 def ddl(dialecto: str) -> str:
+    """Script CREATE TABLE + CREATE INDEX de todas las tablas de modelos.py para `dialecto`, en orden estable."""
     motor = _dialecto(dialecto)
     lineas = [
         f"-- Esquema de Amatista para {dialecto}, generado desde backend/database/modelos.py",
@@ -156,6 +159,7 @@ def ddl(dialecto: str) -> str:
 
 
 def _a_json(valor):
+    """Valor de una columna listo para JSONL (fechas en ISO 8601); ErrorMigracion si aparece un binario."""
     if isinstance(valor, (datetime, date)):
         return valor.isoformat()
     if isinstance(valor, bytes):
@@ -164,6 +168,7 @@ def _a_json(valor):
 
 
 def _huella(archivo: Path) -> str:
+    """SHA-256 hexadecimal del contenido de un archivo exportado (se guarda en el manifiesto)."""
     return hashlib.sha256(archivo.read_bytes()).hexdigest()
 
 
@@ -202,6 +207,10 @@ def exportar(motor: Engine, carpeta: Path) -> dict:
 
 
 def leer_manifiesto(carpeta: Path) -> dict:
+    """Lee manifiesto.json de un respaldo y comprueba formato y huella de cada .jsonl.
+
+    Lanza ErrorMigracion si falta, es de otro formato o algún archivo cambió.
+    """
     ruta = carpeta / "manifiesto.json"
     if not ruta.is_file():
         raise ErrorMigracion(f"No hay manifiesto.json en {carpeta}: ¿es la carpeta de «exportar»?")
@@ -216,6 +225,7 @@ def leer_manifiesto(carpeta: Path) -> dict:
 
 
 def _filas(archivo: Path, tabla: Table) -> Iterable[dict]:
+    """Lee las filas de un .jsonl convirtiendo de nuevo a datetime las columnas TIMESTAMP."""
     fechas = {c.name for c in tabla.columns if isinstance(c.type, TIMESTAMP)}
     with archivo.open(encoding="utf-8") as entrada:
         for linea in entrada:
@@ -246,12 +256,18 @@ def _en_orden_propio(tabla: Table, filas: List[dict]) -> List[dict]:
 
 
 def contar(motor: Engine, nombres: Iterable[str]) -> Dict[str, int]:
+    """Número de filas de cada tabla indicada en la base `motor`."""
     tablas = Base.metadata.tables
     with motor.connect() as conexion:
         return {n: conexion.execute(select(func.count()).select_from(tablas[n])).scalar_one() for n in nombres}
 
 
 def importar(motor: Engine, carpeta: Path, crear_tablas: bool = False) -> Dict[str, int]:
+    """Carga un respaldo en una base vacía (todo o nada) y devuelve los conteos verificados.
+
+    Con crear_tablas crea el esquema portable antes. Lanza ErrorMigracion si
+    faltan tablas, el destino ya tiene filas o los conteos finales no coinciden.
+    """
     manifiesto = leer_manifiesto(carpeta)
     if crear_tablas:
         metadata_portable().create_all(motor)
@@ -276,6 +292,7 @@ def importar(motor: Engine, carpeta: Path, crear_tablas: bool = False) -> Dict[s
 
 
 def verificar(motor: Engine, carpeta: Path, manifiesto: Optional[dict] = None) -> Dict[str, int]:
+    """Compara las filas de cada tabla del destino con las del manifiesto; devuelve los conteos o lanza ErrorMigracion."""
     manifiesto = manifiesto or leer_manifiesto(carpeta)
     reales = contar(motor, manifiesto["orden"])
     distintas = [
@@ -411,6 +428,7 @@ def registrar_linea_base(
 
 
 def _motor(url: Optional[str]) -> Engine:
+    """Engine de `url` si se indica; si no, el de la configuración del backend (backend/.env)."""
     if url:
         return create_engine(url)
     from database import conexion
@@ -419,6 +437,10 @@ def _motor(url: Optional[str]) -> Engine:
 
 
 def main(argumentos: Optional[Sequence[str]] = None) -> int:
+    """CLI de migración: subcomandos ddl, exportar, importar, verificar y estado. Devuelve 0 o 1 ante ErrorMigracion.
+
+    «estado --estricto» también devuelve 1 si hay migraciones pendientes o modificadas.
+    """
     parser = argparse.ArgumentParser(description="Migrar Amatista a otra base de datos (formato " + FORMATO + ").")
     comandos = parser.add_subparsers(dest="comando", metavar="comando", required=True)
 

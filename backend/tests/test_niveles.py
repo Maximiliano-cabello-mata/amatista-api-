@@ -38,14 +38,17 @@ def con_modulos(catalogo: dict) -> list:
 
 
 def leer(ruta: Path) -> dict:
+    """Lee un archivo JSON de módulo."""
     return json.loads(ruta.read_text(encoding="utf-8"))
 
 
 def importar_reales() -> None:
+    """Importa a la base los módulos reales de Blender y A-Frame con la CLI de contenido."""
     assert cli.main(["importar", str(BLENDER), str(AFRAME)]) == 0
 
 
 def ficha_completa(**cambios) -> dict:
+    """Ficha de lección con objetivo, habilidades, versión de Blender y criterios (sin pendientes)."""
     ficha = {
         "objetivo": "Crear una mesa con proporciones coherentes.",
         "habilidades": ["bl-extruir"],
@@ -60,6 +63,7 @@ def ficha_completa(**cambios) -> dict:
 
 
 def test_niveles_de_la_propuesta():
+    """Comprueba que NIVELES_BLENDER trae los niveles 1-4 y cuatro ramas del 5 con ids coherentes."""
     assert [n["numero"] for n in NIVELES_BLENDER] == [1, 2, 3, 4, 5, 5, 5, 5]
     for nivel in NIVELES_BLENDER:
         assert nivel["id"] == id_nivel("blender", nivel["numero"], nivel["rama"])
@@ -67,6 +71,7 @@ def test_niveles_de_la_propuesta():
 
 
 def test_leccion_estructurada_valida_y_con_los_10_pasos():
+    """Comprueba que leccion_estructurada genera una lección válida de 10 bloques que empieza por el objetivo."""
     leccion = leccion_estructurada("les_n1_mesa", "Construir una mesa", "Crear una mesa estable.")
     assert validar_leccion(leccion) == []
     assert len(leccion["contentBlocks"]) == len(ESTRUCTURA_LECCION) == 10
@@ -96,6 +101,7 @@ def test_006_arma_la_misma_estructura_que_las_plantillas():
     ],
 )
 def test_errores_de_la_ficha(ficha, esperado):
+    """Comprueba que una ficha mal formada produce el error esperado."""
     leccion = leccion_estructurada("les_x", "X")
     leccion["ficha"] = ficha
     errores = validar_leccion(leccion)
@@ -103,6 +109,7 @@ def test_errores_de_la_ficha(ficha, esperado):
 
 
 def test_ficha_completa_sin_pendientes_y_lecciones_viejas_siguen_validando():
+    """Comprueba que una ficha completa no tiene pendientes y que las lecciones sin ficha siguen validando."""
     leccion = leccion_estructurada("les_x", "X")
     leccion["ficha"] = ficha_completa()
     assert validar_leccion(leccion) == [] and pendientes_ficha(leccion) == []
@@ -112,6 +119,7 @@ def test_ficha_completa_sin_pendientes_y_lecciones_viejas_siguen_validando():
 
 
 def test_modulo_con_nivel_invalido():
+    """Comprueba que un nivel_id con formato inválido hace fallar la validación del módulo."""
     datos = modulo_esqueleto("blender", 2, "Interfaz", nivel_id="blender n1")
     assert any("nivel" in e for e in validar_modulo(datos))
     assert validar_modulo(modulo_esqueleto("blender", 2, "Interfaz", nivel_id="blender-n1")) == []
@@ -121,6 +129,7 @@ def test_modulo_con_nivel_invalido():
 
 
 def test_importar_crea_niveles_y_asigna_el_modulo(cliente, crear_cuenta):
+    """Comprueba que importar crea los niveles de Blender y asigna el nivel declarado al módulo."""
     importar_reales()
     _, admin = crear_cuenta(rol="admin")
     niveles = cliente.get(f"{API}/niveles?curso_id=blender", headers=admin).json()["niveles"]
@@ -153,6 +162,7 @@ def test_importar_crea_niveles_y_asigna_el_modulo(cliente, crear_cuenta):
 
 
 def test_crear_editar_y_asignar_niveles(cliente, crear_cuenta):
+    """Comprueba crear, editar y asignar niveles desde la API (y sus 409/422)."""
     importar_reales()
     _, admin = crear_cuenta(rol="admin")
     nuevo = {"curso_id": "aframe", "numero": 1, "titulo": "Primeros pasos en WebXR"}
@@ -186,6 +196,7 @@ def test_crear_editar_y_asignar_niveles(cliente, crear_cuenta):
 
 
 def test_mapa_del_curso(cliente, crear_cuenta):
+    """Comprueba que GET /api/contenido/mapa arma curso > nivel > módulo > lección con fichas completas y pendientes."""
     importar_reales()
     _, admin = crear_cuenta(rol="admin")
     leccion = leccion_estructurada("les_n1_mesa", "Construir una mesa", "Crear una mesa.")
@@ -206,6 +217,7 @@ def test_mapa_del_curso(cliente, crear_cuenta):
 
 
 def test_importar_con_nivel_inexistente_falla(cliente, tmp_path):
+    """Comprueba que importar un módulo con un nivel que no existe falla."""
     datos = leer(BLENDER)
     datos["module"]["nivel"] = "blender-n9"
     archivo = tmp_path / "blender-modulo-1.json"
@@ -214,6 +226,7 @@ def test_importar_con_nivel_inexistente_falla(cliente, tmp_path):
 
 
 def test_permisos_de_niveles_y_blender(cliente, crear_cuenta):
+    """Comprueba que alumnos no acceden (403), profesores leen y solo admins editan niveles y versiones."""
     importar_reales()
     _, alumno = crear_cuenta(rol="alumno")
     _, profesor = crear_cuenta(rol="profesor")
@@ -230,6 +243,7 @@ def test_permisos_de_niveles_y_blender(cliente, crear_cuenta):
 
 
 def test_versiones_y_matriz_de_compatibilidad(cliente, crear_cuenta):
+    """Comprueba versiones de Blender (una sola principal), verificaciones y la matriz de compatibilidad."""
     importar_reales()
     _, admin = crear_cuenta(rol="admin")
     _, profesor = crear_cuenta(rol="profesor", nombre="Profe")
@@ -279,6 +293,7 @@ def test_versiones_y_matriz_de_compatibilidad(cliente, crear_cuenta):
 
 
 def test_cli_nueva_leccion_mapa_y_nuevo_modulo_con_nivel(tmp_path, capsys):
+    """Comprueba los comandos nuevo-modulo con nivel, nueva-leccion y mapa de la CLI de contenido."""
     shutil.copy(BLENDER, tmp_path / BLENDER.name)
     assert cli.main(["nuevo-modulo", "blender", "2", "Interfaz y navegación", "--nivel", "blender-n1",
                      "--destino", str(tmp_path)]) == 0
@@ -304,6 +319,7 @@ def test_cli_nueva_leccion_mapa_y_nuevo_modulo_con_nivel(tmp_path, capsys):
 
 
 def test_cli_sembrar_niveles(cliente, capsys):
+    """Comprueba que sembrar-niveles crea los niveles una vez y después avisa que ya existían."""
     assert cli.main(["sembrar-niveles"]) == 0
     assert "blender-n1" in capsys.readouterr().out
     assert cli.main(["sembrar-niveles"]) == 0

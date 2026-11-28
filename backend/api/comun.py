@@ -1,3 +1,9 @@
+"""Utilidades compartidas por las API (cabecera añadida en la revisión 2026-11-27).
+
+- asegurar_usuario: crea la fila USUARIOS antes de escribir filas con FK.
+- usuario_publico: datos seguros de una cuenta para el navegador.
+- error_bd: registra el error de SQLAlchemy con folio y devuelve un HTTPException corto.
+"""
 import logging
 import re
 import uuid

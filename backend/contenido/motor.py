@@ -47,6 +47,7 @@ __all__ = [
 
 
 def canonico(definicion: Dict[str, Any]) -> str:
+    """JSON canónico de una práctica (claves ordenadas, sin espacios, sin NaN): base de la huella y de lo que se guarda."""
     return json.dumps(definicion, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 

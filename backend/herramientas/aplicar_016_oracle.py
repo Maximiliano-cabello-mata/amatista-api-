@@ -87,6 +87,7 @@ def aplicar_016(
 
 
 def main() -> int:
+    """Punto de entrada CLI: aplica 016 (ESQUEMA_MIGRACIONES, permisos y línea base) e imprime el resumen. Devuelve 0."""
     motor = crear_motor()
     try:
         res = aplicar_016(motor)

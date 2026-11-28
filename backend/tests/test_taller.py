@@ -27,30 +27,36 @@ TALLER = "blender.bp.m1"
 
 @pytest.fixture()
 def con_cursos(cliente):
+    """Fixture: crea los cursos base en la base (HABILIDADES.CURSO_ID es llave foránea)."""
     with Session(conexion.motor()) as db:
         asegurar_cursos_base(db)
         db.commit()
 
 
 def escena_cubo(primitiva="cube"):
+    """Foto de escena con un cubo de 2 m en el origen (o la primitiva indicada)."""
     return motor.snapshot.scene_to_dict(Escena().malla(primitiva, "Cubo", dims=(2, 2, 2), loc=(0, 0, 0)).construir())
 
 
 def escena_vacia():
+    """Foto de escena vacía."""
     return motor.snapshot.scene_to_dict(Escena().construir())
 
 
 def intento(actividad, tipo, correcto=False, en=None, habilidad="bl-agregar-primitivas", **extra):
+    """Intento del taller de ejemplo para TALLER con los campos que se quieran cambiar."""
     return {"habilidad": habilidad, "actividad": actividad, "taller": TALLER, "tipo": tipo, "correcto": correcto,
             "ayuda": 0, "segundos": 30, "en": en or time.time() - 60, **extra}
 
 
 def enviar(cliente, cabeceras, *intentos):
+    """Hace POST /habilidades/intentos con los intentos y la versión del add-on."""
     return cliente.post(f"{API}/habilidades/intentos", json={"intentos": list(intentos), "version_addon": "5.0.0"},
                         headers=cabeceras)
 
 
 def test_sin_intentos_el_alumno_empieza_de_cero(cliente, crear_cuenta):
+    """Comprueba que sin intentos el estado está vacío y que la ruta exige sesión."""
     _, alumno = crear_cuenta()
     datos = cliente.get(f"{API}/habilidades", headers=alumno).json()
     assert datos["estado"] == {} and datos["completadas"] == [] and datos["guardado"] is True
@@ -58,6 +64,7 @@ def test_sin_intentos_el_alumno_empieza_de_cero(cliente, crear_cuenta):
 
 
 def test_al_arrancar_registra_las_habilidades_del_catalogo(cliente, con_cursos, monkeypatch):
+    """Comprueba que al arrancar se registran en HABILIDADES las del catálogo y que repetirlo no cambia nada."""
     from api.motor.taller import sincronizar_al_arrancar
     from contenido.taller import catalogo
 
@@ -75,6 +82,7 @@ def test_al_arrancar_registra_las_habilidades_del_catalogo(cliente, con_cursos, 
 
 
 def test_el_servidor_revisa_la_escena_y_su_resultado_cuenta(cliente, crear_cuenta, con_cursos):
+    """Comprueba que si el intento trae escena el servidor la revisa y su resultado reemplaza al del add-on."""
     alumno_id, alumno = crear_cuenta()
     ahora = time.time()
     respuesta = enviar(
@@ -98,6 +106,7 @@ def test_el_servidor_revisa_la_escena_y_su_resultado_cuenta(cliente, crear_cuent
 
 
 def test_un_reenvio_no_cuenta_dos_veces(cliente, crear_cuenta, con_cursos):
+    """Comprueba que reenviar el mismo intento lo marca como repetido y no cambia el modelo."""
     _, alumno = crear_cuenta()
     uno = intento("conmigo:bl-agregar-primitivas:caja", "conmigo", correcto=True, en=time.time() - 30)
     assert enviar(cliente, alumno, uno).json()["aceptados"] == 1
@@ -107,6 +116,7 @@ def test_un_reenvio_no_cuenta_dos_veces(cliente, crear_cuenta, con_cursos):
 
 
 def test_los_intentos_que_no_existen_se_rechazan_con_su_motivo(cliente, crear_cuenta, con_cursos):
+    """Comprueba que intentos con taller, habilidad, actividad o fecha inválidos se rechazan con su motivo."""
     _, alumno = crear_cuenta()
     ahora = time.time()
     datos = enviar(
@@ -124,6 +134,7 @@ def test_los_intentos_que_no_existen_se_rechazan_con_su_motivo(cliente, crear_cu
 
 
 def test_los_talleres_y_el_plan(cliente, crear_cuenta, con_cursos):
+    """Comprueba GET /talleres (9 talleres) y el plan de un taller con sus habilidades y repasos."""
     _, alumno = crear_cuenta()
     lista = cliente.get(f"{API}/talleres", headers=alumno).json()
     assert len(lista["talleres"]) == 9 and lista["guardado"] is True
@@ -143,6 +154,7 @@ def test_los_talleres_y_el_plan(cliente, crear_cuenta, con_cursos):
 
 
 def test_sin_012_se_lee_vacio_y_los_intentos_esperan(cliente, crear_cuenta, con_cursos):
+    """Comprueba que sin las tablas de sql/012 las lecturas salen vacías y los intentos responden 503."""
     _, alumno = crear_cuenta()
     with Session(conexion.motor()) as db:
         db.execute(text("DROP TABLE talleres_alumno"))
@@ -154,6 +166,7 @@ def test_sin_012_se_lee_vacio_y_los_intentos_esperan(cliente, crear_cuenta, con_
 
 
 def test_la_plataforma_maneja_el_taller_en_blender(cliente, crear_cuenta):
+    """Comprueba las órdenes del taller (abrir, probar, repaso...) y su validación contra el catálogo."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -189,6 +202,7 @@ def test_la_leccion_manda_su_etapa_y_blender_no_sale_de_ella(cliente, crear_cuen
 
 
 def test_la_leccion_ve_el_taller_en_vivo(cliente, crear_cuenta):
+    """Comprueba que el detalle.taller del latido llega a GET /enlace para la lección."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     vivo = {
@@ -215,6 +229,7 @@ def test_la_leccion_ve_el_taller_en_vivo(cliente, crear_cuenta):
 
 
 def test_el_bloque_blender_taller_se_valida():
+    """Comprueba que el bloque blender_taller valida el taller, la vista, la etapa y las habilidades."""
     from tests.test_contenido import leccion_con as leccion
 
     bien = {"type": "blender_taller", "id": "taller_1", "taller": TALLER, "title": "Tu taller"}
@@ -274,6 +289,7 @@ def test_blender_sabe_en_que_leccion_va_la_plataforma(cliente, crear_cuenta):
 
 
 def test_la_leccion_ve_la_ficha_que_presenta_blender(cliente, crear_cuenta):
+    """Comprueba que la ficha que presenta Blender (motor 6.1) llega en el detalle del enlace."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     vivo = {"taller": "blender.bp.m2", "estado": "presentando", "ficha": {"id": "mesh.extrude", "nombre": "Extruir"},

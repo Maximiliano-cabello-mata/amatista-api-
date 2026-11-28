@@ -452,6 +452,7 @@ def ejemplo_bloque(tipo: str) -> dict:
 
 
 def _bloque(tipo: str, **cambios) -> dict:
+    """Copia del bloque de ejemplo `tipo` con los campos de `cambios` reemplazados."""
     bloque = ejemplo_bloque(tipo)
     bloque.update(cambios)
     return bloque
@@ -468,6 +469,7 @@ def es_curso_blender(curso_id: Optional[str]) -> bool:
 
 
 def _gancho(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
+    """Paso «gancho» de la fórmula: (tipo de lección, segundos, bloques) con pregunta intrigante, hotspots y quiz."""
     return "theory_interactive", 180, [
         _bloque(
             "markdown_text",
@@ -482,6 +484,7 @@ def _gancho(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _explora(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
+    """Paso «explora»: (tipo, segundos, bloques) con scene_explorer, tarjetas de conceptos y asociar."""
     return "theory_interactive", 390, [
         _bloque("markdown_text", body=f"### {REEMPLAZA}\nInvita a descubrir el concepto moviendo los controles."),
         _bloque("scene_explorer"),
@@ -491,6 +494,7 @@ def _explora(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _practica(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
+    """Paso «practica»: en cursos de Blender, ordenar y atajos; en A-Frame, ordenar, completar y reto de código."""
     if es_curso_blender(curso_id):
         return "theory_interactive", 480, [
             _bloque("markdown_text", body=f"### {REEMPLAZA}\nRepasa el paso a paso antes de abrir Blender."),
@@ -513,6 +517,7 @@ def _practica(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _reto(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
+    """Paso «reto»: reto final con criterio de logro y evidencias (modelo low poly en Blender, escena en A-Frame)."""
     if es_curso_blender(curso_id):
         return "theory_interactive", 720, [
             _bloque(
@@ -587,6 +592,7 @@ def _reto(curso_id: Optional[str]) -> Tuple[str, int, List[dict]]:
 
 
 def _pregunta(numero: int, texto: str, opciones: List[str], correcta: int) -> dict:
+    """Pregunta de examen plantilla con opciones a-e e id q_NN; `correcta` es el índice de la opción correcta."""
     letras = "abcde"
     return {
         "id": f"q_{numero:02d}",
@@ -600,6 +606,7 @@ def _pregunta(numero: int, texto: str, opciones: List[str], correcta: int) -> di
 
 
 def _jefe(curso_id: Optional[str]) -> dict:
+    """quizData del examen final plantilla (passingScore 80 y tres preguntas de ejemplo)."""
     return {
         "passingScore": 80,
         "questions": [
@@ -696,6 +703,7 @@ def generar_esqueleto(
 
 
 def minutos_estimados(lecciones: Iterable[dict]) -> int:
+    """Minutos de un módulo a partir de la duración de sus lecciones (mínimo 1)."""
     segundos = sum(
         leccion.get("durationSeconds") or 0 for leccion in lecciones if isinstance(leccion.get("durationSeconds"), int)
     )

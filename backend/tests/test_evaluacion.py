@@ -12,6 +12,7 @@ API = "/api/evaluacion"
 
 
 def modelo_mesa(**extra):
+    """Modelo ligero válido de una mesa (dos objetos, un material) empaquetado como lo manda el add-on."""
     datos = {
         "formato": modelo_ligero.FORMATO,
         "blender": "4.2.3",
@@ -30,6 +31,7 @@ def modelo_mesa(**extra):
 
 @pytest.fixture()
 def practica(cliente):
+    """Fixture: registra una práctica publicada y otra en borrador para asignar."""
     with Session(conexion.motor()) as db:
         db.add(Practica(id="blender.n1.mesa", titulo="Construir una mesa", nivel=1, version=1, version_publicada=1,
                         definicion="{}", estado="publicado", origen="repositorio"))
@@ -62,6 +64,7 @@ def salon(cliente, crear_cuenta, practica):
 
 
 def test_el_modelo_ligero_se_revisa_y_resume():
+    """Comprueba que el modelo ligero se resume bien y que los modelos mal formados se rechazan."""
     resumen = modelo_ligero.resumen_de(modelo_mesa())
     assert resumen == {"objetos": 2, "vertices": 4, "triangulos": 2, "materiales": 1,
                        "nombres": ["Cubierta", "Luz"], "resumido": False, "blender": "4.2.3"}
@@ -77,6 +80,7 @@ def test_el_modelo_ligero_se_revisa_y_resume():
 
 
 def test_una_bomba_de_zip_no_pasa():
+    """Comprueba que un modelo que descomprimido supera el tope se rechaza."""
     import base64
     import zlib
 
@@ -86,6 +90,7 @@ def test_una_bomba_de_zip_no_pasa():
 
 
 def test_solo_profesores_y_admins_usan_el_panel(cliente, crear_cuenta):
+    """Comprueba que el panel del profesor da 401 sin sesión y 403 a un alumno."""
     _, alumno = crear_cuenta()
     _, admin = crear_cuenta(rol="admin")
     assert cliente.get(f"{API}/grupos", headers=alumno).status_code == 403
@@ -94,6 +99,7 @@ def test_solo_profesores_y_admins_usan_el_panel(cliente, crear_cuenta):
 
 
 def test_flujo_completo_entregar_recoger_y_evaluar(cliente, salon):
+    """Comprueba el flujo completo: el alumno entrega, el profesor recoge el modelo (se borra del servidor) y evalúa."""
     profesor, asignacion = salon["profesor"], salon["asignacion"]
     (luis_id, luis), (marta_id, _) = salon["alumnos"]
 
@@ -149,6 +155,7 @@ def test_flujo_completo_entregar_recoger_y_evaluar(cliente, salon):
 
 
 def test_nadie_ve_lo_de_otro_profesor_ni_entrega_fuera_de_su_grupo(cliente, crear_cuenta, salon):
+    """Comprueba que un profesor no ve grupos ajenos y que un alumno no entrega en un grupo al que no pertenece."""
     _, otro_profesor = crear_cuenta(rol="profesor")
     _, intruso = crear_cuenta()
     asignacion, grupo = salon["asignacion"], salon["grupo"]
@@ -161,6 +168,7 @@ def test_nadie_ve_lo_de_otro_profesor_ni_entrega_fuera_de_su_grupo(cliente, crea
 
 
 def test_reglas_de_grupos_y_asignaciones(cliente, crear_cuenta, salon):
+    """Comprueba las reglas: no se asignan borradores, grupos archivados ni se entrega en asignaciones cerradas o evaluadas."""
     profesor, grupo, asignacion = salon["profesor"], salon["grupo"], salon["asignacion"]
     luis_id, luis = salon["alumnos"][0]
     # Un borrador no se puede asignar (los alumnos no lo verían).
@@ -186,6 +194,7 @@ def test_reglas_de_grupos_y_asignaciones(cliente, crear_cuenta, salon):
 
 
 def test_los_modelos_sin_recoger_se_borran_a_los_30_dias(cliente, salon):
+    """Comprueba que los modelos sin recoger de más de 30 días se purgan (410 al recogerlos)."""
     asignacion = salon["asignacion"]
     luis_id, luis = salon["alumnos"][0]
     cliente.post(f"{API}/entregas", json={"asignacion_id": asignacion["id"], "modelo": modelo_mesa()}, headers=luis)
@@ -200,5 +209,6 @@ def test_los_modelos_sin_recoger_se_borran_a_los_30_dias(cliente, salon):
 
 
 def test_un_alumno_anonimo_no_se_une(cliente, practica):
+    """Comprueba que sin cuenta registrada no se puede unir a un grupo (401)."""
     respuesta = cliente.post(f"{API}/unirme", json={"codigo": "AMA-XXXX"}, headers={"X-Usuario-Id": "alumno-1"})
     assert respuesta.status_code == 401

@@ -25,6 +25,7 @@ _vence = 0.0
 
 
 def _numero(n):
+    """True si `n` es un entero no negativo (bool excluido); valida los conteos de la publicación G7B."""
     return type(n) is int and n >= 0
 
 
@@ -58,6 +59,11 @@ def validar(documento):
 
 
 def _descargar():
+    """Descarga y valida la publicación agregada de G7B (red, timeout 4 s, máx. 64 KiB).
+
+    La URL sale de G7B_GEODA_URL (configuración del servidor, nunca del cliente)
+    y debe ser HTTPS. Lanza ValueError/OSError si no se puede usar.
+    """
     url = os.getenv("G7B_GEODA_URL", PUBLICACION)
     # Configuración de administración, no parámetro del cliente. HTTPS obligatorio.
     if not url.startswith("https://"):
@@ -70,12 +76,20 @@ def _descargar():
 
 
 def _reiniciar_cache():
+    """Vacía la caché en memoria de G7B (la usan las pruebas)."""
     global _cache, _vence
     with _CANDADO:
         _cache, _vence = None, 0.0
 
 
 def obtener():
+    """Estado de G7B para Geoda con caché de 15 min y protección ante caídas.
+
+    Devuelve el documento validado con `estado`: "conectado" (dato fresco),
+    "cache" (falló la descarga pero hay copia anterior) o "sin_conexion"
+    (sin datos; cubo y conocimiento en None). Tras un fallo no vuelve a
+    intentarlo durante 60 s. Efecto: petición HTTPS a GitHub.
+    """
     global _cache, _vence
     ahora = time.monotonic()
     with _CANDADO:
@@ -85,6 +99,7 @@ def obtener():
             return {"contrato": "g7b.geoda.estado/1", "estado": "sin_conexion",
                     "cubo": None, "conocimiento": None, "perfiles": []}
         try:
+            # [REVISION-OPTIMIZAR] La descarga (hasta 4 s) se hace con _CANDADO tomado: todas las peticiones a /estado esperan detrás.
             nuevo = _descargar()
         except (OSError, ValueError, TypeError, UnicodeError) as error:
             # Un proveedor caído no debe disparar una petición externa por cada alumno.
@@ -100,4 +115,9 @@ def obtener():
 
 @router.get("/estado")
 def estado():
+    """GET /api/g7b/v1/estado. Público, sin sesión.
+
+    Respuesta: contrato g7b.geoda.estado/1 con cubo, conocimiento, perfiles ([])
+    y `estado`. Nunca falla por G7B caído: responde "sin_conexion".
+    """
     return obtener()

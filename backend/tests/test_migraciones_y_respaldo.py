@@ -1,6 +1,7 @@
 """Pruebas de 016 (ESQUEMA_MIGRACIONES), migrar estado y respaldo con restauración."""
 import json
 from datetime import datetime
+# [REVISION-MUERTO] Path y select (abajo) se importan y no se usan.
 from pathlib import Path
 
 from sqlalchemy import create_engine, select
@@ -12,6 +13,7 @@ from herramientas.aplicar_016_oracle import aplicar_016
 
 
 def test_aplicar_016_idempotente_y_estado_completo_en_sqlite(tmp_path):
+    """Comprueba que aplicar 016 dos veces en SQLite deja ESQUEMA_MIGRACIONES completa y sin pendientes."""
     db_url = f"sqlite:///{(tmp_path / 'mig_016.db').as_posix()}"
     motor = create_engine(db_url)
     try:
@@ -38,6 +40,7 @@ def test_aplicar_016_idempotente_y_estado_completo_en_sqlite(tmp_path):
 
 
 def test_estado_migraciones_detecta_pendiente_y_cambio_sha(tmp_path):
+    """Comprueba que estado_migraciones detecta un script pendiente y uno cuyo SHA cambió."""
     sql_dir = tmp_path / "sql"
     sql_dir.mkdir()
     s1 = sql_dir / "001_init.sql"
@@ -70,6 +73,7 @@ def test_estado_migraciones_detecta_pendiente_y_cambio_sha(tmp_path):
 
 
 def test_respaldar_y_probar_exporta_restaura_verifica_y_rota(tmp_path):
+    """Comprueba que el respaldo verificado exporta, restaura en SQLite, escribe la verificación y rota copias viejas."""
     origen_ruta = tmp_path / "origen.db"
     db_url = f"sqlite:///{origen_ruta.as_posix()}"
     motor = create_engine(db_url)

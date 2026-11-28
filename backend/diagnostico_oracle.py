@@ -538,6 +538,7 @@ def revisar_email_unico(real, email_unico):
 
 
 def obsoletas(real):
+    """Tablas del esquema que pertenecen a versiones anteriores (OBSOLETAS) y ya no usa el backend, en orden."""
     return sorted(tabla for tabla in real if tabla.upper() in OBSOLETAS)
 
 
@@ -553,6 +554,10 @@ def ids_numericos(real):
 
 
 def _completo_salvo(real, tablas, columnas_extra=frozenset()):
+    """True si existen todas las tablas y columnas de ESPERADO salvo las `tablas` y (tabla, columna) excluidas.
+
+    Base de las funciones solo_falta_NNN que eligen qué script de sql/ recomendar.
+    """
     for tabla, columnas in ESPERADO.items():
         if tabla in tablas:
             continue
@@ -611,18 +616,22 @@ def solo_falta_016(real):
 
 
 def falta_016(real):
+    """True si falta alguna tabla de sql/016 (ESQUEMA_MIGRACIONES)."""
     return any(t not in real for t in TABLAS_016)
 
 
 def falta_015(real):
+    """True si falta alguna tabla de sql/015 (SISTEMA_LOTES)."""
     return any(t not in real for t in TABLAS_015)
 
 
 def falta_014(real):
+    """True si falta alguna tabla de sql/014 (panel del profesor)."""
     return any(t not in real for t in TABLAS_014)
 
 
 def falta_013(real):
+    """True si falta alguna tabla de sql/013 (avatares y buzón)."""
     return any(t not in real for t in TABLAS_013)
 
 
@@ -792,6 +801,11 @@ def mostrar_mantenimiento(motor, usuario, esquema):
 
 
 def main() -> int:
+    """Diagnóstico de Oracle: conecta, compara las tablas reales con las que espera el backend y muestra filas y espacio.
+
+    Solo lee. Devuelve 0 si todo coincide, 1 si no hay conexión o no es Oracle y
+    2 si faltan tablas/columnas (imprime el script de sql/ a ejecutar).
+    """
     try:
         motor = crear_motor()
         if motor.dialect.name != "oracle":

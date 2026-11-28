@@ -15,6 +15,11 @@ from .comun import (
 
 
 def _blender_practice(c: _Contexto, b: dict) -> None:
+    """Bloque blender_practice: enlaza una práctica del add-on por su id (p. ej. blender.n1.mesa) con título.
+
+    «steps» es una vista previa offline (hasta 30 textos) y «allowManual» permite
+    marcarla como hecha sin el add-on.
+    """
     practica = c.texto(b, "practica", maximo=80)
     if practica is not None and not PATRON_PRACTICA.match(practica):
         c.error(f"«practica» = «{practica}» debe ser un id de práctica como blender.n1.mesa (minúsculas, números, punto, guion)")
@@ -32,6 +37,11 @@ def _blender_practice(c: _Contexto, b: dict) -> None:
 
 
 def _blender_taller(c: _Contexto, b: dict) -> None:
+    """Bloque blender_taller: enlaza un taller de practices/blender/habilidades.json.
+
+    Si el catálogo está disponible comprueba que el taller exista y que las
+    «habilidades» (solo con etapa «exploracion», 1-4) sean de ese taller.
+    """
     taller = c.texto(b, "taller", maximo=60)
     if taller is not None and not PATRON_PRACTICA.match(taller):
         c.error(f"«taller» = «{taller}» debe ser un id de taller como blender.bp.m1 (minúsculas, números, punto, guion)")
@@ -63,12 +73,14 @@ def _blender_taller(c: _Contexto, b: dict) -> None:
 
 
 def _fichas():
+    """Catálogo de fichas de herramientas de Blender (practices/blender/fichas.json), importado en diferido."""
     from contenido.taller import fichas
 
     return fichas()
 
 
 def _herramienta_blender(c: _Contexto, b: dict) -> None:
+    """Bloque herramienta_blender: presenta una herramienta que debe tener ficha en fichas.json; «check» pide encontrarla en el mapa."""
     herramienta = c.texto(b, "tool", maximo=40)
     if herramienta is not None:
         f = _fichas()
@@ -80,6 +92,11 @@ def _herramienta_blender(c: _Contexto, b: dict) -> None:
 
 
 def _blender_mapa(c: _Contexto, b: dict) -> None:
+    """Bloque blender_mapa: mapa de la interfaz de Blender en modo «explore» (zonas) o «find» (preguntas).
+
+    En «explore» las zonas deben existir y no repetirse; en «find» cada pregunta
+    lleva «tool» o «zone» (no ambos) y un «prompt».
+    """
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=600)
     modo = c.opcion(b, "mode", MODOS_MAPA)
@@ -117,6 +134,7 @@ def _blender_mapa(c: _Contexto, b: dict) -> None:
 
 
 def _blender_tour(c: _Contexto, b: dict) -> None:
+    """Bloque blender_tour: recorrido guiado en Blender con título, texto opcional y «allowManual»."""
     c.texto(b, "title", maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=2000)
     c.booleano(b, "allowManual")

@@ -39,6 +39,7 @@ log = logging.getLogger("amatista.reenganche")
 
 
 def primer_nombre(nombre_completo: Optional[str], email: str) -> str:
+    """Primer nombre para el saludo: del nombre guardado (si no parece un correo) o, si no, la parte local del correo, capitalizado."""
     if nombre_completo:
         limpio = " ".join(nombre_completo.split()).strip()
         if limpio and "@" not in limpio:
@@ -53,6 +54,10 @@ def construir_correo_reenganche(
     lecciones: int,
     remitente: str,
 ) -> EmailMessage:
+    """Arma el correo de reenganche (texto + HTML) para un usuario con su nombre y cuántas lecciones lleva.
+
+    No envía nada; el enlace y los textos invitan a volver a la plataforma.
+    """
     asunto = f"¡Hola, {nombre}! Tu taller 3D en Amatista te espera 🚀"
     mensaje = EmailMessage()
     mensaje["Subject"] = asunto
@@ -166,6 +171,10 @@ def construir_correo_reenganche(
 
 
 def enviar_correo_smtp(mensaje: EmailMessage) -> bool:
+    """Envía el mensaje por SMTP (SMTP_HOST/PORT/USER/PASSWORD; TLS implícito en 465, STARTTLS en otro puerto).
+
+    Devuelve False y lo deja en el log si falla (nunca lanza). Efecto: red.
+    """
     host = os.getenv("SMTP_HOST", "smtp-relay.brevo.com").strip()
     try:
         puerto = int(os.getenv("SMTP_PORT", "587"))
@@ -193,6 +202,12 @@ def enviar_correo_smtp(mensaje: EmailMessage) -> bool:
 
 
 def main():
+    """CLI: --dry-run lista destinatarios, --probar <correo> manda uno de prueba y --enviar manda a todos.
+
+    Destinatarios: usuarios con correo válido (sin .local ni la cuenta de prueba
+    fija); hay 1,2 s de pausa entre envíos. No filtra por es_prueba ni por un
+    consentimiento de recibir correos.
+    """
     parser = argparse.ArgumentParser(description="Envío masivo de correos de reenganche personalizados.")
     parser.add_argument("--dry-run", action="store_true", help="Simula el envío sin mandar correos.")
     parser.add_argument("--probar", type=str, help="Envía un solo correo de prueba a esta dirección.")

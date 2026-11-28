@@ -90,6 +90,7 @@ def aplicar_015(motor: Engine) -> dict[str, bool]:
 
 
 def main() -> int:
+    """Punto de entrada CLI: aplica 015 (SISTEMA_LOTES) en la base configurada e imprime si se creó o ya existía. Devuelve 0."""
     motor = crear_motor()
     try:
         resultado = aplicar_015(motor)

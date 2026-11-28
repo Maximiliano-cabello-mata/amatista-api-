@@ -64,6 +64,7 @@ def agregar_eventos(usuario_id, *eventos, es_prueba=0):
 
 
 def agregar_progreso(usuario_id, curso_id, leccion_id, completada_en=None, puntaje=None):
+    """Inserta una fila de progreso de lección para las pruebas de métricas."""
     with Session(conexion.motor()) as db:
         db.add(
             ProgresoLeccion(
@@ -81,6 +82,7 @@ def agregar_progreso(usuario_id, curso_id, leccion_id, completada_en=None, punta
 
 
 def agregar_sesion(usuario_id, activa=1, expira_en=None, ultimo_acceso=None):
+    """Inserta una sesión activa para el usuario y devuelve su token."""
     token = nuevo_token()
     with Session(conexion.motor()) as db:
         db.add(
@@ -97,16 +99,19 @@ def agregar_sesion(usuario_id, activa=1, expira_en=None, ultimo_acceso=None):
 
 
 def leer(modelo, llave):
+    """Lee una fila del `modelo` por su llave."""
     with Session(conexion.motor()) as db:
         return db.get(modelo, llave)
 
 
 def contar(modelo, *condiciones):
+    """Cuenta las filas de `modelo` que cumplen las condiciones."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo).where(*condiciones))
 
 
 def dia(fecha):
+    """Día (ISO) en la zona de las métricas de una fecha guardada en UTC."""
     return fecha.replace(tzinfo=timezone.utc).astimezone(ZONA).date().isoformat()
 
 
@@ -117,6 +122,7 @@ LECTURAS = ("/api/admin/resumen", "/api/admin/usuarios")
 
 
 def test_permisos_de_lectura(cliente, crear_cuenta):
+    """Comprueba que las lecturas del panel dan 401 sin sesión, 403 a alumnos y 200 a profesores y admins."""
     _, alumno = crear_cuenta()
     _, profesor = crear_cuenta(rol="profesor")
     _, admin = crear_cuenta(rol="admin")
@@ -128,6 +134,7 @@ def test_permisos_de_lectura(cliente, crear_cuenta):
 
 
 def test_permisos_de_escritura(cliente, crear_cuenta):
+    """Comprueba que las escrituras del panel solo las puede hacer un admin."""
     alumno_id, alumno = crear_cuenta()
     _, profesor = crear_cuenta(rol="profesor")
     for cabeceras, estado in (({}, 401), (alumno, 403), (profesor, 403)):
@@ -147,6 +154,7 @@ def escenario(cliente, crear_cuenta):
     momento = ahora()
 
     def hace(dias, horas=0):
+        """Momento de hace `dias` días y `horas` horas respecto del inicio del escenario."""
         return momento - timedelta(days=dias, hours=horas)
 
     _, profesor = crear_cuenta(rol="profesor")
@@ -195,6 +203,7 @@ def escenario(cliente, crear_cuenta):
 
 
 def test_resumen_metricas_del_plan(cliente, escenario):
+    """Comprueba registros, activaciones, activos semanales y retención del resumen con el escenario de alumnos."""
     respuesta = cliente.get("/api/admin/resumen", headers=escenario["profesor"])
     assert respuesta.status_code == 200, respuesta.text
     datos = respuesta.json()
@@ -218,6 +227,7 @@ def test_resumen_metricas_del_plan(cliente, escenario):
 
 
 def test_resumen_serie_diaria(cliente, escenario):
+    """Comprueba que la serie diaria trae 30 días con activos, completadas y registros correctos."""
     hace = escenario["hace"]
     serie = cliente.get("/api/admin/resumen", headers=escenario["profesor"]).json()["serie_diaria"]
     assert len(serie) == 30
@@ -235,6 +245,7 @@ def test_resumen_serie_diaria(cliente, escenario):
 
 
 def test_resumen_por_curso(cliente, escenario):
+    """Comprueba los alumnos, completadas y lecciones publicadas por curso del resumen."""
     profesor = escenario["profesor"]
     por_curso = cliente.get("/api/admin/resumen", headers=profesor).json()["por_curso"]
     assert por_curso == [
@@ -269,6 +280,7 @@ def test_resumen_por_curso(cliente, escenario):
 
 
 def test_resumen_con_ventana_de_30_dias(cliente, escenario):
+    """Comprueba las métricas del resumen con ?dias=30."""
     datos = cliente.get("/api/admin/resumen?dias=30", headers=escenario["profesor"]).json()
     assert datos["activos_semanales"] == 4  # A, G, I y J
     assert datos["registros_periodo"] == 5  # A, B, I, J y K
@@ -278,6 +290,7 @@ def test_resumen_con_ventana_de_30_dias(cliente, escenario):
 
 
 def test_resumen_activacion_fuera_de_7_dias_no_cuenta(cliente, crear_cuenta):
+    """Comprueba que una primera lección más de 7 días después del alta no cuenta como activación."""
     _, admin = crear_cuenta(rol="admin")
     momento = ahora()
     # Alta hace 12 días, primera lección hace 2: no es activación (más de 7 días).
@@ -289,6 +302,7 @@ def test_resumen_activacion_fuera_de_7_dias_no_cuenta(cliente, crear_cuenta):
 
 
 def test_resumen_sin_datos(cliente, crear_cuenta):
+    """Comprueba que el resumen sin datos responde ceros y retención None."""
     _, admin = crear_cuenta(rol="admin")
     datos = cliente.get("/api/admin/resumen", headers=admin).json()
     assert datos["activos_semanales"] == 0
@@ -298,6 +312,7 @@ def test_resumen_sin_datos(cliente, crear_cuenta):
 
 
 def test_marcar_cuenta_de_prueba_la_saca_de_las_metricas(cliente, escenario, crear_cuenta):
+    """Comprueba que marcar una cuenta como de prueba la saca de las métricas (también sus eventos)."""
     _, admin = crear_cuenta(rol="admin")
     antes = cliente.get("/api/admin/resumen", headers=admin).json()
     respuesta = cliente.patch("/api/admin/usuarios/alumno-a", json={"es_prueba": True}, headers=admin)
@@ -315,6 +330,7 @@ def test_marcar_cuenta_de_prueba_la_saca_de_las_metricas(cliente, escenario, cre
 
 @pytest.fixture()
 def usuarios(cliente, crear_cuenta):
+    """Fixture: crea varias cuentas (alumnos, profesor, anónimo fusionado) con progreso para listar."""
     admin_id, admin = crear_cuenta(rol="admin", nombre="Prueba")
     momento = ahora()
     crear_usuario(
@@ -343,12 +359,14 @@ def usuarios(cliente, crear_cuenta):
 
 
 def listar(cliente, cabeceras, **params):
+    """Hace GET /api/admin/usuarios con los parámetros, exige 200 y devuelve el JSON."""
     respuesta = cliente.get("/api/admin/usuarios", params=params, headers=cabeceras)
     assert respuesta.status_code == 200, respuesta.text
     return respuesta.json()
 
 
 def test_usuarios_por_defecto(cliente, usuarios):
+    """Comprueba la lista por defecto: más reciente primero y sin filas fusionadas."""
     datos = listar(cliente, usuarios["admin"])
     assert (datos["total"], datos["pagina"], datos["por_pagina"]) == (4, 1, 25)
     # Más reciente primero; la fila fusionada se oculta.
@@ -365,6 +383,7 @@ def test_usuarios_por_defecto(cliente, usuarios):
 
 
 def test_usuarios_busqueda_sin_distinguir_mayusculas(cliente, usuarios):
+    """Comprueba que la búsqueda por nombre, correo o id no distingue mayúsculas ni acentos escapados."""
     admin = usuarios["admin"]
     assert [u["id"] for u in listar(cliente, admin, buscar="ANA")["usuarios"]] == ["usr-1"]  # nombre y correo
     assert [u["id"] for u in listar(cliente, admin, buscar="lópez")["usuarios"]] == ["usr-1"]
@@ -378,6 +397,7 @@ def test_usuarios_busqueda_sin_distinguir_mayusculas(cliente, usuarios):
 
 
 def test_usuarios_filtro_por_rol(cliente, usuarios):
+    """Comprueba el filtro por rol (alumno incluye filas sin rol)."""
     admin = usuarios["admin"]
     assert [u["id"] for u in listar(cliente, admin, rol="profesor")["usuarios"]] == ["usr-2"]
     assert [u["id"] for u in listar(cliente, admin, rol="admin")["usuarios"]] == [usuarios["admin_id"]]
@@ -389,6 +409,7 @@ def test_usuarios_filtro_por_rol(cliente, usuarios):
 
 
 def test_usuarios_paginacion(cliente, usuarios):
+    """Comprueba la paginación de la lista de usuarios."""
     admin = usuarios["admin"]
     paginas = [listar(cliente, admin, por_pagina=3, pagina=n) for n in (1, 2, 3)]
     assert [len(p["usuarios"]) for p in paginas] == [3, 1, 0]
@@ -401,6 +422,7 @@ def test_usuarios_paginacion(cliente, usuarios):
 
 
 def test_usuarios_orden(cliente, usuarios):
+    """Comprueba los órdenes nombre y actividad con los nulos al final."""
     admin = usuarios["admin"]
     por_nombre = [u["nombre"] for u in listar(cliente, admin, orden="nombre")["usuarios"]]
     assert por_nombre == ["Ana López", "Beto Ruiz", "Prueba", None]  # sin nombre al final
@@ -411,6 +433,7 @@ def test_usuarios_orden(cliente, usuarios):
 
 
 def test_detalle_de_usuario(cliente, usuarios):
+    """Comprueba el detalle de un usuario: ficha, progreso, insignias, sesiones activas y eventos recientes."""
     admin = usuarios["admin"]
     momento = ahora()
     with Session(conexion.motor()) as db:
@@ -439,6 +462,7 @@ def test_detalle_de_usuario(cliente, usuarios):
 
 
 def test_profesor_ve_el_detalle(cliente, usuarios, crear_cuenta):
+    """Comprueba que un profesor ve el detalle de un usuario y un alumno no (403)."""
     _, profesor = crear_cuenta(rol="profesor")
     _, alumno = crear_cuenta()
     assert cliente.get("/api/admin/usuarios/usr-1", headers=profesor).status_code == 200
@@ -449,6 +473,7 @@ def test_profesor_ve_el_detalle(cliente, usuarios, crear_cuenta):
 
 
 def test_admin_cambia_rol_y_aplica_de_inmediato(cliente, crear_cuenta):
+    """Comprueba que el cambio de rol vale desde la siguiente petición sin cerrar sesión."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, alumno = crear_cuenta()
     assert cliente.get("/api/admin/resumen", headers=alumno).status_code == 403
@@ -465,6 +490,7 @@ def test_admin_cambia_rol_y_aplica_de_inmediato(cliente, crear_cuenta):
 
 
 def test_admin_no_se_quita_admin_a_si_mismo(cliente, crear_cuenta):
+    """Comprueba que un admin no puede quitarse su propio rol (400)."""
     admin_id, admin = crear_cuenta(rol="admin")
     for rol in ("profesor", "alumno"):
         respuesta = cliente.patch(f"/api/admin/usuarios/{admin_id}", json={"rol": rol}, headers=admin)
@@ -482,6 +508,7 @@ def test_admin_no_se_quita_admin_a_si_mismo(cliente, crear_cuenta):
 
 
 def test_patch_valida(cliente, crear_cuenta):
+    """Comprueba que PATCH de usuario rechaza roles inválidos, usuarios inexistentes y rol de equipo sin contraseña."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, _ = crear_cuenta()
     respuesta = cliente.patch(f"/api/admin/usuarios/{alumno_id}", json={"rol": "director"}, headers=admin)
@@ -495,6 +522,7 @@ def test_patch_valida(cliente, crear_cuenta):
 
 
 def test_patch_correo_confirmado(cliente, crear_cuenta):
+    """Comprueba que confirmar el correo desde el panel borra el código de confirmación pendiente."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, _ = crear_cuenta()
     with Session(conexion.motor()) as db:
@@ -516,6 +544,7 @@ def test_patch_correo_confirmado(cliente, crear_cuenta):
 
 
 def test_purgar_sesiones_y_eventos(cliente, crear_cuenta):
+    """Comprueba que la purga borra sesiones inactivas/vencidas y eventos viejos sin tocar lo vigente."""
     _, admin = crear_cuenta(rol="admin")
     alumno_id, propia = crear_cuenta()
     momento = ahora()
@@ -547,12 +576,14 @@ def test_purgar_sesiones_y_eventos(cliente, crear_cuenta):
 
 
 def test_purgar_valida(cliente, crear_cuenta):
+    """Comprueba que la purga rechaza días fuera de rango (422)."""
     _, admin = crear_cuenta(rol="admin")
     for cuerpo in ({"dias_sesiones": 0}, {"dias_eventos": -1}):
         assert cliente.post("/api/admin/mantenimiento/purgar", json=cuerpo, headers=admin).status_code == 422
 
 
 def test_salud_detallada(cliente, crear_cuenta):
+    """Comprueba que salud-detallada da el motor y las filas por tabla."""
     _, admin = crear_cuenta(rol="admin")
     crear_usuario("alumno-1", ahora(), registrado=False)
     respuesta = cliente.get("/api/admin/salud-detallada", headers=admin)
@@ -571,6 +602,7 @@ def test_salud_detallada(cliente, crear_cuenta):
 
 
 def test_auditoria_permisos(cliente, crear_cuenta):
+    """Comprueba que la auditoría da 401 sin sesión, 403 a alumnos y 200 a profesores."""
     _, alumno = crear_cuenta()
     _, profesor = crear_cuenta(rol="profesor")
     assert cliente.get("/api/admin/auditoria").status_code == 401
@@ -579,6 +611,7 @@ def test_auditoria_permisos(cliente, crear_cuenta):
 
 
 def test_auditoria_personal_cuentas_y_atascos(cliente, crear_cuenta):
+    """Comprueba la auditoría de personal, cuentas (bloqueadas, sin confirmar, de prueba) y lecciones con atascos."""
     _, admin = crear_cuenta(rol="admin")
     momento = ahora()
     crear_usuario("sin-confirmar", momento - timedelta(days=10), confirmado=False)
@@ -625,6 +658,7 @@ def test_auditoria_personal_cuentas_y_atascos(cliente, crear_cuenta):
 
 
 def test_auditoria_contenido(cliente, crear_cuenta):
+    """Comprueba la auditoría de contenido: conteos por estado, sin publicar y cambios recientes."""
     _, admin = crear_cuenta(rol="admin")
     momento = ahora()
     with Session(conexion.motor()) as db:

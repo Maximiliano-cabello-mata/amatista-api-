@@ -93,6 +93,7 @@ DDL_STATEMENTS = [
 ]
 
 def tabla_existe(con, tabla):
+    """True si la tabla existe en el esquema activo (CURRENT_SCHEMA) de Oracle; consulta ALL_TABLES."""
     r = con.execute(
         text("SELECT COUNT(*) FROM all_tables WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND table_name = :t"),
         {"t": tabla.upper()}
@@ -100,6 +101,7 @@ def tabla_existe(con, tabla):
     return (r or 0) > 0
 
 def indice_existe(con, idx):
+    """True si el índice existe en el esquema activo de Oracle; consulta ALL_INDEXES."""
     r = con.execute(
         text("SELECT COUNT(*) FROM all_indexes WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND index_name = :i"),
         {"i": idx.upper()}
@@ -107,6 +109,10 @@ def indice_existe(con, idx):
     return (r or 0) > 0
 
 def main():
+    """Crea en Oracle, solo si faltan, las tablas e índices del panel del profesor (sql/014).
+
+    Una sola transacción; imprime qué creó y qué ya existía. Efecto: DDL en la base de backend/.env.
+    """
     print("Conectando a la base de datos...")
     motor = crear_motor()
     with motor.begin() as con:

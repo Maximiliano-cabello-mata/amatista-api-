@@ -16,6 +16,12 @@ from fastapi import APIRouter, FastAPI
 
 @dataclass(frozen=True)
 class Api:
+    """Descripción estática de una API de Amatista (plataforma, motor, aula, administración, datos).
+
+    `nombre` firma los códigos de error, `prefijos` decide a qué API pertenece una
+    ruta (api_de) y `routers` devuelve sus routers de FastAPI de forma perezosa.
+    `activa` permite apagarla por configuración.
+    """
     nombre: str  # identificador estable: aparece en los códigos de error
     titulo: str
     responsabilidad: str
@@ -25,6 +31,7 @@ class Api:
 
 
 def _plataforma():
+    """Routers de la API de la plataforma (la web del alumno). Importa en diferido para evitar ciclos."""
     from api.plataforma import auth, blender, buzon, contenido, eventos, niveles, perfil, progreso, sesiones, sincronizar
 
     # sesiones: /api/iniciar-sesion heredado (alumnos anónimos). sincronizar: progreso
@@ -34,6 +41,7 @@ def _plataforma():
 
 
 def _motor():
+    """Routers de la API del motor (complemento de Blender: addon, enlace en vivo y taller)."""
     from api.motor import addon, enlace, taller
 
     # addon: complemento y motor de prácticas (sql/007). enlace: plataforma ↔ Blender
@@ -42,18 +50,21 @@ def _motor():
 
 
 def _aula():
+    """Router de la API del aula (panel del profesor y «Mi clase»)."""
     from api.aula import evaluacion
 
     return (evaluacion.router,)  # panel del profesor y «Mi clase» (sql/014)
 
 
 def _administracion():
+    """Router de la API de administración (/api/admin)."""
     from api.administracion import admin
 
     return (admin.router,)
 
 
 def _datos():
+    """Routers de la API de datos: G7B siempre; la propuesta de nube solo con AMATISTA_PROPUESTA_NUBE=1."""
     from api.datos import g7b, nube
 
     # g7b: estado agregado G7B -> Geoda (sin Oracle). nube: propuesta Amatista

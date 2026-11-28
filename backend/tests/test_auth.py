@@ -22,19 +22,23 @@ CREDENCIALES = "Correo o contraseña incorrectos."
 
 
 def bearer(token):
+    """Cabecera Authorization: Bearer con el token dado."""
     return {"Authorization": f"Bearer {token}"}
 
 
 def registrar(cliente, **datos):
+    """Hace POST /api/auth/registro con una cuenta de ejemplo (Ana) y los cambios indicados."""
     cuerpo = {"nombre": "Ana López", "email": "ana@amatista.local", "password": PASSWORD, **datos}
     return cliente.post("/api/auth/registro", json=cuerpo)
 
 
 def entrar(cliente, email="ana@amatista.local", password=PASSWORD, **datos):
+    """Hace POST /api/auth/iniciar-sesion con el correo y la contraseña indicados (Ana por defecto)."""
     return cliente.post("/api/auth/iniciar-sesion", json={"email": email, "password": password, **datos})
 
 
 def confirmar(cliente, codigo, email="ana@amatista.local"):
+    """Hace POST /api/auth/confirmar-correo con el código y el correo indicados."""
     return cliente.post("/api/auth/confirmar-correo", json={"email": email, "codigo": codigo})
 
 
@@ -45,6 +49,7 @@ def escribir_anonimo(cliente, usuario_id, leccion_id):
 
 
 def leccion(leccion_id, completada, puntaje=None, intentos=0, datos=None, completada_en=None, actualizado_en=None):
+    """Fila de progreso de ejemplo para sembrar (lección, completada, puntaje, fechas)."""
     return {
         "leccion_id": leccion_id,
         "completada": completada,
@@ -58,11 +63,13 @@ def leccion(leccion_id, completada, puntaje=None, intentos=0, datos=None, comple
 
 def leer(modelo, llave):
     # Al cerrar la sesión el objeto queda desligado con sus columnas ya cargadas.
+    """Lee una fila del `modelo` por su llave."""
     with Session(conexion.motor()) as db:
         return db.get(modelo, llave)
 
 
 def modificar_usuario(usuario_id, **campos):
+    """Cambia campos de un usuario directamente en la base (para simular vencimientos y bloqueos)."""
     with Session(conexion.motor()) as db:
         usuario = db.get(Usuario, usuario_id)
         for campo, valor in campos.items():
@@ -71,6 +78,7 @@ def modificar_usuario(usuario_id, **campos):
 
 
 def contar(modelo, *condiciones):
+    """Cuenta las filas de `modelo` que cumplen las condiciones."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo).where(*condiciones))
 
@@ -98,6 +106,7 @@ def sembrar(usuario_id, lecciones=(), logros=(), eventos=0, **campos):
 
 
 def progreso_de(usuario_id):
+    """Filas de progreso del usuario indexadas por id de lección."""
     with Session(conexion.motor()) as db:
         filas = db.scalars(select(ProgresoLeccion).where(ProgresoLeccion.usuario_id == usuario_id)).all()
     return {f.leccion_id: f for f in filas}
@@ -105,6 +114,7 @@ def progreso_de(usuario_id):
 
 @pytest.fixture()
 def modo_dev(monkeypatch):
+    """Fixture: activa AMATISTA_MOSTRAR_CODIGOS=1 para recibir codigo_dev en las respuestas."""
     monkeypatch.setenv("AMATISTA_MOSTRAR_CODIGOS", "1")
 
 
@@ -112,6 +122,7 @@ def modo_dev(monkeypatch):
 
 
 def test_registro_crea_cuenta_con_sesion(cliente):
+    """Comprueba que el registro normaliza el correo, guarda teléfono, acota el dispositivo y abre sesión."""
     respuesta = registrar(
         cliente, email="  Ana@Amatista.LOCAL ", telefono="+52 55 1234 5678", dispositivo="x" * 500
     )
@@ -148,6 +159,7 @@ def test_registro_crea_cuenta_con_sesion(cliente):
 
 
 def test_registro_correo_duplicado(cliente):
+    """Comprueba que registrar un correo ya usado (sin distinguir mayúsculas) responde 409."""
     assert registrar(cliente).status_code == 201
     respuesta = registrar(cliente, email="ANA@amatista.local", nombre="Otra")
     assert respuesta.status_code == 409
@@ -174,6 +186,7 @@ def test_registro_correo_duplicado(cliente):
     ],
 )
 def test_registro_valida_datos(cliente, cambios, mensaje):
+    """Comprueba el mensaje de validación de cada dato inválido del registro (422)."""
     respuesta = registrar(cliente, **cambios)
     assert respuesta.status_code == 422
     assert mensaje in respuesta.json()["detail"][0]["msg"]
@@ -181,10 +194,12 @@ def test_registro_valida_datos(cliente, cambios, mensaje):
 
 
 def test_registro_requiere_campos(cliente):
+    """Comprueba que el registro sin nombre ni contraseña responde 422."""
     assert cliente.post("/api/auth/registro", json={"email": "ana@amatista.local"}).status_code == 422
 
 
 def test_registro_convierte_al_anonimo_en_el_lugar(cliente):
+    """Comprueba que registrarse con el id de un anónimo convierte esa fila en la cuenta y conserva su progreso."""
     anonimo = "alumno-1b2c3d4e-0000-4000-8000-000000000001"
     sembrar(
         anonimo,
@@ -214,6 +229,7 @@ def test_registro_convierte_al_anonimo_en_el_lugar(cliente):
 
 
 def test_registro_con_id_local_que_aun_no_existe(cliente):
+    """Comprueba que un id local nuevo se adopta como id de la cuenta."""
     respuesta = registrar(cliente, usuario_local_id="alumno-nuevo-123")
     assert respuesta.status_code == 201
     assert respuesta.json()["usuario"]["id"] == "alumno-nuevo-123"
@@ -221,6 +237,7 @@ def test_registro_con_id_local_que_aun_no_existe(cliente):
 
 
 def test_registro_ignora_id_local_de_una_cuenta(cliente, crear_cuenta):
+    """Comprueba que el id local de otra cuenta registrada no se adopta ni se fusiona."""
     otra_id, _ = crear_cuenta(email="beto@amatista.local")
     sembrar(otra_id, lecciones=[{"leccion_id": "les_001", "completada": 1}])
     respuesta = registrar(cliente, usuario_local_id=otra_id)
@@ -235,6 +252,7 @@ def test_registro_ignora_id_local_de_una_cuenta(cliente, crear_cuenta):
 
 def test_registro_con_id_local_tipo_correo_fusiona_en_cuenta_nueva(cliente):
     # Versiones viejas usaban el correo como id: el id de la cuenta nunca es un correo.
+    """Comprueba que un id local con forma de correo se fusiona en una cuenta nueva en vez de adoptarse."""
     viejo = "alumno_prueba@amatista.local"
     sembrar(viejo, lecciones=[{"leccion_id": "les_001", "completada": 1, "puntaje": 70}])
     respuesta = registrar(cliente, usuario_local_id=viejo)
@@ -250,6 +268,7 @@ def test_registro_con_id_local_tipo_correo_fusiona_en_cuenta_nueva(cliente):
 
 
 def test_iniciar_sesion_correcto(cliente):
+    """Comprueba el inicio de sesión correcto: token, usuario y dispositivo guardado."""
     registro = registrar(cliente).json()
     respuesta = entrar(cliente, email="ANA@amatista.local", dispositivo="Firefox en Android")
     assert respuesta.status_code == 200, respuesta.text
@@ -264,6 +283,7 @@ def test_iniciar_sesion_correcto(cliente):
 
 
 def test_iniciar_sesion_no_revela_si_el_correo_existe(cliente):
+    """Comprueba que contraseña incorrecta y correo inexistente dan el mismo 401."""
     registrar(cliente)
     incorrecta = entrar(cliente, password="otra-clave-999")
     inexistente = entrar(cliente, email="nadie@amatista.local")
@@ -274,11 +294,13 @@ def test_iniciar_sesion_no_revela_si_el_correo_existe(cliente):
 
 
 def test_iniciar_sesion_anonimo_sin_password_no_entra(cliente):
+    """Comprueba que una fila anónima con correo pero sin contraseña no puede entrar."""
     sembrar("alumno-sin-cuenta", email="raro@amatista.local")
     assert entrar(cliente, email="raro@amatista.local").json()["detail"] == CREDENCIALES
 
 
 def test_bloqueo_tras_cinco_fallos(cliente):
+    """Comprueba que 5 contraseñas incorrectas bloquean la cuenta 15 minutos (423 con Retry-After)."""
     usuario_id = registrar(cliente).json()["usuario"]["id"]
     for _ in range(4):
         assert entrar(cliente, password="mala-clave-1").status_code == 401
@@ -298,6 +320,7 @@ def test_bloqueo_tras_cinco_fallos(cliente):
 
 
 def test_inicio_correcto_reinicia_los_fallos(cliente):
+    """Comprueba que un inicio correcto reinicia el contador de fallos."""
     registrar(cliente)
     for _ in range(4):
         entrar(cliente, password="mala-clave-1")
@@ -307,6 +330,7 @@ def test_inicio_correcto_reinicia_los_fallos(cliente):
 
 
 def test_iniciar_sesion_actualiza_hash_viejo(cliente, monkeypatch):
+    """Comprueba que al entrar se rehace el hash si usa menos iteraciones que las configuradas."""
     usuario_id = registrar(cliente).json()["usuario"]["id"]
     assert leer(Usuario, usuario_id).password_hash.split("$")[1] == "1000"
     monkeypatch.setenv("AMATISTA_PBKDF2_ITER", "2000")
@@ -316,6 +340,7 @@ def test_iniciar_sesion_actualiza_hash_viejo(cliente, monkeypatch):
 
 
 def test_token_invalido_o_ausente(cliente):
+    """Comprueba que sin token o con uno inventado /api/auth/yo responde 401."""
     token = registrar(cliente).json()["token"]
     assert cliente.get("/api/auth/yo").status_code == 401
     assert cliente.get("/api/auth/yo", headers=bearer("token-inventado")).status_code == 401
@@ -324,6 +349,7 @@ def test_token_invalido_o_ausente(cliente):
 
 
 def test_sesion_vencida(cliente):
+    """Comprueba que una sesión vencida responde 401."""
     token = registrar(cliente).json()["token"]
     with Session(conexion.motor()) as db:
         db.get(Sesion, hash_token(token)).expira_en = ahora() - timedelta(minutes=1)
@@ -335,6 +361,7 @@ def test_sesion_vencida(cliente):
 
 
 def test_yo_y_actualizar_perfil(cliente):
+    """Comprueba GET y PATCH /api/auth/yo (nombre y teléfono, que se puede borrar)."""
     token = registrar(cliente, telefono="5512345678").json()["token"]
     respuesta = cliente.patch(
         "/api/auth/yo",
@@ -358,6 +385,7 @@ def test_yo_y_actualizar_perfil(cliente):
 
 
 def test_cerrar_sesion_invalida_el_token(cliente):
+    """Comprueba que cerrar sesión invalida solo ese token."""
     token = registrar(cliente).json()["token"]
     otro = entrar(cliente).json()["token"]
     respuesta = cliente.post("/api/auth/cerrar-sesion", headers=bearer(token))
@@ -369,6 +397,7 @@ def test_cerrar_sesion_invalida_el_token(cliente):
 
 
 def test_cerrar_todas(cliente, crear_cuenta):
+    """Comprueba que cerrar-todas invalida todas las sesiones de la cuenta y ninguna ajena."""
     tokens = [registrar(cliente).json()["token"], entrar(cliente).json()["token"], entrar(cliente).json()["token"]]
     _, ajena = crear_cuenta()
     respuesta = cliente.post("/api/auth/cerrar-todas", headers=bearer(tokens[1]))
@@ -383,6 +412,7 @@ def test_cerrar_todas(cliente, crear_cuenta):
 
 
 def test_confirmar_correo_con_codigo_dev(cliente, modo_dev):
+    """Comprueba que el código de 6 dígitos (con espacios o guiones) confirma el correo y no sirve dos veces."""
     datos = registrar(cliente).json()
     codigo = datos["codigo_dev"]
     assert re.fullmatch(r"\d{6}", codigo)
@@ -404,6 +434,7 @@ def test_confirmar_correo_con_codigo_dev(cliente, modo_dev):
 
 
 def test_codigo_incorrecto_se_invalida_tras_cinco_intentos(cliente, modo_dev):
+    """Comprueba que tras 5 códigos incorrectos el código bueno ya no sirve."""
     codigo = registrar(cliente).json()["codigo_dev"]
     incorrecto = "000000" if codigo != "000000" else "111111"
     for _ in range(5):
@@ -418,6 +449,7 @@ def test_codigo_incorrecto_se_invalida_tras_cinco_intentos(cliente, modo_dev):
 
 
 def test_codigo_vencido(cliente, modo_dev):
+    """Comprueba que un código vencido responde 400."""
     datos = registrar(cliente).json()
     modificar_usuario(datos["usuario"]["id"], codigo_expira=ahora() - timedelta(seconds=1))
     respuesta = confirmar(cliente, datos["codigo_dev"])
@@ -426,6 +458,7 @@ def test_codigo_vencido(cliente, modo_dev):
 
 
 def test_codigo_de_otra_cuenta_o_formato_invalido(cliente, modo_dev):
+    """Comprueba que el código de otra cuenta da 400 y uno mal formado 422."""
     codigo = registrar(cliente).json()["codigo_dev"]
     registrar(cliente, email="beto@amatista.local")
     assert confirmar(cliente, codigo, "beto@amatista.local").status_code == 400
@@ -434,6 +467,7 @@ def test_codigo_de_otra_cuenta_o_formato_invalido(cliente, modo_dev):
 
 
 def test_reenviar_y_recuperar_no_revelan_cuentas(cliente):
+    """Comprueba que reenviar-codigo y recuperar responden igual exista o no el correo."""
     registrar(cliente)
     for ruta in ("/api/auth/reenviar-codigo", "/api/auth/recuperar"):
         existe = cliente.post(ruta, json={"email": "ana@amatista.local"})
@@ -443,6 +477,7 @@ def test_reenviar_y_recuperar_no_revelan_cuentas(cliente):
 
 
 def test_codigo_dev_solo_en_modo_desarrollo(cliente):
+    """Comprueba que codigo_dev solo aparece con AMATISTA_MOSTRAR_CODIGOS=1."""
     assert "codigo_dev" not in registrar(cliente).json()
     assert "codigo_dev" not in cliente.post("/api/auth/recuperar", json={"email": "ana@amatista.local"}).json()
 
@@ -451,6 +486,7 @@ def test_codigo_dev_solo_en_modo_desarrollo(cliente):
 
 
 def test_recuperar_y_restablecer(cliente, modo_dev):
+    """Comprueba que restablecer con el código cambia la contraseña, cierra sesiones y no acepta el código de confirmación."""
     registro = registrar(cliente).json()
     codigo_correo = registro["codigo_dev"]
     otro_token = entrar(cliente).json()["token"]
@@ -477,6 +513,7 @@ def test_recuperar_y_restablecer(cliente, modo_dev):
 
 
 def test_restablecer_desbloquea_la_cuenta(cliente, modo_dev):
+    """Comprueba que restablecer la contraseña quita el bloqueo por intentos fallidos."""
     registrar(cliente)
     for _ in range(5):
         entrar(cliente, password="mala-clave-1")
@@ -488,6 +525,7 @@ def test_restablecer_desbloquea_la_cuenta(cliente, modo_dev):
 
 
 def test_cambiar_password(cliente):
+    """Comprueba cambiar-password: exige la actual, rechaza igual a la vieja y cierra las demás sesiones."""
     actual = registrar(cliente).json()["token"]
     otro = entrar(cliente).json()["token"]
     ruta = "/api/auth/cambiar-password"
@@ -509,6 +547,7 @@ def test_cambiar_password(cliente):
 
 
 def test_admins_por_variable_de_entorno(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que los correos de AMATISTA_ADMINS reciben rol admin al registrarse o entrar."""
     monkeypatch.setenv("AMATISTA_ADMINS", " Jefa@Amatista.local , coordinador@amatista.local")
     assert registrar(cliente, email="jefa@amatista.local").json()["usuario"]["rol"] == "admin"
     assert registrar(cliente, email="alumna@amatista.local").json()["usuario"]["rol"] == "alumno"
@@ -518,11 +557,13 @@ def test_admins_por_variable_de_entorno(cliente, crear_cuenta, monkeypatch):
 
 
 def test_registro_no_hereda_rol_de_una_fila_anonima(cliente):
+    """Comprueba que al convertir un anónimo la cuenta nace alumno aunque la fila tuviera otro rol."""
     sembrar("alumno-con-rol", rol="admin")
     assert registrar(cliente, usuario_local_id="alumno-con-rol").json()["usuario"]["rol"] == "alumno"
 
 
 def test_requiere_confirmacion(cliente, modo_dev, monkeypatch):
+    """Comprueba que con AMATISTA_REQUIERE_CONFIRMACION=1 no hay token hasta confirmar el correo (403 al entrar)."""
     monkeypatch.setenv("AMATISTA_REQUIERE_CONFIRMACION", "1")
     datos = registrar(cliente).json()
     assert datos["token"] is None and datos["requiere_confirmacion"] is True
@@ -536,6 +577,7 @@ def test_requiere_confirmacion(cliente, modo_dev, monkeypatch):
 
 
 def test_no_registra_contraseñas_ni_tokens(cliente, caplog, modo_dev):
+    """Comprueba que el log no contiene contraseñas, tokens ni códigos."""
     caplog.set_level(logging.DEBUG)
     token = registrar(cliente).json()["token"]
     entrar(cliente, password="mala-clave-1")
@@ -549,6 +591,7 @@ def test_no_registra_contraseñas_ni_tokens(cliente, caplog, modo_dev):
 
 
 def test_fusion_al_iniciar_sesion_desde_otro_dispositivo(cliente):
+    """Comprueba la fusión monotónica del progreso anónimo al entrar desde otro dispositivo."""
     cuenta = registrar(cliente).json()["usuario"]["id"]
     t1, t2, t3 = datetime(2026, 9, 1), datetime(2026, 9, 10), datetime(2026, 9, 20)
     sembrar(
@@ -607,6 +650,7 @@ def test_fusion_al_iniciar_sesion_desde_otro_dispositivo(cliente):
 
 
 def test_fusion_no_toma_progreso_de_otra_cuenta(cliente, crear_cuenta):
+    """Comprueba que el id local de otra cuenta registrada no se fusiona."""
     otra, _ = crear_cuenta(email="beto@amatista.local")
     sembrar(otra, lecciones=[{"leccion_id": "les_001", "completada": 1}])
     cuenta = registrar(cliente).json()["usuario"]["id"]
@@ -617,6 +661,7 @@ def test_fusion_no_toma_progreso_de_otra_cuenta(cliente, crear_cuenta):
 
 
 def test_fusion_casos_limite(cliente):
+    """Comprueba casos límite de la fusión: id propio, ya fusionado, inexistente y eventos reasignados."""
     cuenta = registrar(cliente).json()["usuario"]["id"]
     otra = registrar(cliente, email="beto@amatista.local").json()["usuario"]["id"]
     sembrar("alumno-a", lecciones=[{"leccion_id": "les_001", "completada": 1}])
@@ -642,6 +687,7 @@ def test_fusion_casos_limite(cliente):
 
 
 def test_un_alumno_no_escribe_ni_lee_el_progreso_de_otro(cliente, crear_cuenta):
+    """Comprueba que un alumno no puede escribir ni leer el progreso de otra cuenta."""
     a_id, a = crear_cuenta(email="a@amatista.local")
     b_id, b = crear_cuenta(email="b@amatista.local")
     evento = {"curso_id": "blender", "leccion_id": "les_001", "completada": True, "puntaje": 100}
@@ -662,6 +708,7 @@ def test_un_alumno_no_escribe_ni_lee_el_progreso_de_otro(cliente, crear_cuenta):
 
 @pytest.fixture()
 def con_limites(monkeypatch):
+    """Fixture: activa los límites por IP con los contadores en cero."""
     monkeypatch.delenv("AMATISTA_SIN_LIMITES", raising=False)
     limites.reiniciar_limites()
     yield monkeypatch
@@ -669,6 +716,7 @@ def con_limites(monkeypatch):
 
 
 def test_limite_por_ip_responde_429(cliente, con_limites):
+    """Comprueba que pasar el límite por IP responde 429 con Retry-After."""
     for _ in range(10):
         assert cliente.post("/api/auth/recuperar", json={"email": "ana@amatista.local"}).status_code == 200
     bloqueada = cliente.post("/api/auth/recuperar", json={"email": "ana@amatista.local"})
@@ -684,13 +732,16 @@ def test_limite_por_ip_responde_429(cliente, con_limites):
 
 
 def test_limite_desactivado_por_variable(cliente, con_limites):
+    """Comprueba que AMATISTA_SIN_LIMITES=1 desactiva los límites."""
     con_limites.setenv("AMATISTA_SIN_LIMITES", "1")
     for _ in range(15):
         assert cliente.post("/api/auth/recuperar", json={"email": "ana@amatista.local"}).status_code == 200
 
 
 def test_limite_respeta_x_forwarded_for_solo_con_proxy_confiable(cliente, con_limites):
+    """Comprueba que X-Forwarded-For solo cuenta con AMATISTA_PROXY_CONFIABLE=1 (la última entrada)."""
     def recuperar(ip):
+        """Llama a /api/auth/recuperar declarando la IP en X-Forwarded-For."""
         cabeceras = {"X-Forwarded-For": ip}
         return cliente.post("/api/auth/recuperar", json={"email": "x@amatista.local"}, headers=cabeceras)
 
@@ -708,6 +759,7 @@ def test_limite_respeta_x_forwarded_for_solo_con_proxy_confiable(cliente, con_li
 
 
 def test_limitador_ventana_deslizante(monkeypatch):
+    """Comprueba la ventana deslizante del Limitador con un reloj simulado."""
     reloj = [1000.0]
     monkeypatch.setattr(limites.time, "monotonic", lambda: reloj[0])
     limitador = limites.Limitador(2, ventana=60)
@@ -729,31 +781,39 @@ def test_limitador_ventana_deslizante(monkeypatch):
 
 
 class SMTPFalso:
+    """Servidor SMTP falso que anota conexión, STARTTLS, login y envío."""
     enviados = []
 
     def __init__(self, host, puerto, timeout=None, context=None):
+        """Guarda los datos de conexión y se registra en la lista de envíos."""
         self.host, self.puerto, self.timeout, self.contexto = host, puerto, timeout, context
         self.pasos = []
         SMTPFalso.enviados.append(self)
 
     def __enter__(self):
+        """Permite usarlo con `with`."""
         return self
 
     def __exit__(self, *args):
+        """Anota el cierre de la conexión."""
         self.pasos.append("quit")
 
     def starttls(self, context=None):
+        """Anota el paso STARTTLS."""
         self.pasos.append("starttls")
 
     def login(self, usuario, password):
+        """Anota el login con sus credenciales."""
         self.pasos.append(("login", usuario, password))
 
     def send_message(self, mensaje):
+        """Guarda el mensaje enviado."""
         self.mensaje = mensaje
         self.pasos.append("send")
 
 
 def test_enviar_codigo_por_smtp_con_starttls(monkeypatch):
+    """Comprueba el envío por SMTP con STARTTLS, login y el código en el mensaje."""
     SMTPFalso.enviados = []
     monkeypatch.setattr(correo.smtplib, "SMTP", SMTPFalso)
     monkeypatch.setenv("SMTP_HOST", "smtp.ejemplo.com")
@@ -777,6 +837,7 @@ def test_enviar_codigo_por_smtp_con_starttls(monkeypatch):
 
 
 def test_enviar_codigo_por_puerto_465_usa_tls_directo(monkeypatch):
+    """Comprueba que con el puerto 465 se usa SMTP_SSL sin STARTTLS."""
     SMTPFalso.enviados = []
     monkeypatch.setattr(correo.smtplib, "SMTP_SSL", SMTPFalso)
     monkeypatch.setenv("SMTP_HOST", "smtp.ejemplo.com")
@@ -793,6 +854,7 @@ def test_enviar_codigo_por_puerto_465_usa_tls_directo(monkeypatch):
 
 
 def test_sin_smtp_avisa_sin_mostrar_el_codigo(caplog, monkeypatch):
+    """Comprueba que sin SMTP configurado se avisa en el log sin mostrar el código."""
     monkeypatch.delenv("AMATISTA_MOSTRAR_CODIGOS", raising=False)
     caplog.set_level(logging.INFO)
     assert correo.enviar_codigo("ana@amatista.local", "654321", "correo") is False
@@ -806,7 +868,9 @@ def test_sin_smtp_avisa_sin_mostrar_el_codigo(caplog, monkeypatch):
 
 
 def test_fallo_smtp_no_tumba_el_registro(cliente, caplog, monkeypatch):
+    """Comprueba que un SMTP caído no hace fallar el registro."""
     def caido(*args, **kwargs):
+        """Simula un servidor SMTP que rechaza la conexión."""
         raise ConnectionRefusedError("conexión rechazada")
 
     monkeypatch.setattr(correo.smtplib, "SMTP", caido)
@@ -822,6 +886,7 @@ def test_fallo_smtp_no_tumba_el_registro(cliente, caplog, monkeypatch):
 
 
 def test_crear_admin_promueve_cuenta_existente(cliente, capsys):
+    """Comprueba que herramientas/crear_admin promueve a admin una cuenta existente."""
     from herramientas import crear_admin
 
     usuario_id = registrar(cliente).json()["usuario"]["id"]
@@ -833,6 +898,7 @@ def test_crear_admin_promueve_cuenta_existente(cliente, capsys):
 
 
 def test_crear_admin_sin_cuenta_y_con_crear(cliente, monkeypatch):
+    """Comprueba que crear_admin falla sin la cuenta y la crea con --crear pidiendo la contraseña."""
     from herramientas import crear_admin
 
     assert crear_admin.main(["jefa@amatista.local"]) == 1
@@ -852,6 +918,7 @@ def test_crear_admin_sin_cuenta_y_con_crear(cliente, monkeypatch):
 
 
 def test_autenticar_google_nuevo_usuario(cliente):
+    """Comprueba que entrar con Google (token de prueba) crea una cuenta confirmada con sesión."""
     respuesta = cliente.post(
         "/api/auth/google",
         json={"credencial": "test_google_carlos@amatista.local_Carlos+Gómez", "dispositivo": "Chrome Linux"},
@@ -871,6 +938,7 @@ def test_autenticar_google_nuevo_usuario(cliente):
 
 def test_autenticar_google_cuenta_existente(cliente):
     # Registrar primero por formulario estándar
+    """Comprueba que entrar con Google con un correo ya registrado entra en esa cuenta."""
     registrar(cliente, email="laura@amatista.local", nombre="Laura")
 
     # Iniciar con Google con el mismo correo
@@ -886,6 +954,7 @@ def test_autenticar_google_cuenta_existente(cliente):
 
 
 def test_autenticar_google_fusion_anonimo(cliente):
+    """Comprueba que entrar con Google convierte o fusiona el progreso del anónimo indicado."""
     anonimo_id = "alumno-google-123"
     escribir_anonimo(cliente, anonimo_id, "leccion-test-1")
 
@@ -899,6 +968,7 @@ def test_autenticar_google_fusion_anonimo(cliente):
 
 
 def test_autenticar_google_token_invalido(cliente):
+    """Comprueba que una credencial de Google vacía responde 400."""
     respuesta = cliente.post(
         "/api/auth/google",
         json={"credencial": ""},
@@ -908,6 +978,7 @@ def test_autenticar_google_token_invalido(cliente):
 
 def test_google_rechaza_token_de_prueba_fuera_del_modo_prueba(cliente, monkeypatch):
     # En producción un "test_google_*" no puede autenticar a nadie ni crear cuentas.
+    """Comprueba que fuera de AMATISTA_MODO_PRUEBA los tokens test_google_* se rechazan (no permiten entrar como admin)."""
     monkeypatch.delenv("AMATISTA_MODO_PRUEBA", raising=False)
     monkeypatch.setenv("AMATISTA_ADMINS", "direccion@amatista.local")
     respuesta = cliente.post(
@@ -918,8 +989,69 @@ def test_google_rechaza_token_de_prueba_fuera_del_modo_prueba(cliente, monkeypat
     assert "token" not in respuesta.json()
 
 
+class _RespuestaGoogle:
+    """Simula la respuesta de oauth2.googleapis.com/tokeninfo."""
+
+    def __init__(self, datos):
+        """Guarda el JSON que devolverá la respuesta simulada de tokeninfo."""
+        import json as _json
+
+        self._cuerpo = _json.dumps(datos).encode("utf-8")
+
+    def read(self):
+        """Devuelve el cuerpo JSON simulado."""
+        return self._cuerpo
+
+    def __enter__(self):
+        """Permite usarla con `with`."""
+        return self
+
+    def __exit__(self, *args):
+        """No suprime excepciones."""
+        return False
+
+
+def _simular_tokeninfo(monkeypatch, **claims):
+    """Reemplaza urlopen para que tokeninfo de Google responda los claims dados (válidos por defecto)."""
+    datos = {"iss": "accounts.google.com", "aud": "cliente-amatista", "email": "laura@amatista.local",
+             "email_verified": "true", "name": "Laura", "sub": "123", **claims}
+    monkeypatch.setattr(auth.urllib.request, "urlopen", lambda *a, **k: _RespuestaGoogle(datos))
+
+
+def test_google_real_acepta_token_valido(monkeypatch):
+    """Comprueba que un token con emisor, aud y correo verificado se acepta."""
+    _simular_tokeninfo(monkeypatch)
+    info = auth.verificar_token_google("token-real", "cliente-amatista")
+    assert info["email"] == "laura@amatista.local" and info["email_verified"] is True
+
+
+def test_google_real_rechaza_correo_no_verificado(monkeypatch):
+    """Comprueba que un correo de Google no verificado se rechaza (401)."""
+    _simular_tokeninfo(monkeypatch, email_verified="false")
+    with pytest.raises(auth.HTTPException) as error:
+        auth.verificar_token_google("token-real", "cliente-amatista")
+    assert error.value.status_code == 401
+
+
+def test_google_real_rechaza_otra_aplicacion(monkeypatch):
+    """Comprueba que un token emitido para otra aplicación (aud distinto) se rechaza (401)."""
+    _simular_tokeninfo(monkeypatch, aud="otra-app")
+    with pytest.raises(auth.HTTPException) as error:
+        auth.verificar_token_google("token-real", "cliente-amatista")
+    assert error.value.status_code == 401
+
+
+def test_google_real_sin_client_id_se_deshabilita(monkeypatch):
+    """Comprueba que sin GOOGLE_CLIENT_ID el inicio con Google responde 503."""
+    _simular_tokeninfo(monkeypatch)
+    with pytest.raises(auth.HTTPException) as error:
+        auth.verificar_token_google("token-real", None)
+    assert error.value.status_code == 503
+
+
 
 def test_autenticar_google_incluye_foto(cliente):
+    """Comprueba que la respuesta de Google incluye la foto del perfil."""
     respuesta = cliente.post(
         "/api/auth/google",
         json={"credencial": "test_google_sofia@amatista.local_Sofía+Ramírez"},
@@ -930,6 +1062,7 @@ def test_autenticar_google_incluye_foto(cliente):
 
 
 def test_enviar_codigo_personalizado_con_nombre(monkeypatch):
+    """Comprueba que el correo del código saluda por su nombre al alumno."""
     SMTPFalso.enviados = []
     monkeypatch.setattr(correo.smtplib, "SMTP", SMTPFalso)
     monkeypatch.setenv("SMTP_HOST", "smtp.ejemplo.com")
@@ -946,22 +1079,28 @@ def test_enviar_codigo_personalizado_con_nombre(monkeypatch):
 
 
 def test_enviar_codigo_con_brevo_api(monkeypatch):
+    """Comprueba que con BREVO_API_KEY el código se envía por la API de Brevo."""
     import json
     llamadas = []
 
     class DummyResponse:
+        """Respuesta HTTP simulada de Brevo (201 con messageId)."""
         status = 201
 
         def read(self):
+            """Devuelve el cuerpo JSON simulado de Brevo."""
             return b'{"messageId":"<test@brevo>"}'
 
         def __enter__(self):
+            """Permite usarla con `with`."""
             return self
 
         def __exit__(self, *args):
+            """No suprime excepciones."""
             pass
 
     def mock_urlopen(req, timeout=10):
+        """Anota la petición a Brevo y devuelve la respuesta simulada."""
         llamadas.append(req)
         return DummyResponse()
 

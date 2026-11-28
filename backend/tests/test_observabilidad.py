@@ -3,11 +3,13 @@ import observabilidad
 
 
 def test_sin_dsn_no_se_activa(monkeypatch):
+    """Comprueba que Sentry no se activa sin SENTRY_DSN."""
     monkeypatch.delenv("SENTRY_DSN", raising=False)
     assert observabilidad.iniciar("0.3.0") is False
 
 
 def test_el_evento_no_lleva_datos_personales():
+    """Comprueba que el evento enviado a Sentry pierde usuario, cookies, cuerpo y cabeceras privadas."""
     evento = {
         "user": {"ip_address": "1.2.3.4", "email": "alumno@x.cl"},
         "request": {
@@ -30,6 +32,7 @@ def test_el_evento_no_lleva_datos_personales():
 
 
 def test_con_dsn_se_activa_sin_pii(monkeypatch):
+    """Comprueba que con SENTRY_DSN se inicia Sentry sin PII y con la proporción de trazas acotada."""
     import sentry_sdk
 
     visto = {}
@@ -44,6 +47,7 @@ def test_con_dsn_se_activa_sin_pii(monkeypatch):
 
 
 def test_las_migas_del_log_de_acceso_no_se_envian():
+    """Comprueba que las migas del log de acceso de uvicorn (con la IP) se descartan y las demás pasan."""
     acceso = {"category": "uvicorn.access", "message": '2806:2f0::1:0 - "GET /api/addon/v1/enlace HTTP/1.1" 500'}
     assert observabilidad._miga(acceso) is None
     consulta = {"category": "query", "message": "SELECT practicas.id FROM practicas"}

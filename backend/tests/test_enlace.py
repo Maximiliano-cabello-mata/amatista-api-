@@ -14,6 +14,7 @@ from tests.test_addon import API, MESA, sembrar, vincular  # noqa: F401  (fixtur
 
 
 def latir(cliente, blender, **cuerpo):
+    """Envía un latido del add-on con versiones por defecto, exige 200 y devuelve la respuesta."""
     respuesta = cliente.post(f"{API}/enlace", json={"version_addon": "3.4.0", "version_blender": "5.0.1", **cuerpo},
                              headers=blender)
     assert respuesta.status_code == 200, respuesta.text
@@ -21,6 +22,7 @@ def latir(cliente, blender, **cuerpo):
 
 
 def test_sin_blender_abierto_la_plataforma_lo_sabe(cliente, crear_cuenta):
+    """Comprueba que sin latidos GET /enlace responde en_linea=false y los ajustes por defecto."""
     _, alumno = crear_cuenta()
     datos = cliente.get(f"{API}/enlace", headers=alumno).json()
     assert datos["enlace"] is True and datos["en_linea"] is False and datos["blender"] == []
@@ -28,6 +30,7 @@ def test_sin_blender_abierto_la_plataforma_lo_sabe(cliente, crear_cuenta):
 
 
 def test_el_latido_hace_visible_a_blender(cliente, crear_cuenta):
+    """Comprueba que tras un latido la plataforma ve el Blender en línea con su práctica, paso y progreso."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     respuesta = latir(cliente, blender, practica_id="blender.bp.m1.tren", paso="ruedas", progreso=40, enfocado=True)
@@ -40,6 +43,7 @@ def test_el_latido_hace_visible_a_blender(cliente, crear_cuenta):
 
 
 def test_blender_cerrado_deja_de_estar_en_linea(cliente, crear_cuenta):
+    """Comprueba que sin latido en 25 s el Blender deja de estar en línea."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -51,12 +55,14 @@ def test_blender_cerrado_deja_de_estar_en_linea(cliente, crear_cuenta):
 
 
 def test_solo_el_add_on_late(cliente, crear_cuenta):
+    """Comprueba que el latido con token de la PWA da 403 y sin sesión 401."""
     _, alumno = crear_cuenta()
     assert cliente.post(f"{API}/enlace", json={}, headers=alumno).status_code == 403
     assert cliente.post(f"{API}/enlace", json={}).status_code == 401
 
 
 def test_abrir_en_blender_llega_al_blender_abierto(cliente, crear_cuenta, sembrar):  # noqa: F811
+    """Comprueba que «Abrir en Blender» deja la orden abrir_practica al Blender abierto."""
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
     _, alumno = crear_cuenta()
@@ -74,6 +80,7 @@ def test_abrir_en_blender_llega_al_blender_abierto(cliente, crear_cuenta, sembra
 
 
 def test_abrir_sin_blender_abierto_no_deja_orden(cliente, crear_cuenta, sembrar):  # noqa: F811
+    """Comprueba que abrir una práctica sin Blender abierto no deja orden (abierta_en_blender=false)."""
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
     _, alumno = crear_cuenta()
@@ -87,6 +94,7 @@ def test_abrir_sin_blender_abierto_no_deja_orden(cliente, crear_cuenta, sembrar)
 
 
 def test_ordenes_de_la_plataforma(cliente, crear_cuenta):
+    """Comprueba que las órdenes solo se entregan con un Blender en línea y desaparecen al cumplirse."""
     _, alumno = crear_cuenta()
     assert cliente.post(f"{API}/ordenes", json={"tipo": "enfocar"}, headers=alumno).json()["entregada"] is False
     blender, _ = vincular(cliente, alumno)
@@ -99,6 +107,7 @@ def test_ordenes_de_la_plataforma(cliente, crear_cuenta):
 
 
 def test_la_orden_vieja_se_descarta(cliente, crear_cuenta):
+    """Comprueba que una orden que nadie recogió en 10 minutos se descarta."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -111,6 +120,7 @@ def test_la_orden_vieja_se_descarta(cliente, crear_cuenta):
 
 
 def test_mi_blender_decide_como_se_ve_blender(cliente, crear_cuenta):
+    """Comprueba que los ajustes de «Mi Blender» se guardan y llegan al add-on en el latido con una orden actualizar."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -129,6 +139,7 @@ def test_mi_blender_decide_como_se_ve_blender(cliente, crear_cuenta):
 
 
 def test_cada_alumno_ve_solo_sus_blender(cliente, crear_cuenta):
+    """Comprueba que un alumno no ve los Blender de otro."""
     _, uno = crear_cuenta()
     _, otro = crear_cuenta()
     blender, _ = vincular(cliente, uno)
@@ -171,6 +182,7 @@ DETALLE = {
 
 
 def test_la_leccion_ve_lo_que_dice_el_instructor(cliente, crear_cuenta):
+    """Comprueba que el detalle del instructor del latido llega a la lección."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, practica_id="blender.bp.m2.espada", paso="silueta", progreso=25, detalle=DETALLE)
@@ -184,6 +196,7 @@ def test_la_leccion_ve_lo_que_dice_el_instructor(cliente, crear_cuenta):
 
 
 def test_el_detalle_tiene_limites(cliente, crear_cuenta):
+    """Comprueba que un detalle con textos demasiado largos responde 422."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     largo = {**DETALLE, "mensaje": "x" * 600}
@@ -194,6 +207,7 @@ def test_el_detalle_tiene_limites(cliente, crear_cuenta):
 
 
 def test_la_plataforma_maneja_la_practica(cliente, crear_cuenta):
+    """Comprueba las órdenes comprobar, pista, hazlo_conmigo y guardar con su practica_id."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, practica_id="blender.bp.m2.espada")
@@ -206,6 +220,7 @@ def test_la_plataforma_maneja_la_practica(cliente, crear_cuenta):
 
 
 def test_empezar_de_nuevo_pide_confirmacion(cliente, crear_cuenta):
+    """Comprueba que la orden reiniciar sin confirmar=true responde 400."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, practica_id="blender.bp.m2.espada")
@@ -238,6 +253,7 @@ def test_una_orden_nueva_no_pisa_la_pendiente(cliente, crear_cuenta, sembrar):  
 
 
 def test_la_cola_de_ordenes_tiene_tope_y_abrir_manda(cliente, crear_cuenta, sembrar):  # noqa: F811
+    """Comprueba que la cola de órdenes tiene tope y que abrir_practica no se descarta al llenarse."""
     _, admin = crear_cuenta(rol="admin")
     sembrar(cliente, admin)
     _, alumno = crear_cuenta()
@@ -254,6 +270,7 @@ def test_la_cola_de_ordenes_tiene_tope_y_abrir_manda(cliente, crear_cuenta, semb
 
 
 def test_una_orden_guardada_por_una_version_anterior_se_lee(cliente, crear_cuenta):
+    """Comprueba que una orden suelta (formato anterior a la cola) se sigue leyendo."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -281,6 +298,7 @@ def test_el_latido_solo_manda_los_ajustes_elegidos(cliente, crear_cuenta):
 
 
 def test_el_token_del_add_on_no_da_ordenes(cliente, crear_cuenta):
+    """Comprueba que el token del add-on no puede dar órdenes ni cambiar ajustes (403)."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender)
@@ -290,6 +308,7 @@ def test_el_token_del_add_on_no_da_ordenes(cliente, crear_cuenta):
 
 
 def test_abrir_un_borrador_desde_la_plataforma_no_existe(cliente, crear_cuenta, sembrar):  # noqa: F811
+    """Comprueba que un alumno no puede ordenar abrir una práctica en borrador (404)."""
     _, admin = crear_cuenta(rol="admin")
     _, profesor = crear_cuenta(rol="profesor")
     sembrar(cliente, admin)
@@ -328,6 +347,7 @@ with TestClient(app) as c:
 
 
 def test_detalle_cambia_sin_cambiar_paso_y_caduca(cliente, crear_cuenta):
+    """Comprueba que el detalle se actualiza aunque no cambie el paso y deja de mostrarse fuera de línea."""
     _, alumno = crear_cuenta()
     _, otro = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
@@ -343,6 +363,7 @@ def test_detalle_cambia_sin_cambiar_paso_y_caduca(cliente, crear_cuenta):
 
 
 def test_detalle_no_se_arrastra_a_otra_practica(cliente, crear_cuenta):
+    """Comprueba que al cambiar de práctica sin detalle se borra el detalle anterior."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, practica_id='espada', detalle=DETALLE)
@@ -351,6 +372,7 @@ def test_detalle_no_se_arrastra_a_otra_practica(cliente, crear_cuenta):
 
 
 def test_detalle_igual_no_escribe_cada_latido(cliente, crear_cuenta):
+    """Comprueba que un latido idéntico no hace commit cada vez (solo cada 15 s)."""
     from unittest.mock import patch
     from api.motor.enlace import Latido, latido
     from database.modelos import Sesion, Usuario
@@ -382,6 +404,7 @@ RECORRIDO = {
 
 
 def test_la_leccion_ve_los_primeros_pasos_sin_practica_abierta(cliente, crear_cuenta):
+    """Comprueba que el detalle del recorrido se guarda y se ve aunque no haya práctica abierta."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, detalle={"recorrido": RECORRIDO})
@@ -397,6 +420,7 @@ def test_la_leccion_ve_los_primeros_pasos_sin_practica_abierta(cliente, crear_cu
 
 
 def test_los_primeros_pasos_tienen_limites(cliente, crear_cuenta):
+    """Comprueba que un recorrido con demasiados pasos responde 422."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     largo = {**RECORRIDO, "pasos": [{"titulo": "x"}] * 13}
@@ -409,6 +433,7 @@ def test_los_primeros_pasos_tienen_limites(cliente, crear_cuenta):
 
 
 def test_la_leccion_maneja_los_primeros_pasos(cliente, crear_cuenta):
+    """Comprueba la orden «recorrido» con sus acciones empezar, siguiente, anterior y salir."""
     _, alumno = crear_cuenta()
     blender, _ = vincular(cliente, alumno)
     latir(cliente, blender, detalle={"recorrido": RECORRIDO})

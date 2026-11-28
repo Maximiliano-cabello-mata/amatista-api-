@@ -32,6 +32,7 @@ class Limitador:
     """Permite como máximo `maximo` peticiones por clave dentro de `ventana` segundos."""
 
     def __init__(self, maximo: int, ventana: float = 60.0):
+        """Crea un limitador vacío de `maximo` peticiones cada `ventana` segundos."""
         self.maximo = maximo
         self.ventana = ventana
         self._registros: Dict[str, Deque[float]] = {}
@@ -53,12 +54,17 @@ class Limitador:
             return True, 0
 
     def reiniciar(self) -> None:
+        """Olvida todas las peticiones registradas (usado por las pruebas)."""
         with self._candado:
             self._registros.clear()
 
     def _limpiar(self, momento: float, limite: float) -> None:
         # Una vez por ventana se borran las IP que ya no tienen peticiones
         # recientes: así la memoria no crece con cada visitante.
+        """Borra las claves sin peticiones recientes, como mucho una vez por ventana.
+
+        Se llama con el candado ya tomado; evita que la memoria crezca con cada IP nueva.
+        """
         if momento - self._ultima_limpieza < self.ventana:
             return
         self._ultima_limpieza = momento
@@ -70,10 +76,16 @@ _limitadores: List[Limitador] = []
 
 
 def limites_desactivados() -> bool:
+    """Indica si AMATISTA_SIN_LIMITES=1 apaga los límites (se usa en las pruebas)."""
     return os.getenv("AMATISTA_SIN_LIMITES") == "1"
 
 
 def ip_cliente(request: Request) -> str:
+    """IP del cliente para contar peticiones.
+
+    Con AMATISTA_PROXY_CONFIABLE=1 usa la última entrada de X-Forwarded-For
+    (la que añade Caddy); si no, la IP de la conexión. "desconocida" si no hay.
+    """
     if os.getenv("AMATISTA_PROXY_CONFIABLE") == "1":
         reenviada = request.headers.get("x-forwarded-for", "")
         # La última entrada es la que agregó nuestro proxy (Caddy); las
@@ -110,6 +122,7 @@ def limitar(maximo: int, ventana: float = 60.0, por: str = "ip") -> Callable[[Re
     quien = clave_cuenta if por == "cuenta" else ip_cliente
 
     def verificar(request: Request) -> None:
+        """Cuenta la petición para su clave IP/sesión + ruta y responde 429 con Retry-After si se pasa."""
         if limites_desactivados():
             return
         permitida, espera = limitador.intentar(f"{quien(request)}|{request.url.path}")

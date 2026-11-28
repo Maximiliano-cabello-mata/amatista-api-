@@ -61,6 +61,7 @@ def probar_restauracion(carpeta_base: Path) -> Dict[str, Any]:
 
 
 def _siguiente_carpeta(destino: Path, prefijo: str) -> Path:
+    """Carpeta nueva para el snapshot «<prefijo>AAAAMMDD-HHMMSS» (con sufijo -N si ya existe); no la crea."""
     sello = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     candidata = destino / f"{prefijo}{sello}"
     indice = 1
@@ -118,6 +119,7 @@ def ejecutar_respaldo_verificado(
 
 
 def construir_parser() -> argparse.ArgumentParser:
+    """Argumentos de la CLI: --destino o --solo-verificar (excluyentes), --mantener y --url de origen."""
     parser = argparse.ArgumentParser(
         description="Respaldo verificado de Amatista (exporta y prueba restauración en SQLite temporal)."
     )
@@ -139,6 +141,11 @@ def construir_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI del respaldo diario: exporta y prueba la restauración, o solo verifica un respaldo ya hecho.
+
+    Escribe verificacion_restauracion.json junto al respaldo. Devuelve 0 si todo
+    salió bien y 1 ante errores de migración, disco o argumentos.
+    """
     args = construir_parser().parse_args(argv)
     try:
         if args.solo_verificar is not None:
