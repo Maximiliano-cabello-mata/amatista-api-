@@ -432,8 +432,14 @@ def _definicion_proyecto(db: Session, practica_id: str, usuario: Usuario) -> Opt
         practica = db.get(Practica, practica_id)
         if visible(practica, usuario):
             return definicion_de(db, practica, version_para(practica, usuario))
-    except (SQLAlchemyError, HTTPException):
-        pass
+    except SQLAlchemyError as error:
+        # Si la consulta falla, la sesión queda «pendiente de rollback» y las siguientes consultas de la
+        # misma petición (escribir el progreso) fallarían con PendingRollbackError: se deshace y se sigue
+        # con la práctica del repositorio.
+        db.rollback()
+        log.warning("No se pudo leer la práctica %s de la base; se usa la del repositorio: %s", practica_id, error)
+    except HTTPException:
+        pass  # la versión de la práctica no le corresponde al alumno: se usa la del repositorio
     carpeta = str(motor.CARPETA_PRACTICAS)
     if carpeta not in _REPOSITORIO:
         _REPOSITORIO[carpeta] = {d.get("id"): d for _, d in motor.practicas_del_repositorio()}
