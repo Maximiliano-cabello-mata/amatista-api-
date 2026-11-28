@@ -23,8 +23,22 @@ def app():
     return app
 
 
-def test_ninguna_ruta_cae_con_inyeccion_sql_xss_o_recorrido(cliente, crear_cuenta, app):
+def _aislar_google_tokeninfo(monkeypatch):
+    """Configura GOOGLE_CLIENT_ID y simula rechazo 400 de Google sin salir a internet durante el fuzzing."""
+    import urllib.error
+    from api.plataforma import auth
+
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "amatista-seguridad-test.apps.googleusercontent.com")
+
+    def _rechazar_token_invalido(req, timeout=6):
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, None)
+
+    monkeypatch.setattr(auth.urllib.request, "urlopen", _rechazar_token_invalido)
+
+
+def test_ninguna_ruta_cae_con_inyeccion_sql_xss_o_recorrido(cliente, crear_cuenta, app, monkeypatch):
     """Comprueba que ninguna ruta responde 500 ni filtra errores internos con cargas de inyección, XSS o recorrido."""
+    _aislar_google_tokeninfo(monkeypatch)
     _, admin = crear_cuenta(rol="admin")
     with Session(conexion.motor()) as db:
         usuarios_antes = db.scalar(select(func.count()).select_from(Usuario))
@@ -38,8 +52,9 @@ def test_ninguna_ruta_cae_con_inyeccion_sql_xss_o_recorrido(cliente, crear_cuent
     assert cliente.get("/api/salud").status_code == 200
 
 
-def test_inyeccion_a_ciegas_por_tiempo(cliente, crear_cuenta, app):
+def test_inyeccion_a_ciegas_por_tiempo(cliente, crear_cuenta, app, monkeypatch):
     """Comprueba que ninguna carga de inyección por tiempo hace tardar la respuesta."""
+    _aislar_google_tokeninfo(monkeypatch)
     _, admin = crear_cuenta(rol="admin")
     informe = auditoria.atacar_por_tiempo(cliente, app.openapi(), admin, umbral_s=3.0)
     assert [h.__dict__ for h in informe.graves] == []

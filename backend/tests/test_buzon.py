@@ -11,7 +11,12 @@ CATALOGO_PWA = Path("src") / "avatares" / "catalogo.js"  # dentro de frontend/ (
 
 def test_los_avatares_son_los_mismos_que_en_la_pwa():
     """Comprueba que los ids de avatares del servidor coinciden con el catálogo de la PWA."""
-    ids = set(re.findall(r"\{\s*id:\s*'([a-z_]+)'", (vecinos.requerir_web() / CATALOGO_PWA).read_text(encoding="utf-8")))
+    import pytest
+
+    ruta_catalogo = vecinos.requerir_web() / CATALOGO_PWA
+    if not ruta_catalogo.is_file():
+        pytest.skip(f"El checkout web vecino no contiene {CATALOGO_PWA}.")
+    ids = set(re.findall(r"\{\s*id:\s*'([a-z_]+)'", ruta_catalogo.read_text(encoding="utf-8")))
     assert ids == set(AVATARES) | {AVATAR_CREADOR}
 
 
