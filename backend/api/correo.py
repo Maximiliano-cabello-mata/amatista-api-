@@ -12,6 +12,7 @@ Sin BREVO_API_KEY ni SMTP_HOST no se envía nada y se registra una advertencia
 SIN el código. Un fallo de envío nunca tumba la petición: se registra y el
 alumno puede pedir otro código con "reenviar". Nunca se registran contraseñas ni tokens.
 """
+import html
 import json
 import logging
 import os
@@ -79,12 +80,17 @@ def construir_plantilla_html(
         else "RECUPERACIÓN DE ACCESO · SEGURIDAD"
     )
     motivo = MOTIVOS.get(proposito, "continuar")
-    # [REVISION-SEGURIDAD] nombre (lo escribe quien se registra) entra sin html.escape() al HTML del correo, aquí y en frase_goliat:
-    # permite registrar el correo de un tercero con un 'nombre' que inyecta enlaces/HTML de phishing enviado desde el remitente oficial.
-    saludo = f"Hola, <strong>{nombre}</strong>:" if nombre else "Hola:"
+    # Todo dato que viene del usuario se escapa antes de entrar al HTML: el nombre lo escribe quien se
+    # registra (podría registrar el correo de otra persona con un nombre que inyecte enlaces o HTML de
+    # phishing enviado desde el remitente oficial).
+    nombre_html = html.escape(nombre) if nombre else None
+    codigo_html = html.escape(codigo)
+    saludo = f"Hola, <strong>{nombre_html}</strong>:" if nombre_html else "Hola:"
 
     if es_correo:
-        enlace = f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
+        enlace = html.escape(
+            f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={urllib.parse.quote(codigo)}"
+        )
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -94,11 +100,11 @@ def construir_plantilla_html(
             f'</div>'
         )
         frase_goliat = (
-            f"«¡Bienvenido al taller{f', {nombre}' if nombre else ''}! "
+            f"«¡Bienvenido al taller{f', {nombre_html}' if nombre_html else ''}! "
             f"En cuanto confirmes tu correo guardaremos tus insignias y tu avance en todos tus dispositivos.»"
         )
     else:
-        enlace = f"{url_pwa_correo()}/#/recuperar"
+        enlace = html.escape(f"{url_pwa_correo()}/#/recuperar")
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -138,7 +144,7 @@ def construir_plantilla_html(
           CÓDIGO DE VERIFICACIÓN (15 MINUTOS DE VALIDEZ)
         </div>
         <div style="font-family:monospace;font-size:32px;font-weight:800;letter-spacing:0.35em;color:#ffffff;margin-top:8px;">
-          {codigo}
+          {codigo_html}
         </div>
       </div>
       {boton_html}
