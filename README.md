@@ -26,6 +26,10 @@ Un proceso, cinco API. Cada una vive en su paquete y firma sus errores con su no
 
 Un error dice de dónde sale: `{"detail": "...", "error": {"api": "motor", "operacion": "leer_practica", "codigo": "motor.leer_practica.no_encontrado", "estado": 404}}`, y toda respuesta lleva `X-Peticion-Id`.
 
+## Lugar en la base del proyecto
+
+Es la **API de Amatista**: la aduana de la frontera de privacidad. Los datos personales se quedan aquí; hacia G7B solo salen mediciones agregadas y con permiso, y desde Geoda solo entran recomendaciones. Piezas, flujo y prioridades: [base oficial](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/BASE.md). Instrucciones para agentes: [`AGENTS.md`](AGENTS.md).
+
 ## Responsabilidad
 
 Este repositorio decide **qué se guarda y quién puede verlo**. No decide si una práctica está bien hecha: para eso importa el motor.
@@ -74,5 +78,7 @@ amatista actualizar
 ## Historia
 
 La historia sale de filtrar `backend/` y `despliegue/` del monorepo (del 27 de septiembre al 5 de noviembre de 2026). Los identificadores de commit son nuevos; los originales están en la rama `historia/vm-main` del monorepo.
+
+El 22 de noviembre de 2026 se congeló la [base oficial del proyecto](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/BASE.md): cuatro piezas (Amatista, G7B, Amatista IA y Geoda), una sola puerta al cubo y prioridades en orden. Cómo se llegó y qué repositorio hace cada cosa: [bitácora](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/bitacora/2026-11-22_de_g7b_a_la_base_oficial.md) y [mapa del ecosistema](https://github.com/Maximiliano-cabello-mata/amatista-recuperada-20261106/blob/recuperacion/docs/arquitectura/2026-11-22_ecosistema_y_responsabilidades.md).
 
 Maximiliano Cabello Mata dirige el proyecto.
