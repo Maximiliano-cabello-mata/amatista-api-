@@ -72,17 +72,20 @@ class TextoJSON(TypeDecorator):
     cache_ok = True
 
     def process_result_value(self, valor: Any, dialect) -> Optional[str]:
+        """Convierte el valor leído a texto JSON compacto si el driver lo entregó ya decodificado (dict/list)."""
         if valor is None or isinstance(valor, str):
             return valor
         return json.dumps(valor, ensure_ascii=False, separators=(",", ":"))
 
 
 class TextoJSONCorto(TextoJSON):
+    """Variante de TextoJSON sobre VARCHAR2/String (columnas JSON cortas, p. ej. objetivos y datos ligeros)."""
     impl = String
     cache_ok = True
 
 
 class Base(DeclarativeBase):
+    """Base declarativa de SQLAlchemy de todos los modelos (su metadata crea las tablas en SQLite)."""
     pass
 
 
@@ -205,6 +208,11 @@ class EventoAprendizaje(Base):
 
 
 class Curso(Base):
+    """Curso del catálogo (CURSOS): 'blender', 'aframe'... con textos de portada, orden y estado.
+
+    `ruta` agrupa los cursos de una misma familia y `requisito_id` indica el curso
+    que conviene terminar antes (sql/008). Lo edita el panel de contenido.
+    """
     __tablename__ = "cursos"
 
     id: Mapped[str] = mapped_column(String(50), primary_key=True)  # 'blender', 'aframe'
@@ -251,6 +259,10 @@ class Nivel(Base):
 
 
 class Modulo(Base):
+    """Módulo de un curso (MODULOS): agrupa lecciones y puede pertenecer a un nivel (v3).
+
+    Lleva estado (borrador|publicado|archivado) y una versión que sube con cada cambio.
+    """
     __tablename__ = "modulos"
     __table_args__ = (Index("ix_modulos_curso", "curso_id", "numero"),)
 
@@ -370,6 +382,7 @@ class TallerAlumno(Base):
     actualizado_en: Mapped[datetime] = mapped_column(TIMESTAMP, default=ahora)
 
 
+# [REVISION-MUERTO] Modelo sin referencias en api/, herramientas/ ni tests (grep 2026-11-27): ¿tabla pendiente o abandonada? Decidir.
 class EvaluacionRubrica(Base):
     """Rúbrica común del proyecto de un nivel: criterio A a E por alumno.
 

@@ -1,5 +1,6 @@
 """Validación de lecciones, exámenes, fichas y módulos didácticos."""
 import json
+# [REVISION-MUERTO] Optional no se usa; MAX_ID (import de abajo) tampoco se usa aquí.
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .bloques_3d import REVISORES_3D
@@ -37,6 +38,10 @@ REVISORES: Dict[str, Callable[[_Contexto, dict], None]] = {
 
 
 def _revisar_bloques(errores: List[str], bloques: List[Tuple[int, dict]], ruta: str) -> None:
+    """Revisa cada bloque de «contentBlocks» con su revisor según «type» y anota los errores con su ruta.
+
+    Los bloques interactivos exigen «id» (único en la lección) y admiten «required».
+    """
     ids: Dict[str, int] = {}
     for i, bloque in bloques:
         ruta_bloque = _unir(ruta, f"contentBlocks[{i}]")
@@ -62,6 +67,7 @@ def _revisar_bloques(errores: List[str], bloques: List[Tuple[int, dict]], ruta: 
 
 
 def _revisar_examen(errores: List[str], leccion: dict, ruta: str) -> None:
+    """Revisa «quizData» de una lección de examen: passingScore 0-100 y 1-50 preguntas con 2-5 opciones (A a E)."""
     quiz = _valor(leccion, "quizData")
     if quiz is _FALTA or not isinstance(quiz, dict):
         _Contexto(errores, ruta).error("un examen necesita «quizData» con passingScore y questions")
@@ -82,6 +88,7 @@ def _revisar_examen(errores: List[str], leccion: dict, ruta: str) -> None:
 
 
 def _lista_ids(c: _Contexto, objeto: dict, campo: str, maximo: int) -> None:
+    """Revisa que ficha.<campo> sea una lista de ids válidos con como mucho `maximo` elementos (si existe)."""
     valor = _valor(objeto, campo)
     if valor is _FALTA:
         return
@@ -156,6 +163,12 @@ def pendientes_ficha(leccion: Any, requiere_blender: bool = True) -> List[str]:
 
 
 def _revisar_leccion(errores: List[str], leccion: Any, ruta: str) -> None:
+    """Revisa una lección completa (LeccionJSON) y añade sus errores a `errores`.
+
+    Campos base (id, title, type, isLocked...), portada, ficha opcional, «replaces»
+    (sin incluirse a sí misma), examen o 1-60 bloques según el tipo, y que todo
+    sea JSON válido (sin NaN ni infinito).
+    """
     c = _Contexto(errores, ruta)
     if not isinstance(leccion, dict):
         c.error("la lección debe ser un objeto JSON")

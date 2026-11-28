@@ -72,11 +72,14 @@ LIMITE_PEDIDOS = limitar(6, ventana=3600, por="cuenta")
 
 
 def dominios_permitidos() -> List[str]:
+    """Dominios de correo permitidos (AMATISTA_NUBE_DOMINIOS), en minúsculas y sin '@'."""
+    # Producción responde dominios ['utn.edu.mx','utn.mx'] (GET /api/nube/v1/estado, 2026-11-27).
     crudo = os.getenv("AMATISTA_NUBE_DOMINIOS", "utn.mx")
     return [d.strip().lower().lstrip("@") for d in crudo.split(",") if d.strip()]
 
 
 def minutos_sesion() -> int:
+    """Duración de sesión en minutos (AMATISTA_NUBE_MINUTOS, mínimo 60)."""
     try:
         return max(60, int(os.getenv("AMATISTA_NUBE_MINUTOS", "60")))
     except ValueError:
@@ -84,6 +87,7 @@ def minutos_sesion() -> int:
 
 
 def sesiones_por_dia() -> int:
+    """Cuota de sesiones por cuenta en 24 h (AMATISTA_NUBE_POR_DIA, mínimo 1)."""
     try:
         return max(1, int(os.getenv("AMATISTA_NUBE_POR_DIA", "2")))
     except ValueError:
@@ -101,12 +105,14 @@ def nodos_autorizados() -> Dict[str, str]:
 
 
 def correo_permitido(email: Optional[str]) -> bool:
+    """True si el dominio del correo es uno permitido o subdominio suyo."""
     dominio = (email or "").rsplit("@", 1)[-1].lower() if "@" in (email or "") else ""
     return bool(dominio) and any(dominio == d or dominio.endswith("." + d) for d in dominios_permitidos())
 
 
 def motivo_sin_acceso(usuario: Optional[Usuario]) -> Optional[str]:
     """Por qué esta cuenta no puede usar Amatista Cloud, o None si puede."""
+    # [REVISION-BUG] Las cuentas creadas con Google no tienen password_hash: quedan fuera de Amatista Cloud aunque sean @utn. Decidir.
     if usuario is None or not usuario.password_hash:
         return "Inicia sesión con tu cuenta de la UTN."
     if usuario.rol == "admin":
@@ -127,7 +133,9 @@ def motivo_sin_acceso(usuario: Optional[Usuario]) -> Optional[str]:
 
 
 class Nodo:
+    """Estado en memoria de un nodo: último latido, capacidad, sesiones ocupadas y órdenes pendientes."""
     def __init__(self, nombre: str):
+        """Crea el registro de un nodo recién anunciado, sin latidos ni sesiones."""
         self.nombre = nombre
         self.ultimo = 0.0
         self.capacidad = 0
@@ -139,12 +147,15 @@ class Nodo:
         self.tokens: Dict[str, str] = {}  # id → hash de un token nuevo
 
     def vivo(self, momento: float) -> bool:
+        """True si latió hace menos de NODO_VIVO_S segundos (reloj monotónico)."""
         return momento - self.ultimo < NODO_VIVO_S
 
     def libres(self) -> int:
+        """Lugares libres descontando sesiones abiertas y por abrir."""
         return max(0, self.capacidad - len(self.ocupadas | set(self.abrir)))
 
     def publico(self, momento: float) -> dict:
+        """Resumen del nodo para el panel de administración."""
         return {
             "nombre": self.nombre,
             "vivo": self.vivo(momento),
@@ -167,13 +178,16 @@ def reiniciar_nube() -> None:
         _nodos.clear()
 
 
+# Debe llamarse con _candado tomado (nodo_actual lo hace).
 def _nodo(nombre: str) -> Nodo:
+    """Devuelve (o crea) el Nodo con ese nombre."""
     if nombre not in _nodos:
         _nodos[nombre] = Nodo(nombre)
     return _nodos[nombre]
 
 
 def nodo_actual(request: Request) -> Nodo:
+    """Dependencia: identifica al nodo por el SHA-256 de su token Bearer (401 si no está en AMATISTA_NUBE_NODOS)."""
     autorizacion = request.headers.get("authorization", "")
     token = autorizacion[7:].strip() if autorizacion.lower().startswith("bearer ") else ""
     nombre = nodos_autorizados().get(hash_token(token)) if token else None
@@ -187,6 +201,7 @@ def nodo_actual(request: Request) -> Nodo:
 
 
 def _cerrar(db: Session, sesion: NubeSesion, estado: str, motivo: str) -> None:
+    """Marca la sesión como terminada/fallida y encola en el nodo la orden de cerrarla (sin commit)."""
     sesion.estado = estado
     sesion.motivo_fin = motivo[:40]
     sesion.terminada_en = ahora()
@@ -221,6 +236,7 @@ def mantener(db: Session) -> None:
 
 
 def _publica(sesion: NubeSesion, token: Optional[str] = None) -> dict:
+    """Datos de una sesión para el alumno (URLs de entrada y archivos solo si está lista)."""
     nodo = _nodos.get(sesion.nodo)
     url = nodo.url if nodo else ""
     datos = {
@@ -239,6 +255,7 @@ def _publica(sesion: NubeSesion, token: Optional[str] = None) -> dict:
 
 
 def _viva_de(db: Session, usuario_id: str) -> Optional[NubeSesion]:
+    """Sesión asignada o lista más reciente de la cuenta, o None."""
     return db.scalars(
         select(NubeSesion)
         .where(NubeSesion.usuario_id == usuario_id, NubeSesion.estado.in_(VIVAS))
@@ -247,6 +264,7 @@ def _viva_de(db: Session, usuario_id: str) -> Optional[NubeSesion]:
 
 
 def _usadas_hoy(db: Session, usuario_id: str) -> int:
+    """Sesiones no fallidas de la cuenta en las últimas 24 h."""
     desde = ahora() - timedelta(hours=24)
     return db.scalar(
         select(func.count()).select_from(NubeSesion).where(
@@ -256,6 +274,7 @@ def _usadas_hoy(db: Session, usuario_id: str) -> int:
 
 
 def _resumen_nodos() -> dict:
+    """Nodos vivos, capacidad total y lugares libres."""
     momento = time.monotonic()
     vivos = [n for n in _nodos.values() if n.vivo(momento)]
     return {"nodos": len(vivos), "capacidad": sum(n.capacidad for n in vivos), "libres": sum(n.libres() for n in vivos)}
@@ -266,6 +285,7 @@ def _resumen_nodos() -> dict:
 
 @router.get("/estado")
 def estado(usuario: Optional[Usuario] = Depends(usuario_opcional), db: Session = Depends(obtener_db)):
+    """GET /estado: lugares libres, reglas y si la cuenta puede pedir sesión."""
     datos = {
         **_resumen_nodos(),
         "minutos": minutos_sesion(),
@@ -286,6 +306,8 @@ def estado(usuario: Optional[Usuario] = Depends(usuario_opcional), db: Session =
     except SQLAlchemyError as error:
         if sin_esquema(error):
             return {**datos, "listo": False, "motivo": SIN_014}
+        # [REVISION-BUG] error_bd(error, ruta, estado=500) exige 'ruta': las 5 llamadas error_bd(error) de este archivo lanzan
+        # TypeError (500 sin folio, fuera del formato de api/errores.py) ante cualquier error de Oracle que no sea 'falta 014'.
         raise error_bd(error)
     datos["puede"] = True
     return datos
@@ -293,6 +315,7 @@ def estado(usuario: Optional[Usuario] = Depends(usuario_opcional), db: Session =
 
 @router.post("/sesiones", status_code=201, dependencies=[Depends(LIMITE_PEDIDOS)])
 def pedir_sesion(usuario: Usuario = Depends(usuario_requerido), db: Session = Depends(obtener_db)):
+    """POST /sesiones: asigna una sesión al nodo con más lugares libres y devuelve su token (una sola vez)."""
     motivo = motivo_sin_acceso(usuario)
     if motivo:
         raise HTTPException(status_code=403, detail=motivo)
@@ -340,6 +363,7 @@ def pedir_sesion(usuario: Usuario = Depends(usuario_requerido), db: Session = De
 
 @router.get("/sesiones/actual")
 def sesion_actual(usuario: Usuario = Depends(usuario_requerido), db: Session = Depends(obtener_db)):
+    """GET /sesiones/actual: la sesión viva de la cuenta o null."""
     try:
         mantener(db)
         viva = _viva_de(db, usuario.id)
@@ -351,6 +375,7 @@ def sesion_actual(usuario: Usuario = Depends(usuario_requerido), db: Session = D
 
 
 def _sesion_propia(db: Session, sesion_id: str, usuario: Usuario) -> NubeSesion:
+    """La sesión si es de la cuenta (o si quien pide es admin); 404 si no."""
     sesion = db.get(NubeSesion, sesion_id)
     if sesion is None or (sesion.usuario_id != usuario.id and usuario.rol != "admin"):
         raise HTTPException(status_code=404, detail="No encontramos esa sesión.")
@@ -378,6 +403,7 @@ def nuevo_token_de_sesion(sesion_id: str, usuario: Usuario = Depends(usuario_req
 
 @router.post("/sesiones/{sesion_id}/terminar")
 def terminar_sesion(sesion_id: str, usuario: Usuario = Depends(usuario_requerido), db: Session = Depends(obtener_db)):
+    """POST /sesiones/{id}/terminar: cierra la sesión y libera el lugar."""
     sesion = _sesion_propia(db, sesion_id, usuario)
     if sesion.estado in VIVAS:
         _cerrar(db, sesion, "terminada", "la cerró el alumno" if sesion.usuario_id == usuario.id else "la cerró el equipo")
@@ -389,6 +415,7 @@ def terminar_sesion(sesion_id: str, usuario: Usuario = Depends(usuario_requerido
 
 
 class Latido(BaseModel):
+    """Cuerpo del latido de un nodo: URL pública, capacidad, sesiones vivas y métricas."""
     url: str = Field(max_length=200)
     capacidad: int = Field(ge=0, le=64)
     sesiones: List[str] = Field(default_factory=list, max_length=64)  # abiertas y las que está abriendo
@@ -401,6 +428,7 @@ class Latido(BaseModel):
 
 
 def url_valida(url: str) -> bool:
+    """Solo https://host[:puerto] (o http://localhost en pruebas)."""
     if re.fullmatch(r"https://[a-z0-9.-]+(:\d+)?", url):
         return True
     # http solo para pruebas en la misma máquina.
@@ -409,6 +437,7 @@ def url_valida(url: str) -> bool:
 
 @router.post("/nodo/latido")
 def latido(datos: Latido, nodo: Nodo = Depends(nodo_actual), db: Session = Depends(obtener_db)):
+    """POST /nodo/latido: actualiza el nodo y responde {abrir, cerrar, tokens, latido_s}."""
     url = datos.url.rstrip("/").lower()
     if not url_valida(url):
         raise HTTPException(status_code=422, detail="La URL pública del nodo debe ser https://host (o http://localhost en pruebas).")
@@ -447,12 +476,14 @@ def latido(datos: Latido, nodo: Nodo = Depends(nodo_actual), db: Session = Depen
 
 
 class Reporte(BaseModel):
+    """Informe de un nodo sobre una sesión: lista, fallida o terminada."""
     estado: str = Field(pattern="^(lista|fallida|terminada)$")
     motivo: Optional[str] = Field(default=None, max_length=40)
 
 
 @router.post("/nodo/sesiones/{sesion_id}")
 def reporte_de_nodo(sesion_id: str, datos: Reporte, nodo: Nodo = Depends(nodo_actual), db: Session = Depends(obtener_db)):
+    """POST /nodo/sesiones/{id}: aplica el estado que reporta el nodo."""
     sesion = db.get(NubeSesion, sesion_id)
     if sesion is None or sesion.nodo != nodo.nombre:
         raise HTTPException(status_code=404, detail="Esa sesión no es de este nodo.")
@@ -477,6 +508,7 @@ def reporte_de_nodo(sesion_id: str, datos: Reporte, nodo: Nodo = Depends(nodo_ac
 
 @router.get("/admin")
 def panel(_: Usuario = Depends(requiere_rol("admin")), db: Session = Depends(obtener_db)):
+    """GET /admin: nodos, sesiones vivas y las últimas 50 con el correo de cada cuenta."""
     momento = time.monotonic()
     try:
         mantener(db)
@@ -490,6 +522,7 @@ def panel(_: Usuario = Depends(requiere_rol("admin")), db: Session = Depends(obt
         raise error_bd(error)
 
     def fila(s: NubeSesion) -> dict:
+        """Sesión pública más correo y datos de cierre."""
         return {**_publica(s), "correo": correos.get(s.usuario_id), "motivo_fin": s.motivo_fin,
                 "terminada_en": s.terminada_en.isoformat() + "Z" if s.terminada_en else None}
 
@@ -500,4 +533,5 @@ def panel(_: Usuario = Depends(requiere_rol("admin")), db: Session = Depends(obt
 
 @router.post("/admin/sesiones/{sesion_id}/terminar")
 def terminar_como_equipo(sesion_id: str, admin: Usuario = Depends(requiere_rol("admin")), db: Session = Depends(obtener_db)):
+    """POST /admin/sesiones/{id}/terminar: un admin cierra cualquier sesión."""
     return terminar_sesion(sesion_id, admin, db)

@@ -16,6 +16,7 @@ URL_NODO = "http://localhost:8730"
 
 @pytest.fixture(autouse=True)
 def nube(monkeypatch):
+    """Fixture: incluye el router de la propuesta de nube en la app con un nodo de prueba configurado y lo retira al final."""
     from api.datos import nube as mod_nube
     from main import app
     rutas_antes = list(app.router.routes)
@@ -36,12 +37,14 @@ def nube(monkeypatch):
 
 
 def latir(cliente, capacidad=2, sesiones=(), url=URL_NODO, cabeceras=NODO):
+    """Envía un latido de nodo de Amatista Cloud con su URL, capacidad y sesiones."""
     return cliente.post("/api/nube/v1/nodo/latido", headers=cabeceras,
                         json={"url": url, "capacidad": capacidad, "sesiones": list(sesiones), "arquitectura": "x86_64",
                               "nucleos": 8, "ram_gb": 40})
 
 
 def test_dominios_permitidos():
+    """Comprueba que solo los correos del dominio de la UTN (y subdominios) se admiten."""
     assert correo_permitido("ana@utn.mx")
     assert correo_permitido("ana@alumno.utn.mx")
     assert not correo_permitido("ana@xutn.mx")
@@ -51,6 +54,7 @@ def test_dominios_permitidos():
 
 
 def test_la_sesion_dura_al_menos_una_hora(monkeypatch):
+    """Comprueba que la duración de sesión configurada nunca baja de 60 minutos."""
     monkeypatch.setenv("AMATISTA_NUBE_MINUTOS", "10")
     assert minutos_sesion() == 60
     monkeypatch.setenv("AMATISTA_NUBE_MINUTOS", "90")
@@ -58,6 +62,7 @@ def test_la_sesion_dura_al_menos_una_hora(monkeypatch):
 
 
 def test_solo_cuentas_de_la_utn_con_correo_confirmado(cliente, crear_cuenta):
+    """Comprueba que solo cuentas UTN con correo confirmado pueden pedir una sesión en la nube (403 si no)."""
     latir(cliente)
     _, gmail = crear_cuenta(email="ana@gmail.com")
     estado = cliente.get("/api/nube/v1/estado", headers=gmail).json()
@@ -77,6 +82,7 @@ def test_solo_cuentas_de_la_utn_con_correo_confirmado(cliente, crear_cuenta):
 
 
 def test_sin_nodos_no_hay_lugar(cliente, crear_cuenta):
+    """Comprueba que sin nodos vivos pedir sesión responde 409 con Retry-After."""
     _, utn = crear_cuenta(email="ana@utn.mx")
     assert cliente.get("/api/nube/v1/estado", headers=utn).json()["puede"] is True
     r = cliente.post("/api/nube/v1/sesiones", headers=utn)
@@ -84,6 +90,7 @@ def test_sin_nodos_no_hay_lugar(cliente, crear_cuenta):
 
 
 def test_el_nodo_necesita_su_token_y_una_url_segura(cliente):
+    """Comprueba que el latido del nodo exige su token (401) y una URL HTTPS permitida (422)."""
     assert latir(cliente, cabeceras={"Authorization": "Bearer otro"}).status_code == 401
     assert latir(cliente, cabeceras={}).status_code == 401
     assert latir(cliente, url="http://granja.example.com").status_code == 422
@@ -91,6 +98,7 @@ def test_el_nodo_necesita_su_token_y_una_url_segura(cliente):
 
 
 def test_recorrido_completo_de_una_sesion(cliente, crear_cuenta):
+    """Comprueba el ciclo completo: pedir sesión, el nodo la abre, el alumno entra y la termina."""
     latir(cliente, capacidad=2)
     _, utn = crear_cuenta(email="ana@utn.mx")
 
@@ -130,6 +138,7 @@ def test_recorrido_completo_de_una_sesion(cliente, crear_cuenta):
 
 
 def test_cuota_diaria(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que AMATISTA_NUBE_POR_DIA limita las sesiones por alumno y día."""
     monkeypatch.setenv("AMATISTA_NUBE_POR_DIA", "1")
     latir(cliente)
     _, utn = crear_cuenta(email="ana@utn.mx")
@@ -145,6 +154,7 @@ def test_cuota_diaria(cliente, crear_cuenta, monkeypatch):
 
 
 def test_al_vencer_la_hora_se_cierra_sola(cliente, crear_cuenta):
+    """Comprueba que una sesión vencida se cierra y se ordena cerrarla al nodo."""
     latir(cliente)
     _, utn = crear_cuenta(email="ana@utn.mx")
     sesion = cliente.post("/api/nube/v1/sesiones", headers=utn).json()
@@ -160,6 +170,7 @@ def test_al_vencer_la_hora_se_cierra_sola(cliente, crear_cuenta):
 
 
 def test_si_el_nodo_falla_la_sesion_no_cuenta_para_la_cuota(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que una sesión que el nodo marca fallida no gasta la cuota del día."""
     monkeypatch.setenv("AMATISTA_NUBE_POR_DIA", "1")
     latir(cliente)
     _, utn = crear_cuenta(email="ana@utn.mx")
@@ -169,6 +180,7 @@ def test_si_el_nodo_falla_la_sesion_no_cuenta_para_la_cuota(cliente, crear_cuent
 
 
 def test_un_nodo_no_toca_sesiones_de_otro(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que un nodo no puede cambiar sesiones asignadas a otro nodo."""
     otro = "token-del-nodo-oracle-para-pruebas-987654"
     monkeypatch.setenv("AMATISTA_NUBE_NODOS", ",".join([
         "casa:" + hashlib.sha256(TOKEN_NODO.encode()).hexdigest(),
@@ -183,6 +195,7 @@ def test_un_nodo_no_toca_sesiones_de_otro(cliente, crear_cuenta, monkeypatch):
 
 
 def test_panel_del_equipo(cliente, crear_cuenta):
+    """Comprueba que el panel /api/nube/v1/admin es solo para el equipo y muestra nodos y sesiones."""
     latir(cliente, capacidad=4)
     _, utn = crear_cuenta(email="ana@utn.mx")
     _, admin = crear_cuenta(rol="admin")

@@ -13,6 +13,7 @@ from seguridad import DURACION_SESION, hash_password, hash_token, nuevo_token
 @pytest.fixture(autouse=True)
 def entorno_pruebas(monkeypatch):
     # PBKDF2 rápido en pruebas y sin límites de peticiones por IP.
+    """Fixture automática: PBKDF2 rápido, sin límites por IP, modo prueba (tokens test_google_*) y sin registrar prácticas al arrancar."""
     monkeypatch.setenv("AMATISTA_PBKDF2_ITER", "1000")
     monkeypatch.setenv("AMATISTA_SIN_LIMITES", "1")
     monkeypatch.setenv("AMATISTA_MODO_PRUEBA", "1")
@@ -28,6 +29,7 @@ def entorno_pruebas(monkeypatch):
 
 @pytest.fixture()
 def cliente(tmp_path, monkeypatch):
+    """Fixture: TestClient de la app sobre una base SQLite nueva en tmp_path, con la caché del catálogo vacía."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'prueba.db'}")
     conexion.motor.cache_clear()
     from api.plataforma.contenido import invalidar_catalogo
@@ -49,6 +51,7 @@ def crear_cuenta(cliente):
     """
 
     def crear(rol="alumno", email=None, password="clave-segura-123", nombre="Prueba", es_prueba=0):
+        """Crea en la base una cuenta (rol y correo opcionales) con una sesión activa y devuelve (usuario_id, cabeceras Bearer)."""
         usuario_id = f"usr-{uuid.uuid4()}"
         email = email or f"{usuario_id}@amatista.local"
         token = nuevo_token()

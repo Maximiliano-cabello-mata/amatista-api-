@@ -27,6 +27,7 @@ MENSAJE_CUENTA = "Esta cuenta usa correo y contraseña: entra desde «Entrar»."
 
 
 class SolicitudSesion(BaseModel):
+    """Cuerpo de POST /api/iniciar-sesion heredado: id local del alumno o correo, nombre y dispositivo."""
     usuario_id: Optional[str] = Field(default=None, max_length=100)
     email: Optional[str] = Field(default=None, max_length=100)
     nombre: Optional[str] = Field(default=None, max_length=150)
@@ -45,6 +46,16 @@ def pertenece_a_cuenta(db: Session, usuario_id: str, email: Optional[str]) -> bo
 
 @router.post("/iniciar-sesion", dependencies=[Depends(limitar(30))])
 def iniciar_sesion(datos: SolicitudSesion, db: Session = Depends(obtener_db)):
+    """POST /api/iniciar-sesion (heredado). Público, 30 peticiones/min por IP.
+
+    Registra (o reutiliza) un alumno anónimo y anota una sesión informativa con
+    activa=0: el `sesion_id` devuelto NO sirve como token Bearer.
+    Cuerpo: SolicitudSesion (usuario_id o email obligatorio).
+    Respuesta: {mensaje, usuario_id, sesion_id}.
+    Errores: 422 sin usuario_id/email; 409 si el id o correo son de una cuenta
+    registrada (debe entrar por /api/auth); 500 de base de datos (error_bd).
+    Efectos: puede insertar filas en USUARIOS y SESIONES.
+    """
     usuario_id = (datos.usuario_id or datos.email or "").strip()
     if not usuario_id:
         raise HTTPException(status_code=422, detail="Envía usuario_id o email")
@@ -56,6 +67,7 @@ def iniciar_sesion(datos: SolicitudSesion, db: Session = Depends(obtener_db)):
 
         usuario = db.get(Usuario, usuario_id)
         if usuario is None:
+            # [REVISION-SEGURIDAD] BAJA: ruta pública heredada que crea filas USUARIOS con cualquier id (30/min por IP). Decidir si se retira.
             db.add(Usuario(id=usuario_id, nombre=datos.nombre))
             db.flush()  # el usuario debe existir antes que su sesión (FK en Oracle)
         elif datos.nombre and not usuario.nombre:

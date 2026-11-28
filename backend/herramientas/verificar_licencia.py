@@ -38,11 +38,17 @@ def archivos_de(ruta: Path) -> dict:
 
 
 def archivos_de_zip(datos: bytes) -> dict:
+    """{nombre: bytes} de los archivos de un .zip que viene en memoria (la extensión dentro del paquete con instalador)."""
     with zipfile.ZipFile(io.BytesIO(datos)) as zf:
         return {n: zf.read(n) for n in zf.namelist() if not n.endswith("/")}
 
 
 def main(argv=None) -> int:
+    """CLI: muestra a qué cuenta pertenece una copia del add-on, si la firma es válida y qué archivos cambiaron.
+
+    Lee licencia.json e integridad.json de la carpeta o .zip indicada. Necesita
+    AMATISTA_SECRETO_FIRMA para validar la firma. Devuelve el código de salida.
+    """
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("ruta", type=Path)
     args = parser.parse_args(argv)

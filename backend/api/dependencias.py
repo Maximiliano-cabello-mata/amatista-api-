@@ -28,6 +28,11 @@ RUTAS_ADDON = ("/api/addon/", "/api/blender/")
 
 
 def extraer_token(request: Request) -> Optional[str]:
+    """Saca el token de sesión de la petición, o None si no viene.
+
+    Primero mira "Authorization: Bearer <token>" (PWA y add-on); si no está,
+    acepta la cabecera heredada X-Sesion-Id. No valida nada: solo lo extrae.
+    """
     autorizacion = request.headers.get("authorization", "")
     if autorizacion.lower().startswith("bearer "):
         token = autorizacion[7:].strip()
@@ -79,6 +84,11 @@ def usuario_opcional(request: Request, db: Session = Depends(obtener_db)) -> Opt
 
 
 def usuario_requerido(usuario: Optional[Usuario] = Depends(usuario_opcional)) -> Usuario:
+    """Dependencia de FastAPI que exige sesión iniciada.
+
+    Envuelve a usuario_opcional y responde 401 ("Inicia sesión para continuar.")
+    si la petición no trajo token. Con token inválido el 401 ya lo lanza usuario_opcional.
+    """
     if usuario is None:
         raise HTTPException(status_code=401, detail="Inicia sesión para continuar.")
     return usuario
@@ -88,6 +98,7 @@ def requiere_rol(*roles: str) -> Callable[..., Usuario]:
     """Dependencia que exige uno de los roles indicados (403 si no)."""
 
     def verificar(usuario: Usuario = Depends(usuario_requerido)) -> Usuario:
+        """Comprueba que el usuario con sesión tenga uno de los roles permitidos (403 si no)."""
         if usuario.rol not in roles:
             raise HTTPException(status_code=403, detail="No tienes permiso para esta acción.")
         return usuario
@@ -96,6 +107,11 @@ def requiere_rol(*roles: str) -> Callable[..., Usuario]:
 
 
 def es_cuenta_registrada(usuario: Optional[Usuario]) -> bool:
+    """Indica si el usuario es una cuenta real y no un alumno anónimo.
+
+    Cuenta registrada = tiene contraseña o ya fue fusionada con otra cuenta.
+    Esas filas quedan protegidas: sin sesión no se puede escribir ni leer su progreso.
+    """
     return usuario is not None and (bool(usuario.password_hash) or bool(usuario.fusionado_en))
 
 
@@ -110,6 +126,7 @@ def resolver_alumno(db: Session, actual: Optional[Usuario], usuario_id: Optional
     usuario_id = (usuario_id or "").strip()
     if not usuario_id:
         raise HTTPException(status_code=422, detail="Envía usuario_id o inicia sesión.")
+    # Diseño offline-first: sin sesión cualquiera puede escribir progreso de un id anónimo que conozca (riesgo aceptado).
     if es_cuenta_registrada(db.get(Usuario, usuario_id)):
         raise HTTPException(status_code=401, detail="Inicia sesión para sincronizar el progreso de esta cuenta.")
     return usuario_id

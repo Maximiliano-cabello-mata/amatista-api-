@@ -86,6 +86,7 @@ LIMITE_PROFESOR = limitar(120, ventana=60, por="cuenta")
 
 
 def _fallo(db: Session, error: SQLAlchemyError, ruta: str) -> HTTPException:
+    """Deshace la transacción y traduce el error: 503 con SIN_014 si falta sql/014, si no el error_bd normal."""
     db.rollback()
     if sin_esquema(error):
         return HTTPException(status_code=503, detail=SIN_014)
@@ -93,6 +94,7 @@ def _fallo(db: Session, error: SQLAlchemyError, ruta: str) -> HTTPException:
 
 
 def iso(momento: Optional[datetime]) -> Optional[str]:
+    """Fecha en ISO 8601 o None."""
     return momento.isoformat() if momento else None
 
 
@@ -106,6 +108,7 @@ def _purgar_modelos(db: Session) -> None:
 
 
 def _nuevo_codigo(db: Session) -> str:
+    """Código de grupo libre «AMA-XXXX» (letras sin confusiones, para dictarlo en el salón); 503 si no encuentra uno en 20 intentos."""
     for _ in range(20):
         codigo = "AMA-" + "".join(secrets.choice(LETRAS_CODIGO) for _ in range(4))
         if db.scalar(select(Grupo.id).where(Grupo.codigo == codigo)) is None:
@@ -114,6 +117,7 @@ def _nuevo_codigo(db: Session) -> str:
 
 
 def _normalizar_codigo(valor: str) -> str:
+    """Normaliza lo que escribe el alumno («ama x7k2», «AMA-X7K2») a la forma guardada «AMA-X7K2»."""
     limpio = "".join(c for c in valor.upper() if c.isalnum())
     if limpio.startswith("AMA"):
         limpio = limpio[3:]
@@ -121,12 +125,14 @@ def _normalizar_codigo(valor: str) -> str:
 
 
 def _cuenta_con_correo(usuario: Usuario = Depends(usuario_requerido)) -> Usuario:
+    """Dependencia de las rutas del alumno: exige sesión de una cuenta registrada (401 si es anónima)."""
     if not es_cuenta_registrada(usuario):
         raise HTTPException(status_code=401, detail="Entra con tu cuenta para unirte al grupo de tu profesor.")
     return usuario
 
 
 def _grupo_propio(db: Session, grupo_id: str, profesor: Usuario) -> Grupo:
+    """Grupo del profesor que llama; 404 si no existe o es de otro profesor."""
     grupo = db.get(Grupo, grupo_id)
     if grupo is None or grupo.profesor_id != profesor.id:
         raise HTTPException(status_code=404, detail="No encontramos ese grupo entre los tuyos.")
@@ -134,6 +140,7 @@ def _grupo_propio(db: Session, grupo_id: str, profesor: Usuario) -> Grupo:
 
 
 def _asignacion_propia(db: Session, asignacion_id: str, profesor: Usuario) -> Asignacion:
+    """Asignación creada por el profesor que llama; 404 si no existe o es de otro."""
     asignacion = db.get(Asignacion, asignacion_id)
     if asignacion is None or asignacion.profesor_id != profesor.id:
         raise HTTPException(status_code=404, detail="No encontramos esa práctica entre las que dejaste.")
@@ -141,6 +148,7 @@ def _asignacion_propia(db: Session, asignacion_id: str, profesor: Usuario) -> As
 
 
 def _resumen(texto: Optional[str]) -> Optional[dict]:
+    """Decodifica el resumen JSON del modelo entregado; None si falta o está corrupto."""
     if not texto:
         return None
     try:
@@ -150,6 +158,7 @@ def _resumen(texto: Optional[str]) -> Optional[dict]:
 
 
 def _entrega(e: Entrega, asignacion: Asignacion) -> dict:
+    """Serializa una entrega para el profesor: estado, progreso medido, si llegó tarde y si el modelo sigue en el servidor."""
     return {
         "estado": e.estado,
         "progreso": e.progreso,
@@ -169,6 +178,7 @@ def _entrega(e: Entrega, asignacion: Asignacion) -> dict:
 
 
 def _asignacion(a: Asignacion, practica: Optional[Practica], extra: Optional[dict] = None) -> dict:
+    """Serializa una asignación con los datos de su práctica; `extra` añade conteos o la entrega del alumno."""
     datos = {
         "id": a.id,
         "grupo_id": a.grupo_id,
@@ -189,6 +199,7 @@ def _asignacion(a: Asignacion, practica: Optional[Practica], extra: Optional[dic
 
 
 def _practicas(db: Session, ids) -> Dict[str, Practica]:
+    """Prácticas por id en una sola consulta y sin leer su definición (CLOB)."""
     ids = set(ids)
     if not ids:
         return {}
@@ -200,11 +211,13 @@ def _practicas(db: Session, ids) -> Dict[str, Practica]:
 
 
 class SolicitudGrupo(BaseModel):
+    """Cuerpo de POST /api/evaluacion/grupos: nombre del grupo (2-120 caracteres)."""
     nombre: str = Field(min_length=2, max_length=120)
 
     @field_validator("nombre")
     @classmethod
     def _limpio(cls, valor: str) -> str:
+        """Colapsa espacios del nombre y exige al menos 2 caracteres reales."""
         valor = " ".join(valor.split())
         if len(valor) < 2:
             raise ValueError("Ponle un nombre al grupo (por ejemplo «3.º B · tarde»).")
@@ -212,11 +225,13 @@ class SolicitudGrupo(BaseModel):
 
 
 class CambioGrupo(BaseModel):
+    """Cuerpo de PATCH /grupos/{id}: nombre y/o archivado (opcionales)."""
     nombre: Optional[str] = Field(default=None, min_length=2, max_length=120)
     archivado: Optional[bool] = None
 
 
 class SolicitudAsignacion(BaseModel):
+    """Cuerpo de POST /asignaciones: grupo, práctica publicada, título, indicaciones y fecha límite opcionales."""
     grupo_id: str = Field(max_length=40)
     practica_id: str = Field(max_length=80)
     titulo: Optional[str] = Field(default=None, max_length=200)
@@ -225,6 +240,7 @@ class SolicitudAsignacion(BaseModel):
 
 
 class CambioAsignacion(BaseModel):
+    """Cuerpo de PATCH /asignaciones/{id}: abrir/cerrar, indicaciones y fecha límite (quitar_fecha la borra)."""
     estado: Optional[Literal["abierta", "cerrada"]] = None
     indicaciones: Optional[str] = Field(default=None, max_length=1000)
     fecha_limite: Optional[datetime] = None
@@ -232,22 +248,26 @@ class CambioAsignacion(BaseModel):
 
 
 class SolicitudEvaluacion(BaseModel):
+    """Cuerpo de POST .../evaluar: evaluada o rehacer, calificación 0-10 y comentario."""
     estado: Literal["evaluada", "rehacer"]
     calificacion: Optional[int] = Field(default=None, ge=0, le=10)
     comentario: Optional[str] = Field(default=None, max_length=1000)
 
 
 class SolicitudUnirse(BaseModel):
+    """Cuerpo de POST /unirme: el código del grupo que dio el profesor."""
     codigo: str = Field(min_length=4, max_length=20)
 
 
 class SolicitudEntrega(BaseModel):
+    """Cuerpo de POST /entregas (lo manda el add-on): asignación y modelo ligero en base64 opcional."""
     asignacion_id: str = Field(max_length=40)
     modelo: Optional[str] = Field(default=None, max_length=modelo_ligero.MAX_BASE64)
     version_addon: Optional[str] = Field(default=None, max_length=20)
 
 
 def _sin_zona(momento: Optional[datetime]) -> Optional[datetime]:
+    """Pasa una fecha con zona horaria a UTC sin zona (como se guarda); deja igual las que no tienen zona."""
     if momento is None or momento.tzinfo is None:
         return momento
     return momento.astimezone(timezone.utc).replace(tzinfo=None)
@@ -258,6 +278,12 @@ def _sin_zona(momento: Optional[datetime]) -> Optional[datetime]:
 
 @router.get("/grupos", dependencies=[Depends(LIMITE_PROFESOR)])
 def mis_grupos(db: Session = Depends(obtener_db), profesor: Usuario = Depends(profesor_requerido)):
+    """GET /api/evaluacion/grupos. Profesor o admin; 120 peticiones/min por cuenta.
+
+    Antes purga los modelos sin recoger de más de 30 días. Respuesta: lista de
+    grupos del profesor con alumnos, prácticas y entregas por evaluar.
+    Errores: 401/403; 429; 503 sin sql/014.
+    """
     try:
         _purgar_modelos(db)
         db.commit()
@@ -301,6 +327,11 @@ def mis_grupos(db: Session = Depends(obtener_db), profesor: Usuario = Depends(pr
 
 @router.post("/grupos", status_code=201, dependencies=[Depends(LIMITE_PROFESOR)])
 def crear_grupo(cuerpo: SolicitudGrupo, db: Session = Depends(obtener_db), profesor: Usuario = Depends(profesor_requerido)):
+    """POST /api/evaluacion/grupos. Profesor o admin. Responde 201.
+
+    Cuerpo: SolicitudGrupo. Crea el grupo con su código de ingreso.
+    Respuesta: el grupo con conteos en 0. Errores: 401/403; 409 con 40 grupos activos; 422; 503.
+    """
     try:
         total = db.scalar(select(func.count()).select_from(Grupo).where(Grupo.profesor_id == profesor.id, Grupo.archivado == 0))
         if total >= MAX_GRUPOS:
@@ -318,9 +349,16 @@ def crear_grupo(cuerpo: SolicitudGrupo, db: Session = Depends(obtener_db), profe
 @router.patch("/grupos/{grupo_id}", dependencies=[Depends(LIMITE_PROFESOR)])
 def cambiar_grupo(grupo_id: str, cuerpo: CambioGrupo, db: Session = Depends(obtener_db),
                   profesor: Usuario = Depends(profesor_requerido)):
+    """PATCH /api/evaluacion/grupos/{grupo_id}. Profesor dueño del grupo.
+
+    Cuerpo: CambioGrupo. Respuesta: {id, nombre, codigo, archivado}.
+    Errores: 401/403; 404 grupo ajeno o inexistente; 422; 503.
+    """
     try:
         grupo = _grupo_propio(db, grupo_id, profesor)
         if cuerpo.nombre is not None:
+            # [REVISION-DUDA] Un nombre de solo espacios pasa min_length pero aquí lanza pydantic.ValidationError
+            # dentro de la ruta: parece que responde 500 y no 422. Comprobar con una prueba.
             grupo.nombre = SolicitudGrupo(nombre=cuerpo.nombre).nombre
         if cuerpo.archivado is not None:
             grupo.archivado = 1 if cuerpo.archivado else 0
@@ -332,6 +370,11 @@ def cambiar_grupo(grupo_id: str, cuerpo: CambioGrupo, db: Session = Depends(obte
 
 @router.get("/grupos/{grupo_id}", dependencies=[Depends(LIMITE_PROFESOR)])
 def ver_grupo(grupo_id: str, db: Session = Depends(obtener_db), profesor: Usuario = Depends(profesor_requerido)):
+    """GET /api/evaluacion/grupos/{grupo_id}. Profesor dueño del grupo.
+
+    Respuesta: datos del grupo, sus alumnos y sus asignaciones con conteos de
+    entregas por estado. Errores: 401/403; 404; 503.
+    """
     try:
         grupo = _grupo_propio(db, grupo_id, profesor)
         filas = db.execute(
@@ -373,6 +416,10 @@ def ver_grupo(grupo_id: str, db: Session = Depends(obtener_db), profesor: Usuari
 @router.delete("/grupos/{grupo_id}/alumnos/{alumno_id}", dependencies=[Depends(LIMITE_PROFESOR)])
 def sacar_alumno(grupo_id: str, alumno_id: str, db: Session = Depends(obtener_db),
                  profesor: Usuario = Depends(profesor_requerido)):
+    """DELETE /api/evaluacion/grupos/{grupo_id}/alumnos/{alumno_id}. Profesor dueño del grupo.
+
+    Quita al alumno del grupo (sus entregas se conservan). Respuesta: {ok: true}. Errores: 401/403; 404; 503.
+    """
     try:
         grupo = _grupo_propio(db, grupo_id, profesor)
         db.execute(delete(GrupoAlumno).where(GrupoAlumno.grupo_id == grupo.id, GrupoAlumno.alumno_id == alumno_id))
@@ -387,6 +434,10 @@ def sacar_alumno(grupo_id: str, alumno_id: str, db: Session = Depends(obtener_db
 
 @router.get("/practicas", dependencies=[Depends(LIMITE_PROFESOR)])
 def practicas_para_asignar(db: Session = Depends(obtener_db), _: Usuario = Depends(profesor_requerido)):
+    """GET /api/evaluacion/practicas. Profesor o admin.
+
+    Respuesta: prácticas publicadas [{id, titulo, nivel, curso_id, leccion_id}]. Errores: 401/403.
+    """
     filas = db.scalars(
         select(Practica)
         .options(defer(Practica.definicion))
@@ -401,6 +452,12 @@ def practicas_para_asignar(db: Session = Depends(obtener_db), _: Usuario = Depen
 
 @router.post("/asignaciones", status_code=201, dependencies=[Depends(LIMITE_PROFESOR)])
 def asignar(cuerpo: SolicitudAsignacion, db: Session = Depends(obtener_db), profesor: Usuario = Depends(profesor_requerido)):
+    """POST /api/evaluacion/asignaciones. Profesor dueño del grupo. Responde 201.
+
+    Cuerpo: SolicitudAsignacion. Deja la práctica abierta al grupo.
+    Respuesta: la asignación con conteos en 0. Errores: 401/403; 404 grupo ajeno
+    o práctica no publicada; 409 grupo archivado; 503.
+    """
     try:
         grupo = _grupo_propio(db, cuerpo.grupo_id, profesor)
         if grupo.archivado:
@@ -429,6 +486,10 @@ def asignar(cuerpo: SolicitudAsignacion, db: Session = Depends(obtener_db), prof
 @router.patch("/asignaciones/{asignacion_id}", dependencies=[Depends(LIMITE_PROFESOR)])
 def cambiar_asignacion(asignacion_id: str, cuerpo: CambioAsignacion, db: Session = Depends(obtener_db),
                        profesor: Usuario = Depends(profesor_requerido)):
+    """PATCH /api/evaluacion/asignaciones/{asignacion_id}. Profesor que la creó.
+
+    Cuerpo: CambioAsignacion. Respuesta: la asignación actualizada. Errores: 401/403; 404; 503.
+    """
     try:
         asignacion = _asignacion_propia(db, asignacion_id, profesor)
         if cuerpo.estado:
@@ -494,6 +555,7 @@ def ver_asignacion(asignacion_id: str, db: Session = Depends(obtener_db), profes
 
 
 def _entrega_propia(db: Session, asignacion_id: str, alumno_id: str, profesor: Usuario):
+    """(asignación, entrega) de un alumno en una asignación del profesor; 404 si no existe o no ha entregado."""
     asignacion = _asignacion_propia(db, asignacion_id, profesor)
     entrega = db.get(Entrega, (asignacion.id, alumno_id))
     if entrega is None:
@@ -504,6 +566,11 @@ def _entrega_propia(db: Session, asignacion_id: str, alumno_id: str, profesor: U
 @router.get("/asignaciones/{asignacion_id}/entregas/{alumno_id}/modelo", dependencies=[Depends(LIMITE_PROFESOR)])
 def recoger_modelo(asignacion_id: str, alumno_id: str, db: Session = Depends(obtener_db),
                    profesor: Usuario = Depends(profesor_requerido)):
+    """GET /api/evaluacion/asignaciones/{id}/entregas/{alumno_id}/modelo. Profesor que creó la asignación.
+
+    Respuesta: {modelo (base64), bytes, entregada_en} para rearmarlo en el
+    navegador. Errores: 401/403; 404 sin entrega; 410 ya recogido o purgado; 503.
+    """
     try:
         _, entrega = _entrega_propia(db, asignacion_id, alumno_id, profesor)
     except SQLAlchemyError as error:
@@ -536,6 +603,12 @@ def modelo_recibido(asignacion_id: str, alumno_id: str, db: Session = Depends(ob
 @router.post("/asignaciones/{asignacion_id}/entregas/{alumno_id}/evaluar", dependencies=[Depends(LIMITE_PROFESOR)])
 def evaluar(asignacion_id: str, alumno_id: str, cuerpo: SolicitudEvaluacion, db: Session = Depends(obtener_db),
             profesor: Usuario = Depends(profesor_requerido)):
+    """POST /api/evaluacion/asignaciones/{id}/entregas/{alumno_id}/evaluar. Profesor que creó la asignación.
+
+    Cuerpo: SolicitudEvaluacion. Guarda estado, calificación y comentario y
+    marca la evaluación como no vista por el alumno.
+    Respuesta: _entrega actualizada. Errores: 401/403; 404; 422; 503.
+    """
     try:
         asignacion, entrega = _entrega_propia(db, asignacion_id, alumno_id, profesor)
         entrega.estado = cuerpo.estado
@@ -554,6 +627,12 @@ def evaluar(asignacion_id: str, alumno_id: str, cuerpo: SolicitudEvaluacion, db:
 
 @router.post("/unirme", dependencies=[Depends(LIMITE_UNIRSE)])
 def unirme(cuerpo: SolicitudUnirse, db: Session = Depends(obtener_db), alumno: Usuario = Depends(_cuenta_con_correo)):
+    """POST /api/evaluacion/unirme. Alumno con cuenta registrada; 10 peticiones cada 10 min por cuenta.
+
+    Cuerpo: SolicitudUnirse. Une al alumno al grupo (idempotente).
+    Respuesta: {id, nombre, profesor}. Errores: 401; 404 código inexistente o
+    grupo archivado; 409 es su propio grupo o el grupo tiene 200 alumnos; 429; 503.
+    """
     try:
         grupo = db.scalar(select(Grupo).where(Grupo.codigo == _normalizar_codigo(cuerpo.codigo)))
         if grupo is None or grupo.archivado:
@@ -599,6 +678,7 @@ def mis_asignaciones(db: Session = Depends(obtener_db), alumno: Usuario = Depend
         raise _fallo(db, error, "GET /api/evaluacion/mis-asignaciones")
 
     def mia(e: Optional[Entrega]) -> Optional[dict]:
+        """Lo que el alumno ve de su entrega (estado, calificación, comentario y si es nueva); None si no entregó."""
         if e is None:
             return None
         return {
@@ -621,6 +701,10 @@ def mis_asignaciones(db: Session = Depends(obtener_db), alumno: Usuario = Depend
 
 @router.post("/mis-asignaciones/{asignacion_id}/vista")
 def marcar_vista(asignacion_id: str, db: Session = Depends(obtener_db), alumno: Usuario = Depends(_cuenta_con_correo)):
+    """POST /api/evaluacion/mis-asignaciones/{asignacion_id}/vista. Alumno con cuenta registrada.
+
+    Marca la evaluación como leída. Respuesta: {ok: true} (también si no hay entrega). Errores: 401; 503.
+    """
     try:
         entrega = db.get(Entrega, (asignacion_id, alumno.id))
         if entrega is not None and not entrega.vista_alumno:
@@ -633,6 +717,10 @@ def marcar_vista(asignacion_id: str, db: Session = Depends(obtener_db), alumno: 
 
 @router.delete("/mis-grupos/{grupo_id}")
 def salir_del_grupo(grupo_id: str, db: Session = Depends(obtener_db), alumno: Usuario = Depends(_cuenta_con_correo)):
+    """DELETE /api/evaluacion/mis-grupos/{grupo_id}. Alumno con cuenta registrada.
+
+    El alumno deja el grupo (idempotente). Respuesta: {ok: true}. Errores: 401; 503.
+    """
     try:
         db.execute(delete(GrupoAlumno).where(GrupoAlumno.grupo_id == grupo_id, GrupoAlumno.alumno_id == alumno.id))
         db.commit()

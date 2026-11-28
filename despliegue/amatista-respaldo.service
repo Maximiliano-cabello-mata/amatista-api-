@@ -8,5 +8,7 @@ Type=oneshot
 User=opc
 Group=opc
 WorkingDirectory=/home/opc/amatista-api-/backend
+# [REVISION-BUG] Sin el prefijo '-' (a diferencia de amatista-api.service): si las variables viven solo en backend/.env el respaldo falla.
+# [REVISION-SEGURIDAD] Los JSONL de respaldo en /home/opc/respaldos incluyen correos, teléfonos y hashes de contraseña sin cifrar.
 EnvironmentFile=/etc/amatista/amatista-api.env
 ExecStart=/home/opc/amatista-api-/backend/venv/bin/python -m herramientas.respaldar_y_probar --destino /home/opc/respaldos --mantener 14

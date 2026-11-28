@@ -9,6 +9,7 @@ from database.modelos import Practica
 
 
 def arrancar(tmp_path, monkeypatch):
+    """Arranca la app con sincronización de prácticas sobre una base SQLite y devuelve el estado de cada práctica registrada."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'arranque.db'}")
     monkeypatch.setenv("AMATISTA_SINCRONIZAR_PRACTICAS", "1")
     conexion.motor.cache_clear()
@@ -23,6 +24,7 @@ def arrancar(tmp_path, monkeypatch):
 
 
 def test_al_arrancar_registra_y_publica_todas_las_del_repositorio(tmp_path, monkeypatch):
+    """Comprueba que al arrancar se registran y publican las 9 prácticas del repositorio."""
     del_repo = {datos["id"] for _, datos in motor_practicas.practicas_del_repositorio()}
     filas = arrancar(tmp_path, monkeypatch)
     assert len(del_repo) == 9  # los proyectos; las exploraciones de antes quedan en practices/archivo/
@@ -32,12 +34,14 @@ def test_al_arrancar_registra_y_publica_todas_las_del_repositorio(tmp_path, monk
 
 
 def test_volver_a_arrancar_no_crea_versiones_nuevas(tmp_path, monkeypatch):
+    """Comprueba que arrancar otra vez sin cambios no crea versiones nuevas."""
     primera = arrancar(tmp_path, monkeypatch)
     segunda = arrancar(tmp_path, monkeypatch)
     assert primera == segunda
 
 
 def test_respeta_una_practica_que_el_equipo_dejo_en_borrador(tmp_path, monkeypatch):
+    """Comprueba que una práctica que el equipo dejó en borrador no se vuelve a publicar sola."""
     arrancar(tmp_path, monkeypatch)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'arranque.db'}")
     conexion.motor.cache_clear()
@@ -51,6 +55,7 @@ def test_respeta_una_practica_que_el_equipo_dejo_en_borrador(tmp_path, monkeypat
 
 
 def test_apagado_no_registra_nada(tmp_path, monkeypatch):
+    """Comprueba que con AMATISTA_SINCRONIZAR_PRACTICAS=0 no se registra ninguna práctica."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'apagado.db'}")
     monkeypatch.setenv("AMATISTA_SINCRONIZAR_PRACTICAS", "0")
     conexion.motor.cache_clear()
@@ -64,6 +69,7 @@ def test_apagado_no_registra_nada(tmp_path, monkeypatch):
 
 
 def test_revisar_dice_lo_que_falta(tmp_path, monkeypatch):
+    """Comprueba que revisar_practicas informa las prácticas sin publicar o con versión vieja."""
     from herramientas.contenido import revisar_practicas
 
     arrancar(tmp_path, monkeypatch)

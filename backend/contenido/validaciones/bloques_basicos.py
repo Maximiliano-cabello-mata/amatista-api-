@@ -12,16 +12,19 @@ from .comun import (
 
 
 def _markdown_text(c: _Contexto, b: dict) -> None:
+    """Bloque markdown_text: exige «body»."""
     c.texto(b, "body")
 
 
 def _image(c: _Contexto, b: dict) -> None:
+    """Bloque image: exige «src» y «alt» (texto alternativo para accesibilidad); «caption» opcional."""
     c.texto(b, "src")
     c.texto(b, "alt")
     c.texto(b, "caption", obligatorio=False)
 
 
 def _concept_cards(c: _Contexto, b: dict) -> None:
+    """Bloque concept_cards: 1-12 tarjetas con «term» y «definition» únicos por término; «alt» obligatorio si hay imagen."""
     items = c.objetos(b, "items", 1, 12)
     for i, item in items:
         p = f"items[{i}]."
@@ -34,6 +37,7 @@ def _concept_cards(c: _Contexto, b: dict) -> None:
 
 
 def _lista_con_titulo(c: _Contexto, b: dict, campo: str) -> None:
+    """Revisión común de timeline, pipeline y layers: título opcional y 1-20 elementos con «title» y «text»."""
     c.texto(b, "title", obligatorio=False)
     for i, item in c.objetos(b, campo, 1, 20):
         p = f"{campo}[{i}]."
@@ -45,31 +49,37 @@ def _lista_con_titulo(c: _Contexto, b: dict, campo: str) -> None:
 
 
 def _timeline(c: _Contexto, b: dict) -> None:
+    """Bloque timeline: lista «items» de hitos (ver _lista_con_titulo)."""
     _lista_con_titulo(c, b, "items")
 
 
 def _pipeline(c: _Contexto, b: dict) -> None:
+    """Bloque pipeline: lista «steps» de etapas (ver _lista_con_titulo)."""
     _lista_con_titulo(c, b, "steps")
 
 
 def _layers(c: _Contexto, b: dict) -> None:
+    """Bloque layers: lista «items» de capas y «footer» opcional."""
     _lista_con_titulo(c, b, "items")
     c.texto(b, "footer", obligatorio=False)
 
 
 def _callout(c: _Contexto, b: dict) -> None:
+    """Bloque callout (aviso): «body» obligatorio, «variant» de VARIANTES_AVISO y título opcionales."""
     c.opcion(b, "variant", VARIANTES_AVISO, obligatorio=False)
     c.texto(b, "title", obligatorio=False)
     c.texto(b, "body")
 
 
 def _code_snippet(c: _Contexto, b: dict) -> None:
+    """Bloque code_snippet: «code» obligatorio, «language» y «preview» (booleano) opcionales."""
     c.texto(b, "code")
     c.texto(b, "language", obligatorio=False)
     c.booleano(b, "preview")
 
 
 def _video_player(c: _Contexto, b: dict) -> None:
+    """Bloque video_player: exige «url»."""
     c.texto(b, "url")
 
 
@@ -92,6 +102,7 @@ def _teclas(c: _Contexto, objeto: dict, prefijo: str, obligatorio: bool, campo: 
 
 
 def _step_by_step(c: _Contexto, b: dict) -> None:
+    """Bloque step_by_step: 1-12 pasos con «title», texto, teclas e imagen (con «alt») opcionales."""
     c.texto(b, "title", obligatorio=False)
     for i, paso in c.objetos(b, "steps", 1, 12):
         p = f"steps[{i}]."
@@ -103,6 +114,7 @@ def _step_by_step(c: _Contexto, b: dict) -> None:
 
 
 def _shortcuts(c: _Contexto, b: dict) -> None:
+    """Bloque shortcuts: 1-24 atajos con «keys» y «action»; «practice» opcional activa la práctica de teclas."""
     c.texto(b, "title", obligatorio=False)
     for i, atajo in c.objetos(b, "items", 1, 24):
         p = f"items[{i}]."
@@ -112,6 +124,7 @@ def _shortcuts(c: _Contexto, b: dict) -> None:
 
 
 def _lado(c: _Contexto, b: dict, campo: str) -> None:
+    """Revisa un lado («before»/«after») de compare: objeto con «label» y al menos «image» o «text»."""
     lado = _valor(b, campo)
     if not isinstance(lado, dict):
         c.error(f"«{campo}» debe ser un objeto {{label, image, text}}")
@@ -126,6 +139,7 @@ def _lado(c: _Contexto, b: dict, campo: str) -> None:
 
 
 def _compare(c: _Contexto, b: dict) -> None:
+    """Bloque compare (antes/después): dos lados válidos; el modo «slider» exige imagen en ambos."""
     c.texto(b, "title", obligatorio=False)
     _lado(c, b, "before")
     _lado(c, b, "after")

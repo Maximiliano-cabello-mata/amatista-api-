@@ -12,6 +12,7 @@ ANONIMO = "alumno-0a0b0c0d-0000-4000-8000-000000000002"
 
 
 def evento(tipo="lesson_completed", **campos):
+    """Evento de aprendizaje de ejemplo (id nuevo, tipo y lección) con los campos que se quieran cambiar."""
     return {
         "id": str(uuid.uuid4()),
         "tipo": tipo,
@@ -23,6 +24,7 @@ def evento(tipo="lesson_completed", **campos):
 
 
 def enviar(cliente, eventos, usuario_id=ANONIMO, cabeceras=None):
+    """Hace POST /api/eventos con los eventos, el usuario_id opcional y las cabeceras."""
     cuerpo = {"eventos": eventos}
     if usuario_id is not None:
         cuerpo["usuario_id"] = usuario_id
@@ -30,16 +32,19 @@ def enviar(cliente, eventos, usuario_id=ANONIMO, cabeceras=None):
 
 
 def leer(evento_id):
+    """Lee de la base el evento con ese id."""
     with Session(conexion.motor()) as db:
         return db.get(EventoAprendizaje, evento_id)
 
 
 def contar(*condiciones):
+    """Cuenta los eventos de la base que cumplen las condiciones."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(EventoAprendizaje).where(*condiciones))
 
 
 def test_anonimo_registra_eventos(cliente):
+    """Comprueba que un alumno anónimo registra eventos con todos sus campos."""
     datos = evento(
         "activity_submitted",
         sesion_aprendizaje=str(uuid.uuid4()),
@@ -65,6 +70,7 @@ def test_anonimo_registra_eventos(cliente):
 
 
 def test_reenvio_no_cuenta_dos_veces(cliente):
+    """Comprueba que reenviar la cola completa solo inserta los eventos nuevos."""
     a, b = evento(), evento("learning_session_started")
     assert enviar(cliente, [a, b]).json() == {"recibidos": 2, "nuevos": 2}
     # La PWA no recibió la respuesta y reenvía la cola completa, más uno nuevo.
@@ -75,6 +81,7 @@ def test_reenvio_no_cuenta_dos_veces(cliente):
 
 
 def test_duplicados_dentro_del_mismo_lote(cliente):
+    """Comprueba que dentro de un lote los ids repetidos cuentan una vez (el primero)."""
     a = evento()
     copia = {**a, "tipo": "activity_submitted"}  # mismo id: cuenta el primero
     assert enviar(cliente, [a, a, copia]).json() == {"recibidos": 3, "nuevos": 1}
@@ -83,6 +90,7 @@ def test_duplicados_dentro_del_mismo_lote(cliente):
 
 
 def test_tipo_invalido_responde_422(cliente):
+    """Comprueba que un tipo de evento desconocido responde 422 y no guarda nada."""
     respuesta = enviar(cliente, [evento("pagina_vista")])
     assert respuesta.status_code == 422
     assert "Tipo de evento desconocido" in respuesta.text
@@ -93,11 +101,13 @@ def test_tipo_invalido_responde_422(cliente):
 
 
 def test_todos_los_tipos_validos(cliente):
+    """Comprueba que se aceptan los cinco tipos de evento válidos."""
     tipos = ["account_created", "learning_session_started", "lesson_completed", "activity_submitted", "sync_succeeded"]
     assert enviar(cliente, [evento(t) for t in tipos]).json()["nuevos"] == 5
 
 
 def test_valida_tamanos(cliente):
+    """Comprueba los límites del lote (1-200 eventos) y del id (36 caracteres)."""
     assert enviar(cliente, []).status_code == 422
     assert enviar(cliente, [evento() for _ in range(201)]).status_code == 422
     assert enviar(cliente, [evento() for _ in range(200)]).json()["nuevos"] == 200
@@ -108,6 +118,7 @@ def test_valida_tamanos(cliente):
 
 
 def test_fechas_futuras_usan_la_hora_del_servidor(cliente):
+    """Comprueba que una fecha más de 5 min en el futuro se reemplaza por la del servidor y las demás se respetan."""
     momento = ahora()
     lejano = evento(ocurrido_en=(momento + timedelta(days=2)).isoformat())
     cercano = evento(ocurrido_en=(momento + timedelta(minutes=2)).isoformat())
@@ -124,6 +135,7 @@ def test_fechas_futuras_usan_la_hora_del_servidor(cliente):
 
 
 def test_datos_se_serializan_y_respetan_250(cliente):
+    """Comprueba que `datos` se guarda compacto y se descarta si pasa de 250 caracteres o no es texto/objeto."""
     texto, objeto, largo, largo_texto, lista = (
         evento(datos="texto libre"),
         evento(datos={"a": [1, 2], "b": None}),
@@ -141,6 +153,7 @@ def test_datos_se_serializan_y_respetan_250(cliente):
 
 
 def test_es_prueba_se_copia_del_usuario(cliente, crear_cuenta):
+    """Comprueba que el evento copia la marca es_prueba de su usuario."""
     _, prueba = crear_cuenta(es_prueba=1)
     _, real = crear_cuenta()
     a, b = evento(), evento()
@@ -151,6 +164,7 @@ def test_es_prueba_se_copia_del_usuario(cliente, crear_cuenta):
 
 
 def test_identidad_de_los_eventos(cliente, crear_cuenta):
+    """Comprueba que con sesión el evento va a la cuenta de la sesión aunque el cuerpo diga otro usuario."""
     a_id, a = crear_cuenta()
     b_id, _ = crear_cuenta()
     # Con token se guardan en la cuenta de la sesión, aunque el cuerpo diga otra.

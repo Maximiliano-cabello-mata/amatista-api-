@@ -22,6 +22,7 @@ from api import errores, registro
     ("/api/addonx", "plataforma"),  # un prefijo parecido no es del motor
 ])
 def test_cada_ruta_pertenece_a_una_api(ruta, api):
+    """Comprueba que api_de asigna cada ruta de ejemplo a su API (el prefijo más largo gana)."""
     assert registro.api_de(ruta) == api
 
 
@@ -35,6 +36,7 @@ def test_toda_ruta_publicada_tiene_api():
 
 
 def test_los_modulos_viven_en_el_paquete_de_su_api():
+    """Comprueba que las rutas de cada router están definidas dentro del paquete de su API."""
     for api in registro.APIS:
         for router in api.routers():
             assert isinstance(router, APIRouter)
@@ -44,6 +46,7 @@ def test_los_modulos_viven_en_el_paquete_de_su_api():
 
 
 def test_resumen_de_las_apis(cliente):
+    """Comprueba que GET /api/apis lista las cinco API en orden y con operaciones."""
     datos = cliente.get("/api/apis").json()
     nombres = [a["api"] for a in datos["apis"]]
     assert nombres == ["plataforma", "motor", "aula", "administracion", "datos"]
@@ -52,6 +55,7 @@ def test_resumen_de_las_apis(cliente):
 
 
 def test_un_error_dice_de_que_api_y_operacion_sale(cliente):
+    """Comprueba que un 401 conserva `detail` y añade el bloque `error` con API, operación y código."""
     r = cliente.get("/api/addon/v1/yo")  # sin token del complemento
     assert r.status_code == 401
     cuerpo = r.json()
@@ -63,6 +67,7 @@ def test_un_error_dice_de_que_api_y_operacion_sale(cliente):
 
 
 def test_cada_api_firma_sus_errores(cliente):
+    """Comprueba que los errores de cada prefijo llevan el nombre de su API."""
     casos = {
         "/api/evaluacion/grupos": "aula",
         "/api/admin/usuarios": "administracion",
@@ -75,6 +80,7 @@ def test_cada_api_firma_sus_errores(cliente):
 
 
 def test_validacion_conserva_el_detalle_de_fastapi(cliente):
+    """Comprueba que un 422 conserva la lista de errores de FastAPI en `detail`."""
     r = cliente.post("/api/auth/iniciar-sesion", json={})
     assert r.status_code == 422
     cuerpo = r.json()
@@ -84,17 +90,20 @@ def test_validacion_conserva_el_detalle_de_fastapi(cliente):
 
 
 def test_ruta_inexistente(cliente):
+    """Comprueba que una ruta inexistente responde 404 firmado por su API sin operación."""
     r = cliente.get("/api/addon/v1/no-existe")
     assert r.status_code == 404
     assert r.json()["error"] == {"api": "motor", "operacion": None, "codigo": "motor.no_encontrado", "estado": 404}
 
 
 def test_las_respuestas_correctas_tambien_llevan_identificador(cliente):
+    """Comprueba que toda respuesta lleva X-Peticion-Id de 12 caracteres."""
     r = cliente.get("/api/salud")
     assert r.status_code == 200 and len(r.headers[errores.CABECERA]) == 12
 
 
 def test_error_no_controlado_devuelve_el_identificador(tmp_path, monkeypatch):
+    """Comprueba que una excepción no controlada responde 500 con el id de petición y sin el mensaje interno."""
     from fastapi.testclient import TestClient
 
     from database import conexion
@@ -104,6 +113,7 @@ def test_error_no_controlado_devuelve_el_identificador(tmp_path, monkeypatch):
 
     @main.app.get("/api/addon/v1/_prueba_fallo")
     def _prueba_fallo():
+        """Ruta de prueba que lanza una excepción con texto que no debe llegar al cliente."""
         raise RuntimeError("secreto interno que no debe salir")
 
     try:
@@ -121,6 +131,7 @@ def test_error_no_controlado_devuelve_el_identificador(tmp_path, monkeypatch):
 
 
 def test_version_motor_fijada_y_sin_respaldo_monorepo():
+    """Comprueba que MOTOR_VERSION fija una revisión válida y que no se busca la copia vieja ../amatista."""
     import re
     import vecinos
 

@@ -15,10 +15,12 @@ ANONIMO = "alumno-0f0e0d0c-0000-4000-8000-000000000001"
 
 
 def evento(leccion_id="les_001", curso_id="blender", **campos):
+    """Avance de progreso de ejemplo para una lección y curso, con los campos que se quieran cambiar."""
     return {"curso_id": curso_id, "leccion_id": leccion_id, **campos}
 
 
 def enviar(cliente, eventos, usuario_id=ANONIMO, cabeceras=None, **extra):
+    """Hace POST /api/progreso con los eventos, el usuario_id (anónimo por defecto) y campos extra."""
     cuerpo = {"eventos": eventos, **extra}
     if usuario_id is not None:
         cuerpo["usuario_id"] = usuario_id
@@ -26,16 +28,19 @@ def enviar(cliente, eventos, usuario_id=ANONIMO, cabeceras=None, **extra):
 
 
 def fila(usuario_id, leccion_id="les_001", curso_id="blender"):
+    """Fila de PROGRESO_LECCIONES de ese alumno, curso y lección (o None)."""
     with Session(conexion.motor()) as db:
         return db.get(ProgresoLeccion, (usuario_id, curso_id, leccion_id))
 
 
 def contar(modelo, *condiciones):
+    """Cuenta las filas de `modelo` que cumplen las condiciones."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo).where(*condiciones))
 
 
 def lecciones(cliente, usuario_id=ANONIMO, cabeceras=None):
+    """Progreso de un alumno por id de lección leído con GET /api/progreso/{usuario_id}."""
     respuesta = cliente.get(f"/api/progreso/{usuario_id}", headers=cabeceras or {})
     assert respuesta.status_code == 200, respuesta.text
     return {f["leccion_id"]: f for f in respuesta.json()["lecciones"]}
@@ -45,6 +50,7 @@ def lecciones(cliente, usuario_id=ANONIMO, cabeceras=None):
 
 
 def test_anonimo_escribe_y_lee_su_progreso(cliente):
+    """Comprueba que un anónimo guarda progreso e insignias y los lee por su id."""
     respuesta = enviar(cliente, [evento(completada=True, puntaje=80, intentos=1)], insignias=["blender:mod_teoria_001"])
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json() == {"guardados": 1, "insignias": 1}
@@ -65,6 +71,7 @@ def test_anonimo_escribe_y_lee_su_progreso(cliente):
 
 
 def test_progreso_de_anonimo_sin_filas(cliente):
+    """Comprueba que el progreso de un anónimo sin filas responde listas vacías."""
     assert cliente.get("/api/progreso/alumno-que-no-existe").json() == {
         "usuario_id": "alumno-que-no-existe",
         "lecciones": [],
@@ -73,11 +80,13 @@ def test_progreso_de_anonimo_sin_filas(cliente):
 
 
 def test_sin_usuario_ni_sesion(cliente):
+    """Comprueba que sin usuario_id ni sesión (o con id en blanco) responde 422."""
     assert cliente.post("/api/progreso", json={"eventos": [evento()]}).status_code == 422
     assert enviar(cliente, [evento()], usuario_id="   ").status_code == 422
 
 
 def test_cuenta_registrada_sin_token_responde_401(cliente, crear_cuenta):
+    """Comprueba que escribir sin sesión en una cuenta registrada responde 401 y no guarda nada."""
     cuenta_id, _ = crear_cuenta()
     assert enviar(cliente, [evento(completada=True)], usuario_id=cuenta_id).status_code == 401
     assert fila(cuenta_id) is None
@@ -85,12 +94,14 @@ def test_cuenta_registrada_sin_token_responde_401(cliente, crear_cuenta):
 
 
 def test_token_invalido_responde_401(cliente):
+    """Comprueba que un token inválido responde 401 al escribir y al leer."""
     cabeceras = {"Authorization": "Bearer token-que-no-existe"}
     assert enviar(cliente, [evento()], cabeceras=cabeceras).status_code == 401
     assert cliente.get("/api/progreso", headers=cabeceras).status_code == 401
 
 
 def test_con_token_se_escribe_en_la_cuenta_de_la_sesion(cliente, crear_cuenta):
+    """Comprueba que con sesión el progreso va a la cuenta de la sesión aunque el cuerpo diga otra."""
     a_id, a = crear_cuenta()
     b_id, _ = crear_cuenta()
     respuesta = enviar(cliente, [evento(completada=True)], usuario_id=b_id, cabeceras=a)
@@ -103,6 +114,7 @@ def test_con_token_se_escribe_en_la_cuenta_de_la_sesion(cliente, crear_cuenta):
 
 
 def test_get_mi_progreso_requiere_sesion(cliente, crear_cuenta):
+    """Comprueba que GET /api/progreso exige sesión y devuelve lecciones e insignias de la cuenta."""
     assert cliente.get("/api/progreso").status_code == 401
     cuenta_id, cabeceras = crear_cuenta()
     enviar(cliente, [evento(completada=True)], usuario_id=None, cabeceras=cabeceras, insignias=["aframe:mod_af_001"])
@@ -113,6 +125,7 @@ def test_get_mi_progreso_requiere_sesion(cliente, crear_cuenta):
 
 
 def test_permisos_para_leer_el_progreso_de_otro(cliente, crear_cuenta):
+    """Comprueba que el progreso de una cuenta lo leen ella, profesores y admins, pero no otro alumno."""
     alumno_id, alumno = crear_cuenta()
     _, otro = crear_cuenta()
     _, profesor = crear_cuenta(rol="profesor")
@@ -132,6 +145,7 @@ def test_permisos_para_leer_el_progreso_de_otro(cliente, crear_cuenta):
 
 
 def test_anonimo_fusionado_ya_no_acepta_escrituras(cliente, crear_cuenta):
+    """Comprueba que un anónimo ya fusionado rechaza escrituras sin sesión (401)."""
     cuenta_id, _ = crear_cuenta()
     enviar(cliente, [evento()])
     with Session(conexion.motor()) as db:
@@ -144,6 +158,7 @@ def test_anonimo_fusionado_ya_no_acepta_escrituras(cliente, crear_cuenta):
 
 
 def test_progreso_nunca_retrocede(cliente):
+    """Comprueba que completada, mejor puntaje e intentos nunca retroceden con envíos posteriores."""
     for cambios in (
         {"completada": False, "puntaje": 67, "intentos": 1},
         {"completada": True, "puntaje": 100, "intentos": 2},
@@ -156,6 +171,7 @@ def test_progreso_nunca_retrocede(cliente):
 
 
 def test_lote_combina_eventos_de_la_misma_leccion(cliente):
+    """Comprueba que varios eventos de la misma lección en un lote se combinan en una fila."""
     respuesta = enviar(
         cliente,
         [
@@ -171,6 +187,7 @@ def test_lote_combina_eventos_de_la_misma_leccion(cliente):
 
 
 def test_misma_leccion_en_dos_cursos_son_filas_distintas(cliente):
+    """Comprueba que el mismo id de lección en dos cursos se guarda en filas distintas."""
     enviar(cliente, [evento("les_001", "blender", completada=True), evento("les_001", "aframe")])
     assert fila(ANONIMO, "les_001", "blender").completada == 1
     assert fila(ANONIMO, "les_001", "aframe").completada == 0
@@ -180,6 +197,7 @@ def test_misma_leccion_en_dos_cursos_son_filas_distintas(cliente):
 
 
 def test_lote_grande(cliente):
+    """Comprueba que un lote de 500 lecciones se guarda y se puede reenviar."""
     eventos = [evento(f"les_{i:03d}", completada=i % 2 == 0) for i in range(500)]
     assert enviar(cliente, eventos).json()["guardados"] == 500
     assert enviar(cliente, eventos).json()["guardados"] == 500  # segunda vez: todas existen
@@ -188,6 +206,7 @@ def test_lote_grande(cliente):
 
 
 def test_valida_datos(cliente):
+    """Comprueba que puntaje fuera de rango, intentos negativos o faltas de campos responden 422."""
     assert enviar(cliente, [evento(puntaje=150)]).status_code == 422
     assert enviar(cliente, [evento(intentos=-1)]).status_code == 422
     assert enviar(cliente, [{"curso_id": "blender"}]).status_code == 422
@@ -199,6 +218,7 @@ def test_valida_datos(cliente):
 
 def test_pwa_vieja_sin_campos_nuevos(cliente):
     # Formato exacto de la PWA anterior (incluye actualizado_en con zona).
+    """Comprueba que el formato de la PWA vieja (sin campos nuevos) sigue funcionando."""
     cuerpo = {
         "usuario_id": "alumno-pwa-vieja",
         "eventos": [
@@ -228,6 +248,7 @@ def test_pwa_vieja_sin_campos_nuevos(cliente):
 
 
 def test_datos_ligeros_se_unen_y_se_guardan_compactos(cliente):
+    """Comprueba que datos_ligeros se unen (lo nuevo gana) y se guardan como JSON compacto."""
     enviar(cliente, [evento(datos_ligeros={"a": 3, "t": 240})])
     assert fila(ANONIMO).datos_ligeros == '{"a":3,"t":240}'
     # También se acepta un texto JSON; lo nuevo gana en las llaves repetidas.
@@ -241,6 +262,7 @@ def test_datos_ligeros_se_unen_y_se_guardan_compactos(cliente):
 
 
 def test_datos_ligeros_limite_de_250(cliente):
+    """Comprueba que si la unión de datos_ligeros pasa de 250 caracteres se guarda solo lo nuevo."""
     enviar(cliente, [evento(datos_ligeros={"x": "a" * 200})])
     assert json.loads(fila(ANONIMO).datos_ligeros) == {"x": "a" * 200}
     # La unión pasaría de 250: se guarda solo lo nuevo.
@@ -258,6 +280,7 @@ def test_datos_ligeros_limite_de_250(cliente):
 
 
 def test_datos_ligeros_que_no_son_objeto_se_ignoran(cliente):
+    """Comprueba que datos_ligeros que no son un objeto se ignoran sin error."""
     for valor in ("no es json", "[1, 2]", "3", [1, 2], 7, "", {}):
         respuesta = enviar(cliente, [evento(datos_ligeros=valor)])
         assert respuesta.status_code == 200, valor
@@ -269,6 +292,7 @@ def test_datos_ligeros_que_no_son_objeto_se_ignoran(cliente):
 
 
 def test_completada_en_se_fija_la_primera_vez(cliente):
+    """Comprueba que completada_en se fija al completar por primera vez y no cambia después."""
     enviar(cliente, [evento(completada=False, actualizado_en="2026-09-01T10:00:00")])
     assert fila(ANONIMO).completada_en is None
 
@@ -289,6 +313,7 @@ def test_completada_en_se_fija_la_primera_vez(cliente):
 
 
 def test_completada_en_nunca_en_el_futuro(cliente):
+    """Comprueba que una fecha del dispositivo en el futuro no se usa como completada_en."""
     futuro = (ahora() + timedelta(days=3)).isoformat()
     antes = ahora()
     enviar(cliente, [evento(completada=True, actualizado_en=futuro)])
@@ -296,6 +321,7 @@ def test_completada_en_nunca_en_el_futuro(cliente):
 
 
 def test_completada_en_sin_fecha_del_dispositivo_usa_la_del_servidor(cliente):
+    """Comprueba que sin fecha del dispositivo completada_en toma la hora del servidor."""
     antes = ahora()
     enviar(cliente, [evento(completada=True)])
     assert antes <= fila(ANONIMO).completada_en <= ahora()
@@ -305,6 +331,7 @@ def test_completada_en_sin_fecha_del_dispositivo_usa_la_del_servidor(cliente):
 
 
 def test_insignias_sin_duplicar(cliente):
+    """Comprueba que las insignias repetidas o con espacios se guardan una sola vez."""
     respuesta = enviar(cliente, [evento()], insignias=["blender:mod_1", "blender:mod_1", " aframe:mod_1 "])
     assert respuesta.json()["insignias"] == 2
     with Session(conexion.motor()) as db:
@@ -321,6 +348,7 @@ def test_insignias_sin_duplicar(cliente):
 
 
 def test_solo_insignias_sin_eventos(cliente):
+    """Comprueba que se aceptan solicitudes con solo insignias."""
     respuesta = enviar(cliente, [], insignias=["blender:mod_1"])
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json() == {"guardados": 0, "insignias": 1}

@@ -73,6 +73,7 @@ CABECERAS_ESPERADAS = {
 
 @dataclass
 class Hallazgo:
+    """Un problema encontrado por la auditoría: severidad (critica|alta|media|baja|info), ruta, título y detalle."""
     severidad: str  # critica | alta | media | baja | info
     ruta: str
     titulo: str
@@ -81,6 +82,7 @@ class Hallazgo:
 
 @dataclass
 class Informe:
+    """Resultado de una auditoría: peticiones hechas, rutas recorridas, hallazgos, matriz de permisos y tiempos."""
     peticiones: int = 0
     rutas: int = 0
     hallazgos: List[Hallazgo] = field(default_factory=list)
@@ -89,13 +91,16 @@ class Informe:
     segundos: float = 0.0
 
     def agregar(self, *args, **kwargs) -> None:
+        """Añade un Hallazgo construido con los mismos argumentos."""
         self.hallazgos.append(Hallazgo(*args, **kwargs))
 
     @property
     def graves(self) -> List[Hallazgo]:
+        """Hallazgos de severidad crítica o alta (hacen fallar la prueba y la CLI)."""
         return [h for h in self.hallazgos if h.severidad in ("critica", "alta")]
 
     def como_dict(self) -> Dict[str, Any]:
+        """Informe serializable a JSON (para --salida y las pruebas)."""
         return {
             "peticiones": self.peticiones,
             "rutas": self.rutas,
@@ -110,6 +115,7 @@ class Informe:
 
 
 def _resolver(esquema: Dict[str, Any], componentes: Dict[str, Any]) -> Dict[str, Any]:
+    """Sigue $ref y simplifica anyOf (Optional) / allOf de un esquema OpenAPI hasta el esquema concreto."""
     while "$ref" in esquema:
         esquema = componentes[esquema["$ref"].split("/")[-1]]
     if "anyOf" in esquema:  # Optional[X] → X
@@ -148,6 +154,7 @@ def ejemplo(esquema: Dict[str, Any], componentes: Dict[str, Any], carga: str, pr
 
 @dataclass
 class Operacion:
+    """Una operación del OpenAPI: método, ruta, nombres de parámetros de ruta/consulta y esquema del cuerpo JSON."""
     metodo: str
     ruta: str
     parametros_ruta: List[str]
@@ -156,6 +163,7 @@ class Operacion:
 
 
 def operaciones(openapi: Dict[str, Any]) -> List[Operacion]:
+    """Lista de Operacion de todas las rutas del documento OpenAPI, en orden de ruta."""
     componentes = openapi.get("components", {}).get("schemas", {})
     lista = []
     for ruta, metodos in sorted(openapi["paths"].items()):
@@ -184,10 +192,12 @@ CIERRAN_SESION = {"/api/auth/cerrar-sesion", "/api/auth/cerrar-todas", "/api/add
 
 
 def omitir_por_defecto(op: "Operacion") -> bool:
+    """True para las rutas que cerrarían la sesión con la que se ataca (se prueban aparte)."""
     return op.ruta in CIERRAN_SESION
 
 
 def _url(op: Operacion, carga: str) -> str:
+    """Ruta de la operación con cada parámetro de ruta reemplazado por la carga codificada."""
     url = op.ruta
     for nombre in op.parametros_ruta:
         url = url.replace("{" + nombre + "}", _codificar(carga))
@@ -195,12 +205,14 @@ def _url(op: Operacion, carga: str) -> str:
 
 
 def _codificar(texto: str) -> str:
+    """Codifica la carga para la URL (todo carácter especial escapado)."""
     from urllib.parse import quote
 
     return quote(texto, safe="")
 
 
 def _revisar_respuesta(informe: Informe, op: Operacion, carga: str, respuesta, ms: float, lugar: str) -> None:
+    """Cuenta la petición y anota hallazgos: 5xx, errores internos de BD/Python en el cuerpo o contenido de /etc/passwd."""
     informe.peticiones += 1
     informe.tiempo_max_ms = max(informe.tiempo_max_ms, ms)
     texto = respuesta.text if hasattr(respuesta, "text") else ""
@@ -271,6 +283,7 @@ def inicio_de_sesion_con_inyeccion(cliente) -> List[Hallazgo]:
 
 
 def revisar_cabeceras(cliente, ruta: str = "/api/salud") -> List[Hallazgo]:
+    """Comprueba las cabeceras de seguridad esperadas en una ruta (por defecto /api/salud) y que Server no revele versiones."""
     r = cliente.get(ruta)
     hallazgos = []
     for nombre, valor in CABECERAS_ESPERADAS.items():
@@ -317,6 +330,7 @@ def rutas_de(rutas):
 
 
 def matriz_de_permisos(app) -> List[Dict[str, str]]:
+    """Una fila {metodo, ruta, requisito} por cada método de cada ruta de la app (publica, sesion, rol o nodo)."""
     filas = []
     for ruta in rutas_de(app.routes):
         for metodo in sorted(ruta.methods):
@@ -351,6 +365,11 @@ def probar_permisos(cliente, app, cabeceras_alumno: Dict[str, str]) -> Tuple[Lis
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """CLI: audita una API en marcha (--url) usando su /openapi.json y escribe el informe (--salida).
+
+    Devuelve 1 si hay hallazgos graves y 0 si no. Efecto: cientos de peticiones
+    con cargas de ataque contra esa API; no usarla contra producción sin avisar.
+    """
     import httpx
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])

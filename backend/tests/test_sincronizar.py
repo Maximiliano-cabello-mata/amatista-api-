@@ -14,15 +14,18 @@ ANONIMO = "alumno-0a0b0c0d-0000-4000-8000-000000000009"
 
 
 def evento(tipo="lesson_completed"):
+    """Evento de aprendizaje de ejemplo con id nuevo para la lección les_001."""
     return {"id": str(uuid.uuid4()), "tipo": tipo, "curso_id": "blender", "leccion_id": "les_001"}
 
 
 def contar(modelo, *condiciones):
+    """Cuenta las filas de `modelo` que cumplen las condiciones."""
     with Session(conexion.motor()) as db:
         return db.scalar(select(func.count()).select_from(modelo).where(*condiciones))
 
 
 def comprimido(cliente, ruta, cuerpo, cabeceras=None):
+    """Hace un POST con el cuerpo JSON comprimido en gzip (Content-Encoding: gzip)."""
     datos = gzip.compress(json.dumps(cuerpo).encode())
     return cliente.post(
         ruta,
@@ -32,6 +35,7 @@ def comprimido(cliente, ruta, cuerpo, cabeceras=None):
 
 
 def test_un_solo_envio_guarda_progreso_insignias_y_eventos(cliente):
+    """Comprueba que POST /api/sincronizar guarda progreso, insignias y eventos en una sola petición sin duplicar al reenviar."""
     eventos = [evento(), evento("activity_submitted")]
     cuerpo = {
         "usuario_id": ANONIMO,
@@ -56,10 +60,12 @@ def test_un_solo_envio_guarda_progreso_insignias_y_eventos(cliente):
 
 
 def test_lote_vacio_se_rechaza(cliente):
+    """Comprueba que un lote sin progreso, insignias ni eventos responde 422."""
     assert cliente.post("/api/sincronizar", json={"usuario_id": ANONIMO}).status_code == 422
 
 
 def test_cuenta_registrada_sin_sesion_pide_iniciar_sesion(cliente, crear_cuenta):
+    """Comprueba que sincronizar a una cuenta registrada sin sesión da 401 y con sesión funciona."""
     cuenta_id, cabeceras = crear_cuenta()
     sin_sesion = cliente.post("/api/sincronizar", json={"usuario_id": cuenta_id, "eventos": [evento()]})
     assert sin_sesion.status_code == 401
@@ -69,6 +75,7 @@ def test_cuenta_registrada_sin_sesion_pide_iniciar_sesion(cliente, crear_cuenta)
 
 
 def test_acepta_cuerpo_gzip(cliente):
+    """Comprueba que /api/sincronizar y las rutas de siempre aceptan cuerpos gzip."""
     cuerpo = {"usuario_id": ANONIMO, "eventos": [evento() for _ in range(50)]}
     respuesta = comprimido(cliente, "/api/sincronizar", cuerpo)
     assert respuesta.status_code == 200, respuesta.text
@@ -78,6 +85,7 @@ def test_acepta_cuerpo_gzip(cliente):
 
 
 def test_gzip_invalido_o_codificacion_desconocida(cliente):
+    """Comprueba que un gzip corrupto da 400 y una codificación distinta de gzip da 415."""
     roto = cliente.post(
         "/api/sincronizar",
         content=b"esto no es gzip",
@@ -93,6 +101,7 @@ def test_gzip_invalido_o_codificacion_desconocida(cliente):
 
 
 def test_bomba_gzip_se_corta(cliente, monkeypatch):
+    """Comprueba que un gzip que descomprimido supera MAX_CUERPO se corta con 413."""
     import main
 
     monkeypatch.setattr(main, "MAX_CUERPO", 10_000)
@@ -107,6 +116,7 @@ def test_bomba_gzip_se_corta(cliente, monkeypatch):
 
 
 def test_progreso_desde_devuelve_solo_lo_cambiado(cliente, crear_cuenta):
+    """Comprueba que GET /api/progreso?desde= devuelve solo las lecciones cambiadas (con margen)."""
     cuenta_id, cabeceras = crear_cuenta()
     avance = lambda leccion: {"curso_id": "blender", "leccion_id": leccion, "completada": True}  # noqa: E731
     cliente.post("/api/sincronizar", json={"progreso": [avance("les_001"), avance("les_002")]}, headers=cabeceras)
@@ -127,6 +137,7 @@ def test_progreso_desde_devuelve_solo_lo_cambiado(cliente, crear_cuenta):
 
 
 def test_fusion_marca_las_filas_como_cambiadas(cliente):
+    """Comprueba que fusionar un anónimo marca actualizado_en para que la descarga incremental lo vea."""
     from api.fusion import fusionar_alumno
     from database.modelos import Usuario
 

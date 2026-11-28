@@ -15,6 +15,7 @@ def _manifiesto_repo(
     commit_sha: str = "9e4598b1234567890abcdef1234567890abcdef",
     puntaje: int = 92,
 ) -> dict:
+    """Manifiesto amatista.moral/1 de un repositorio de ejemplo con el puntaje indicado."""
     return {
         "contrato": "amatista.moral/1",
         "fecha_utc": "2026-11-19T18:00:00Z",
@@ -32,12 +33,14 @@ def _manifiesto_repo(
 
 
 def _motor_sqlite():
+    """Base SQLite en memoria con solo la tabla SISTEMA_LOTES."""
     motor = create_engine("sqlite:///:memory:")
     SistemaLote.__table__.create(motor)
     return motor
 
 
 def test_aplicar_015_en_sqlite_es_idempotente():
+    """Comprueba que aplicar 015 dos veces crea la tabla e índice solo la primera vez."""
     motor = create_engine("sqlite:///:memory:")
     primera = aplicar_015(motor)
     segunda = aplicar_015(motor)
@@ -46,6 +49,7 @@ def test_aplicar_015_en_sqlite_es_idempotente():
 
 
 def test_registrar_manifiesto_simple_y_upsert_idempotente():
+    """Comprueba que registrar el mismo manifiesto dos veces inserta y luego actualiza la misma fila."""
     motor = _motor_sqlite()
     datos = _manifiesto_repo(puntaje=88)
 
@@ -76,6 +80,7 @@ def test_registrar_manifiesto_simple_y_upsert_idempotente():
 
 
 def test_registrar_manifiesto_consolidado_todos_repos():
+    """Comprueba que un manifiesto consolidado registra una fila por repositorio."""
     motor = _motor_sqlite()
     consolidado = {
         "contrato": "amatista.moral/1",
@@ -105,6 +110,7 @@ def test_registrar_manifiesto_consolidado_todos_repos():
 
 
 def test_dry_run_no_requiere_db_ni_inserta_filas():
+    """Comprueba que --dry-run valida y resume sin conectarse a la base."""
     resumen = registrar_manifiestos(_manifiesto_repo(), lote="M5", dry_run=True)
     assert len(resumen) == 1
     assert resumen[0]["accion"] == "DRY-RUN"
@@ -122,6 +128,7 @@ def test_dry_run_no_requiere_db_ni_inserta_filas():
     ],
 )
 def test_rechaza_manifiestos_invalidos(mutacion):
+    """Comprueba que normalizar_registros rechaza manifiestos con campos inválidos (ValueError)."""
     datos = _manifiesto_repo()
     datos.update(mutacion)
     with pytest.raises(ValueError):
@@ -129,6 +136,7 @@ def test_rechaza_manifiestos_invalidos(mutacion):
 
 
 def test_cli_dry_run_y_escritura_en_sqlite_por_env(tmp_path, monkeypatch, capsys):
+    """Comprueba la CLI de registrar_lote en modo --dry-run y escribiendo en SQLite configurada por entorno."""
     archivo = tmp_path / "moral.json"
     archivo.write_text(json.dumps(_manifiesto_repo(puntaje=95)), encoding="utf-8")
 

@@ -30,10 +30,15 @@ AVATAR_CREADOR = "pavo_real"
 
 
 def correos_creador() -> Set[str]:
+    """Correos del creador leídos de AMATISTA_CREADOR (separados por comas, en minúsculas)."""
     return {c.strip().lower() for c in os.getenv("AMATISTA_CREADOR", "").split(",") if c.strip()}
 
 
 def es_creador(usuario: Optional[Usuario]) -> bool:
+    """Indica si el usuario es el creador de Amatista (dueño del pavo real y del buzón).
+
+    Si AMATISTA_CREADOR está vacía, cualquier admin con correo cuenta como creador.
+    """
     if usuario is None or not usuario.email:
         return False
     correos = correos_creador()
@@ -49,11 +54,18 @@ def sin_esquema(error: SQLAlchemyError) -> bool:
 
 
 class SolicitudAvatar(BaseModel):
+    """Cuerpo de PUT /api/perfil: id del avatar elegido o null para quitarlo."""
     avatar: Optional[str] = Field(default=None, max_length=40)
 
 
 @router.get("")
 def leer_perfil(usuario: Usuario = Depends(usuario_requerido), db: Session = Depends(obtener_db)):
+    """GET /api/perfil. Requiere sesión.
+
+    Respuesta: {avatar, es_creador, guardado}. Si falta sql/013 responde
+    guardado=false (la PWA usa el avatar local) en lugar de fallar; el creador
+    recibe el pavo real por defecto. Errores: 401 sin sesión; 500 de base de datos.
+    """
     creador = es_creador(usuario)
     try:
         perfil = db.get(Perfil, usuario.id)
@@ -75,6 +87,13 @@ def guardar_avatar(
     usuario: Usuario = Depends(usuario_requerido),
     db: Session = Depends(obtener_db),
 ):
+    """PUT /api/perfil. Requiere sesión.
+
+    Cuerpo: {avatar} (uno de AVATARES, "pavo_real" solo para el creador, o null).
+    Respuesta: {avatar, es_creador, guardado: true}. Efecto: crea/actualiza PERFILES.
+    Errores: 401 sin sesión; 422 avatar inexistente; 403 pavo real sin ser creador;
+    503 si falta sql/013; 500 de base de datos.
+    """
     creador = es_creador(usuario)
     avatar = datos.avatar
     if avatar is not None and avatar not in AVATARES and avatar != AVATAR_CREADOR:

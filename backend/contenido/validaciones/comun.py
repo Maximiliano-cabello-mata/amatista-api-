@@ -1,6 +1,7 @@
 """Tipos, constantes y contexto de validación compartidos."""
 import math
 import re
+# [REVISION-MUERTO] Callable y Set no se usan en este archivo.
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 TIPOS_LECCION = ("theory_reading", "theory_interactive", "video_lesson", "code_interactive", "exam")
@@ -141,21 +142,25 @@ class ContenidoInvalido(ValueError):
     """Contenido que no pasa la validación; `errores` trae los mensajes."""
 
     def __init__(self, errores: List[str]):
+        """Guarda la lista de errores; el mensaje de la excepción es el primero."""
         super().__init__(errores[0] if errores else "Contenido inválido.")
         self.errores = errores
 
 
 def _unir(ruta: str, parte: str) -> str:
+    """Une una ruta de error con la siguiente parte («bloques[2]» + «items» → «bloques[2].items»; los índices van sin punto)."""
     if not ruta or parte.startswith("["):
         return f"{ruta}{parte}"
     return f"{ruta}.{parte}"
 
 
 def _es_entero(valor: Any) -> bool:
+    """True si es int de verdad (los bool de JSON no cuentan como número)."""
     return isinstance(valor, int) and not isinstance(valor, bool)
 
 
 def _es_numero(valor: Any) -> bool:
+    """True si es int o float finito (sin bool, NaN ni infinito, que no son JSON válido para Oracle)."""
     return (isinstance(valor, (int, float)) and not isinstance(valor, bool)
             and not math.isnan(valor) and not math.isinf(valor))
 
@@ -170,10 +175,12 @@ class _Contexto:
     """Revisa campos de un objeto y anota los errores con su ruta."""
 
     def __init__(self, errores: List[str], etiqueta: str):
+        """Prepara el revisor: los errores se acumulan en la lista `errores` con el prefijo `etiqueta` (p. ej. el bloque)."""
         self.errores = errores
         self.etiqueta = etiqueta
 
     def error(self, mensaje: str) -> None:
+        """Anota un error con la etiqueta del contexto delante."""
         self.errores.append(f"{self.etiqueta}: {mensaje}" if self.etiqueta else mensaje)
 
     def texto(
@@ -185,6 +192,10 @@ class _Contexto:
         maximo: Optional[int] = None,
         vacio: bool = False,
     ) -> Optional[str]:
+        """Revisa un campo de texto: existe (si es obligatorio), es str, no está vacío y no pasa de `maximo`.
+
+        Devuelve el texto o None si falta o es inválido (el error queda anotado).
+        """
         nombre = f"{prefijo}{campo}"
         valor = _valor(objeto, campo)
         if valor is _FALTA:
@@ -202,6 +213,7 @@ class _Contexto:
         return valor
 
     def identificador(self, objeto: dict, campo: str = "id", prefijo: str = "", obligatorio: bool = True) -> Optional[str]:
+        """Revisa un id (texto ≤ MAX_ID con PATRON_ID: letras, números, guion y guion bajo). Devuelve el valor o None."""
         valor = self.texto(objeto, campo, prefijo, obligatorio=obligatorio, maximo=MAX_ID)
         if valor is not None and not PATRON_ID.match(valor):
             self.error(f"«{prefijo}{campo}» = «{valor}» solo admite letras, números, guion y guion bajo")
@@ -216,6 +228,7 @@ class _Contexto:
         minimo: Optional[int] = None,
         maximo: Optional[int] = None,
     ) -> Optional[int]:
+        """Revisa un entero opcionalmente acotado entre `minimo` y `maximo`; devuelve el valor o None si es inválido."""
         nombre = f"{prefijo}{campo}"
         valor = _valor(objeto, campo)
         if valor is _FALTA:
@@ -242,6 +255,7 @@ class _Contexto:
         minimo: Optional[float] = None,
         maximo: Optional[float] = None,
     ) -> Optional[float]:
+        """Revisa un número finito opcionalmente acotado; devuelve el valor o None si es inválido."""
         nombre = f"{prefijo}{campo}"
         valor = _valor(objeto, campo)
         if valor is _FALTA:
@@ -258,6 +272,7 @@ class _Contexto:
         return valor
 
     def booleano(self, objeto: dict, campo: str, prefijo: str = "", obligatorio: bool = False) -> Optional[bool]:
+        """Revisa un campo true/false (opcional por defecto); devuelve el valor o None."""
         nombre = f"{prefijo}{campo}"
         valor = _valor(objeto, campo)
         if valor is _FALTA:
@@ -270,6 +285,7 @@ class _Contexto:
         return valor
 
     def opcion(self, objeto: dict, campo: str, opciones: Tuple[str, ...], prefijo: str = "", obligatorio: bool = True) -> Optional[str]:
+        """Revisa que el campo sea uno de `opciones` (el mensaje lista las válidas); devuelve el valor o None."""
         nombre = f"{prefijo}{campo}"
         valor = _valor(objeto, campo)
         if valor is _FALTA:
@@ -304,6 +320,7 @@ class _Contexto:
         return elementos
 
     def ids_unicos(self, elementos: List[Tuple[int, dict]], campo: str, clave: str = "id") -> None:
+        """Anota un error por cada `clave` repetida entre los elementos (sin distinguir mayúsculas salvo en «id»)."""
         vistos: Dict[Any, int] = {}
         for i, elemento in elementos:
             valor = elemento.get(clave)

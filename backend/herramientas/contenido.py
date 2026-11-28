@@ -61,6 +61,7 @@ PATRON_ARCHIVO = re.compile(r"^([A-Za-z0-9_]+)-modulo-(\d+)\.json$")
 
 
 def nombre_visible(ruta: Path) -> str:
+    """Ruta para mostrar en la terminal: relativa si está cerca del directorio actual, absoluta si está fuera del repositorio."""
     try:
         relativa = os.path.relpath(ruta)
     except ValueError:  # Windows: otra unidad
@@ -70,6 +71,7 @@ def nombre_visible(ruta: Path) -> str:
 
 
 def leer_archivo(ruta: Path) -> Tuple[Optional[dict], List[str]]:
+    """Lee y decodifica un archivo JSON de módulo: (datos, []) o (None, [mensaje del error de lectura o de JSON])."""
     try:
         texto = ruta.read_text(encoding="utf-8")
     except OSError as error:
@@ -81,6 +83,7 @@ def leer_archivo(ruta: Path) -> Tuple[Optional[dict], List[str]]:
 
 
 def curso_de_archivo(ruta: Path) -> Optional[str]:
+    """Curso deducido del nombre «<curso>-modulo-<n>.json», o None si no sigue ese patrón."""
     coincide = PATRON_ARCHIVO.match(ruta.name)
     return coincide.group(1) if coincide else None
 
@@ -147,12 +150,17 @@ def revisar_archivos(rutas: Sequence[Path]) -> Dict[Path, List[str]]:
 
 
 def rutas_o_defecto(archivos: Sequence[str]) -> List[Path]:
+    """Los archivos indicados o, si no hay, todos los .json de la carpeta de módulos del frontend."""
     if archivos:
         return [Path(a) for a in archivos]
     return sorted(MODULOS.glob("*.json"))
 
 
 def comando_validar(archivos: Sequence[str]) -> int:
+    """`contenido.py validar`: valida los archivos de módulo e imprime OK/ERROR por archivo.
+
+    No usa base de datos. Devuelve 1 si algún archivo tiene errores (lo usa CI).
+    """
     rutas = rutas_o_defecto(archivos)
     if not rutas:
         print(f"No hay archivos que validar en {MODULOS}.", file=sys.stderr)
@@ -184,12 +192,18 @@ def preparar_base():
 
 
 def mensaje_bd(error: Exception) -> str:
+    """Primera línea del error original de la base de datos para imprimirlo en la terminal."""
     original = getattr(error, "orig", None) or error
     texto = str(original).strip()
     return f"Error de base de datos: {texto.splitlines()[0] if texto else type(original).__name__}"
 
 
 def comando_importar(archivos: Sequence[str]) -> int:
+    """`contenido.py importar`: valida todos los archivos y, si no hay errores, los importa a la base (upsert).
+
+    Antes crea los cursos base y los niveles de Blender que falten; hace commit
+    por archivo. Devuelve 1 si algo falló. Efecto: escribe en la base de backend/.env.
+    """
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
@@ -246,10 +260,12 @@ def comando_importar(archivos: Sequence[str]) -> int:
 
 def guardar_json(datos: dict, ruta: Path) -> None:
     # Mismo formato que los archivos existentes: 2 espacios y acentos sin escapar.
+    """Escribe el JSON con 2 espacios y acentos sin escapar, igual que los archivos del frontend."""
     ruta.write_text(json.dumps(datos, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def comando_exportar(modulo_id: str, salida: Optional[str], borradores: bool) -> int:
+    """`contenido.py exportar`: exporta un módulo de la base (con borradores si se pide) a un archivo o a la salida estándar."""
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
@@ -273,6 +289,7 @@ def comando_exportar(modulo_id: str, salida: Optional[str], borradores: bool) ->
 
 
 def comando_sembrar_niveles() -> int:
+    """`contenido.py sembrar-niveles`: crea en la base los niveles de Blender que falten (en borrador)."""
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
@@ -314,6 +331,10 @@ def revisar_practicas(db) -> list:
 
 
 def comando_revisar_practicas() -> int:
+    """`contenido.py practicas --revisar`: lista las prácticas del repositorio que faltan, están viejas o sin publicar en la base.
+
+    Devuelve 1 si hay pendientes. Solo lee.
+    """
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
@@ -336,6 +357,10 @@ def comando_revisar_practicas() -> int:
 
 
 def comando_practicas(publicar: bool) -> int:
+    """`contenido.py practicas [--publicar]`: registra en la base las prácticas de practices/blender/ (y las publica si se pide).
+
+    Devuelve 1 si alguna no se pudo registrar. Efecto: escribe en PRACTICAS y PRACTICA_VERSIONES.
+    """
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import Session
 
@@ -400,6 +425,10 @@ def comando_mapa(curso: Optional[str], carpeta: Optional[str]) -> int:
 
 
 def comando_nueva_leccion(archivo: str, leccion_id: str, titulo: str, objetivo: Optional[str]) -> int:
+    """`contenido.py nueva-leccion`: añade al final de un archivo de módulo una lección de 10 pasos con su ficha.
+
+    Devuelve 1 si el archivo no sirve o el id ya existe y 2 si la lección generada no valida. Efecto: reescribe el archivo.
+    """
     ruta = Path(archivo)
     datos, errores = leer_archivo(ruta)
     if errores:
@@ -436,6 +465,11 @@ def comando_nuevo_modulo(
     forzar: bool,
     nivel: Optional[str] = None,
 ) -> int:
+    """`contenido.py nuevo-modulo`: crea <curso>-modulo-<n>.json en borrador con las lecciones de la fórmula.
+
+    Continúa la numeración de lecciones del curso y no sobrescribe sin --forzar.
+    Devuelve 0 si lo creó, 1 si ya existe y 2 si los argumentos no son válidos.
+    """
     carpeta = Path(destino) if destino else MODULOS
     titulo = titulo.strip()
     if not PATRON_ID.match(curso):
@@ -490,6 +524,7 @@ def comando_nuevo_modulo(
 
 
 def main(argumentos: Optional[Sequence[str]] = None) -> int:
+    """Punto de entrada de la CLI: interpreta el subcomando y delega en el comando_* correspondiente; devuelve su código de salida."""
     parser = argparse.ArgumentParser(
         description="Contenido de Amatista: validar, importar, exportar, crear módulos y lecciones, y ver el mapa."
     )

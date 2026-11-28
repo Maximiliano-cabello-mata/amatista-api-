@@ -61,6 +61,10 @@ def origen(request: Request, estado: int) -> dict:
 
 
 def _respuesta(request: Request, estado: int, detalle: Any, cabeceras: Optional[dict] = None) -> JSONResponse:
+    """Arma la respuesta JSON de error con `detail` (compatible) más el bloque `error`.
+
+    En los 5xx añade el id de petición al cuerpo y lo deja en el registro.
+    """
     error = origen(request, estado)
     if estado >= 500:
         error["peticion"] = id_de(request)
@@ -73,6 +77,7 @@ def instalar(app: FastAPI) -> None:
 
     @app.middleware("http")
     async def identificar(request: Request, siguiente):
+        """Middleware: asigna a cada petición un id corto y lo devuelve en X-Peticion-Id."""
         request.state.peticion = uuid.uuid4().hex[:12]
         respuesta = await siguiente(request)
         respuesta.headers.setdefault(CABECERA, request.state.peticion)
@@ -80,15 +85,21 @@ def instalar(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def error_http(request: Request, error: StarletteHTTPException):
+        """Manejador de HTTPException: conserva estado, detalle y cabeceras (p. ej. Retry-After)."""
         return _respuesta(request, error.status_code, error.detail, getattr(error, "headers", None))
 
     @app.exception_handler(RequestValidationError)
     async def error_validacion(request: Request, error: RequestValidationError):
+        """Manejador de errores de validación de Pydantic: responde 422 con la lista de errores."""
         return _respuesta(request, 422, jsonable_encoder(error.errors()))
 
     @app.exception_handler(Exception)
     async def error_inesperado(request: Request, error: Exception):
         # El detalle completo queda en el registro; al cliente solo le llega el identificador.
+        """Manejador de cualquier excepción no prevista: registra la traza y responde 500.
+
+        Al cliente solo le llega el id de petición, nunca el detalle interno.
+        """
         log.exception("Error no controlado en %s %s (petición %s)", request.method, request.url.path, id_de(request))
         respuesta = _respuesta(request, 500, f"Error interno (petición {id_de(request)}).")
         respuesta.headers[CABECERA] = id_de(request)

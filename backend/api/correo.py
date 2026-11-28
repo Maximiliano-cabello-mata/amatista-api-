@@ -12,6 +12,7 @@ Sin BREVO_API_KEY ni SMTP_HOST no se envía nada y se registra una advertencia
 SIN el código. Un fallo de envío nunca tumba la petición: se registra y el
 alumno puede pedir otro código con "reenviar". Nunca se registran contraseñas ni tokens.
 """
+import html
 import json
 import logging
 import os
@@ -51,6 +52,7 @@ MOTIVOS = {
 
 
 def mostrar_codigos() -> bool:
+    """Indica si AMATISTA_MOSTRAR_CODIGOS=1: modo desarrollo que muestra el código en consola/respuesta en vez de exigir correo real."""
     return os.getenv("AMATISTA_MOSTRAR_CODIGOS") == "1"
 
 
@@ -78,10 +80,17 @@ def construir_plantilla_html(
         else "RECUPERACIÓN DE ACCESO · SEGURIDAD"
     )
     motivo = MOTIVOS.get(proposito, "continuar")
-    saludo = f"Hola, <strong>{nombre}</strong>:" if nombre else "Hola:"
+    # Todo dato que viene del usuario se escapa antes de entrar al HTML: el nombre lo escribe quien se
+    # registra (podría registrar el correo de otra persona con un nombre que inyecte enlaces o HTML de
+    # phishing enviado desde el remitente oficial).
+    nombre_html = html.escape(nombre) if nombre else None
+    codigo_html = html.escape(codigo)
+    saludo = f"Hola, <strong>{nombre_html}</strong>:" if nombre_html else "Hola:"
 
     if es_correo:
-        enlace = f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={codigo}"
+        enlace = html.escape(
+            f"{url_pwa_correo()}/#/confirmar?email={urllib.parse.quote(email)}&codigo={urllib.parse.quote(codigo)}"
+        )
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -91,11 +100,11 @@ def construir_plantilla_html(
             f'</div>'
         )
         frase_goliat = (
-            f"«¡Bienvenido al taller{f', {nombre}' if nombre else ''}! "
+            f"«¡Bienvenido al taller{f', {nombre_html}' if nombre_html else ''}! "
             f"En cuanto confirmes tu correo guardaremos tus insignias y tu avance en todos tus dispositivos.»"
         )
     else:
-        enlace = f"{url_pwa_correo()}/#/recuperar"
+        enlace = html.escape(f"{url_pwa_correo()}/#/recuperar")
         boton_html = (
             f'<div style="text-align:center;margin:22px 0 16px 0;">'
             f'<a href="{enlace}" target="_blank" style="display:inline-block;padding:12px 24px;'
@@ -135,7 +144,7 @@ def construir_plantilla_html(
           CÓDIGO DE VERIFICACIÓN (15 MINUTOS DE VALIDEZ)
         </div>
         <div style="font-family:monospace;font-size:32px;font-weight:800;letter-spacing:0.35em;color:#ffffff;margin-top:8px;">
-          {codigo}
+          {codigo_html}
         </div>
       </div>
       {boton_html}
@@ -164,6 +173,13 @@ def armar_mensaje(
     remitente: str,
     nombre: Optional[str] = None,
 ) -> EmailMessage:
+    """Construye el EmailMessage del código de verificación (texto plano + HTML).
+
+    `proposito` es "correo" (confirmar cuenta; incluye enlace directo a
+    #/confirmar de la PWA) o "password" (recuperar contraseña). Pone asunto,
+    remitente, fecha y Message-ID con el dominio del remitente. No envía nada:
+    lo usa enviar_codigo para la vía SMTP.
+    """
     minutos = int(DURACION_CODIGO.total_seconds() // 60)
     motivo = MOTIVOS.get(proposito, "continuar")
     mensaje = EmailMessage()
@@ -277,12 +293,15 @@ def enviar_codigo(
     proposito: 'correo' (confirmar el correo) o 'password' (recuperar la cuenta).
     """
     if mostrar_codigos():
+        # [REVISION-SEGURIDAD] Con AMATISTA_MOSTRAR_CODIGOS=1 el código y el correo completo quedan en journalctl; nunca activarlo en producción.
         log.warning("[MODO DESARROLLO] Código de %s para %s: %s", proposito, email, codigo)
 
     # 1. Intentar Brevo API v3 si está configurado BREVO_API_KEY
+    # [REVISION-ROTO] BREVO_API_KEY no está documentada en backend/.env.example (sí se usa aquí).
     brevo_key = os.getenv("BREVO_API_KEY", "").strip()
     remitente_config = os.getenv("SMTP_FROM", "").strip() or os.getenv("SMTP_USER", "").strip()
     if brevo_key:
+        # [REVISION-ROTO] Remitente por defecto con el dominio viejo amatista-3d.tech (sin DNS desde nov 2026): Brevo lo rechazará o irá a spam.
         remitente = remitente_config or "no-responder@amatista-3d.tech"
         if enviar_via_brevo(brevo_key, email, codigo, proposito, remitente, nombre):
             return True

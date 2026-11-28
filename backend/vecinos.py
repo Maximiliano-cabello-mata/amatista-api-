@@ -45,6 +45,11 @@ def version_motor_fijada() -> Optional[str]:
 
 
 def _buscar(variable: str, hermanos, marca: str) -> Optional[Path]:
+    """Raíz de un repositorio hermano que contenga la carpeta `marca`, o None.
+
+    Si la variable de entorno está definida manda ella (aunque no sirva: None);
+    si no, prueba las carpetas hermanas en orden.
+    """
     if os.getenv(variable):
         explicito = Path(os.environ[variable]).expanduser().resolve()
         return explicito if (explicito / marca).is_dir() else None

@@ -31,6 +31,10 @@ router = APIRouter(prefix="/api", tags=["progreso"])
 
 
 class SolicitudSincronizar(BaseModel):
+    """Cuerpo de POST /api/sincronizar: progreso, insignias y eventos del alumno en un solo lote.
+
+    Límites: 500 avances, 100 insignias y 200 eventos; `usuario_id` solo cuenta sin sesión.
+    """
     usuario_id: Optional[str] = Field(default=None, max_length=100)
     progreso: List[api_progreso.EventoProgreso] = Field(default_factory=list, max_length=500)
     insignias: List[api_progreso.Insignia] = Field(default_factory=list, max_length=100)
@@ -38,6 +42,7 @@ class SolicitudSincronizar(BaseModel):
 
     @model_validator(mode="after")
     def con_algo_que_guardar(self):
+        """Rechaza el lote vacío (422): debe traer al menos un avance, insignia o evento."""
         if not (self.progreso or self.insignias or self.eventos):
             raise ValueError("Envía al menos un avance, una insignia o un evento.")
         return self
@@ -49,6 +54,16 @@ def sincronizar(
     actual: Optional[Usuario] = Depends(usuario_opcional),
     db: Session = Depends(obtener_db),
 ):
+    """POST /api/sincronizar. Alumno con sesión o anónimo; 300 peticiones/min por cuenta o IP.
+
+    Guarda progreso (monotónico), insignias y eventos en una sola transacción;
+    el cuerpo puede llegar comprimido con gzip. Con sesión se ignora el usuario_id
+    del cuerpo (resolver_alumno). Un admin no guarda nada (sin_progreso: true).
+    Respuesta: {guardados, insignias, eventos, nuevos, servidor_en[, sin_progreso]}.
+    Errores: 422 cuerpo inválido o sin usuario_id; 401 si el id es de una cuenta
+    registrada y no hay sesión; 500 de base de datos. Reintenta una vez ante
+    IntegrityError por lotes duplicados concurrentes.
+    """
     momento = ahora()
     if sin_progreso(actual):
         # Motor 7: el administrador practica sin progreso (ni lecciones ni eventos).

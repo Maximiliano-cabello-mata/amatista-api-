@@ -30,6 +30,7 @@ CONTRATO_ESPERADO = "amatista.moral/1"
 
 
 def _texto_acotado(valor: Any, limite: int) -> Optional[str]:
+    """Texto sin espacios de borde recortado a `limite` caracteres; None si está vacío o falta."""
     if valor is None:
         return None
     texto = str(valor).strip()
@@ -39,6 +40,10 @@ def _texto_acotado(valor: Any, limite: int) -> Optional[str]:
 
 
 def _extraer_items(datos: Any) -> list[dict[str, Any]]:
+    """Entradas de un manifiesto MORAL: la lista «repositorios» de uno consolidado o el propio manifiesto.
+
+    Lanza ValueError si no es un objeto, el contrato no es amatista.moral/1 o la lista está vacía.
+    """
     if not isinstance(datos, dict):
         raise ValueError("El manifiesto MORAL debe ser un objeto JSON.")
     contrato = datos.get("contrato")
@@ -193,6 +198,7 @@ def registrar_manifiestos(
 
 
 def construir_parser() -> argparse.ArgumentParser:
+    """Argumentos de la CLI: --archivo (o stdin), --lote y --dry-run."""
     parser = argparse.ArgumentParser(
         description="Registra manifiestos amatista.moral/1 en SISTEMA_LOTES (Oracle / SQLAlchemy)."
     )
@@ -216,6 +222,10 @@ def construir_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI: lee el manifiesto MORAL, lo registra en SISTEMA_LOTES (o solo lo valida con --dry-run) e imprime cada fila.
+
+    Devuelve 0 si salió bien y 1 ante JSON inválido, archivo ilegible o manifiesto incorrecto.
+    """
     args = construir_parser().parse_args(argv)
     try:
         if args.archivo is not None:

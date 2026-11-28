@@ -10,6 +10,7 @@ CATALOGO_PWA = Path("src") / "avatares" / "catalogo.js"  # dentro de frontend/ (
 
 
 def test_los_avatares_son_los_mismos_que_en_la_pwa():
+    """Comprueba que los ids de avatares del servidor coinciden con el catálogo de la PWA."""
     ids = set(re.findall(r"\{\s*id:\s*'([a-z_]+)'", (vecinos.requerir_web() / CATALOGO_PWA).read_text(encoding="utf-8")))
     assert ids == set(AVATARES) | {AVATAR_CREADOR}
 
@@ -18,6 +19,7 @@ def test_los_avatares_son_los_mismos_que_en_la_pwa():
 
 
 def test_un_alumno_elige_y_cambia_su_avatar(cliente, crear_cuenta):
+    """Comprueba que un alumno guarda, cambia y quita su avatar con GET/PUT /api/perfil."""
     _, cabeceras = crear_cuenta()
     assert cliente.get("/api/perfil", headers=cabeceras).json() == {"avatar": None, "es_creador": False, "guardado": True}
     assert cliente.put("/api/perfil", json={"avatar": "ajolote"}, headers=cabeceras).json()["avatar"] == "ajolote"
@@ -28,6 +30,7 @@ def test_un_alumno_elige_y_cambia_su_avatar(cliente, crear_cuenta):
 
 
 def test_el_pavo_real_es_solo_del_creador(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que solo la cuenta de AMATISTA_CREADOR puede usar el pavo real (403 para los demás)."""
     monkeypatch.setenv("AMATISTA_CREADOR", "creador@amatista.local")
     _, alumno = crear_cuenta()
     _, otro_admin = crear_cuenta(rol="admin")
@@ -40,6 +43,7 @@ def test_el_pavo_real_es_solo_del_creador(cliente, crear_cuenta, monkeypatch):
 
 
 def test_sin_amatista_creador_el_creador_es_cualquier_admin(cliente, crear_cuenta):
+    """Comprueba que sin AMATISTA_CREADOR cualquier admin cuenta como creador."""
     _, admin = crear_cuenta(rol="admin")
     assert cliente.get("/api/perfil", headers=admin).json()["es_creador"] is True
 
@@ -48,6 +52,7 @@ def test_sin_amatista_creador_el_creador_es_cualquier_admin(cliente, crear_cuent
 
 
 def test_conversacion_completa_con_el_creador(cliente, crear_cuenta):
+    """Comprueba el ciclo del buzón: el alumno escribe, el creador responde y marca estado, y el alumno lo lee."""
     _, alumno = crear_cuenta(nombre="Ana")
     _, admin = crear_cuenta(rol="admin")
     cliente.put("/api/perfil", json={"avatar": "colibri"}, headers=alumno)
@@ -81,6 +86,7 @@ def test_conversacion_completa_con_el_creador(cliente, crear_cuenta):
 
 
 def test_el_buzon_protege_cada_conversacion(cliente, crear_cuenta):
+    """Comprueba que un alumno no ve ni escribe en conversaciones de otro (404)."""
     _, ana = crear_cuenta()
     _, beto = crear_cuenta()
     id_ana = cliente.post("/api/buzon", json={"categoria": "idea", "texto": "Más lecciones de luz"}, headers=ana).json()["id"]
@@ -91,6 +97,7 @@ def test_el_buzon_protege_cada_conversacion(cliente, crear_cuenta):
 
 
 def test_el_buzon_valida_lo_que_llega(cliente, crear_cuenta):
+    """Comprueba que el buzón rechaza (422) categorías, textos vacíos o demasiado largos y estados inválidos."""
     _, ana = crear_cuenta()
     assert cliente.post("/api/buzon", json={"categoria": "queja", "texto": "algo"}, headers=ana).status_code == 422
     assert cliente.post("/api/buzon", json={"categoria": "idea", "texto": "  "}, headers=ana).status_code == 422

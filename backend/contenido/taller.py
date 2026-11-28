@@ -56,6 +56,7 @@ def catalogo() -> Optional[Catalogo]:
 
 
 def ids_de_talleres() -> tuple:
+    """Ids de los talleres del catálogo vigente (vacío si no se pudo leer); lo usa el validador de bloques blender_taller."""
     cat = catalogo()
     return tuple(t.id for t in cat.talleres) if cat else ()
 
@@ -79,6 +80,10 @@ def fichas() -> Fichas:
 
 
 def _compilada(definicion: Dict[str, Any]):
+    """Práctica compilada por el motor, cacheada por huella (MAX_PRACTICAS entradas).
+
+    Lanza InvalidPracticeError si la definición no compila.
+    """
     clave = motor.huella(definicion)
     practica = _PRACTICAS.get(clave)
     if practica is None:

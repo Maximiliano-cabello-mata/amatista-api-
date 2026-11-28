@@ -20,6 +20,7 @@ from .comun import (
 
 
 def _opciones(c: _Contexto, b: dict, minimo: int, maximo: int, campo: str = "options") -> None:
+    """Revisa una lista de opciones de respuesta (id, text, isCorrect) con ids únicos y al menos una correcta."""
     opciones = c.objetos(b, campo, minimo, maximo)
     for i, opcion in opciones:
         p = f"{campo}[{i}]."
@@ -32,12 +33,14 @@ def _opciones(c: _Contexto, b: dict, minimo: int, maximo: int, campo: str = "opt
 
 
 def _quiz_inline(c: _Contexto, b: dict) -> None:
+    """Bloque quiz_inline: «question», 2-6 opciones con al menos una correcta y «explanation» opcional."""
     c.texto(b, "question")
     _opciones(c, b, 2, 6)
     c.texto(b, "explanation", obligatorio=False)
 
 
 def _ordering(c: _Contexto, b: dict) -> None:
+    """Bloque ordering: «prompt» y 3-8 elementos (en el orden correcto) con id y texto únicos."""
     c.texto(b, "prompt")
     items = c.objetos(b, "items", 3, 8)
     for i, item in items:
@@ -50,6 +53,7 @@ def _ordering(c: _Contexto, b: dict) -> None:
 
 
 def _matching(c: _Contexto, b: dict) -> None:
+    """Bloque matching (asociar): «prompt» y 2-8 pares left/right sin repetir ningún lado."""
     c.texto(b, "prompt")
     pares = c.objetos(b, "pairs", 2, 8)
     for i, par in pares:
@@ -69,6 +73,7 @@ def huecos_de(plantilla: str) -> List[List[str]]:
 
 
 def _fill_blanks(c: _Contexto, b: dict) -> None:
+    """Bloque fill_blanks: «template» con 1-10 huecos [[respuesta|alternativa]] bien cerrados y sin respuestas vacías."""
     c.texto(b, "prompt")
     plantilla = c.texto(b, "template")
     if plantilla is not None:
@@ -86,6 +91,7 @@ def _fill_blanks(c: _Contexto, b: dict) -> None:
 
 
 def _hotspots(c: _Contexto, b: dict) -> None:
+    """Bloque hotspots: imagen con «alt» y 1-10 puntos (x, y en % de 0 a 100) con título y texto."""
     c.texto(b, "src")
     c.texto(b, "alt")
     puntos = c.objetos(b, "points", 1, 10)
@@ -100,6 +106,7 @@ def _hotspots(c: _Contexto, b: dict) -> None:
 
 
 def _code_challenge(c: _Contexto, b: dict) -> None:
+    """Bloque code_challenge: reto HTML con código inicial (puede estar vacío) y 1-20 comprobaciones por selector."""
     c.texto(b, "prompt")
     c.opcion(b, "language", ("html",))
     # El código inicial puede estar vacío en un reto abierto.
@@ -119,6 +126,7 @@ def _code_challenge(c: _Contexto, b: dict) -> None:
 
 
 def _ui_tour(c: _Contexto, b: dict) -> None:
+    """Bloque ui_tour: recorrido por una pantalla de ZONAS_PANTALLA con 2-10 paradas en sus áreas válidas."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     pantalla = c.opcion(b, "screen", tuple(ZONAS_PANTALLA))
     for i, parada in c.objetos(b, "stops", 2, 10):
@@ -130,6 +138,7 @@ def _ui_tour(c: _Contexto, b: dict) -> None:
 
 
 def _connection_flow(c: _Contexto, b: dict) -> None:
+    """Bloque connection_flow: 2-4 nodos y 1-10 mensajes entre nodos existentes y distintos."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     nodos = c.objetos(b, "nodes", 2, 4)
     c.ids_unicos(nodos, "nodes")
@@ -156,6 +165,7 @@ def _connection_flow(c: _Contexto, b: dict) -> None:
 
 
 def _param_demo(c: _Contexto, b: dict) -> None:
+    """Bloque param_demo: una demo de DEMOS_PARAMETRO con título, pie y valor inicial opcionales."""
     c.opcion(b, "demo", DEMOS_PARAMETRO)
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "caption", obligatorio=False)
@@ -163,6 +173,7 @@ def _param_demo(c: _Contexto, b: dict) -> None:
 
 
 def _classify(c: _Contexto, b: dict) -> None:
+    """Bloque classify: 2-4 grupos y 3-10 tarjetas; cada tarjeta va a un grupo existente y ningún grupo queda vacío."""
     c.texto(b, "question", maximo=300)
     grupos = c.objetos(b, "groups", 2, 4)
     c.ids_unicos(grupos, "groups")
@@ -190,6 +201,7 @@ def _classify(c: _Contexto, b: dict) -> None:
 
 
 def _true_false(c: _Contexto, b: dict) -> None:
+    """Bloque true_false: 2-8 afirmaciones con respuesta; con 3 o más deben mezclar verdaderas y falsas."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     afirmaciones = c.objetos(b, "statements", 2, 8)
     c.ids_unicos(afirmaciones, "statements", clave="text")
@@ -204,6 +216,7 @@ def _true_false(c: _Contexto, b: dict) -> None:
 
 
 def _image_choice(c: _Contexto, b: dict) -> None:
+    """Bloque image_choice: 2-4 figuras de FIGURAS_ELEGIR con exactamente una correcta."""
     c.texto(b, "question", maximo=300)
     opciones = c.objetos(b, "options", 2, 4)
     c.ids_unicos(opciones, "options")
@@ -221,6 +234,7 @@ def _image_choice(c: _Contexto, b: dict) -> None:
 
 
 def _tecla_valida(texto: Any) -> bool:
+    """True si el texto es una tecla pulsable: modificadores Shift/Ctrl/Alt opcionales y una letra, dígito o tecla con nombre."""
     if not isinstance(texto, str) or not texto.strip():
         return False
     *mods, tecla = [p.strip() for p in texto.split("+")]
@@ -230,6 +244,7 @@ def _tecla_valida(texto: Any) -> bool:
 
 
 def _shortcut_drill(c: _Contexto, b: dict) -> None:
+    """Bloque shortcut_drill: 1-8 ejercicios con «prompt» y la lista de teclas a pulsar (cada una válida)."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=600)
     ejercicios = c.objetos(b, "drills", 1, MAX_EJERCICIOS_TECLAS)
@@ -247,6 +262,11 @@ def _shortcut_drill(c: _Contexto, b: dict) -> None:
 
 
 def _transform_challenge(c: _Contexto, b: dict) -> None:
+    """Bloque transform_challenge: mover/rotar/escalar en un eje hasta «target».
+
+    El objetivo debe caer dentro del rango del control y no coincidir con el valor
+    inicial (no habría nada que ajustar).
+    """
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=600)
     c.texto(b, "explanation", obligatorio=False, maximo=400)
@@ -270,6 +290,7 @@ def _transform_challenge(c: _Contexto, b: dict) -> None:
 
 
 def _spot_error(c: _Contexto, b: dict) -> None:
+    """Bloque spot_error: 3-10 pasos, al menos uno marcado «wrong» (con explicación) y al menos uno correcto."""
     c.texto(b, "title", obligatorio=False, maximo=200)
     c.texto(b, "text", obligatorio=False, maximo=600)
     pasos = c.objetos(b, "steps", 3, 10)

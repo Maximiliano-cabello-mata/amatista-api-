@@ -45,6 +45,11 @@ PREFIJO = "rend-"
 
 
 def sembrar(alumnos: int, eventos: int) -> Dict[str, str]:
+    """Crea `alumnos` alumnos de prueba «rend-…» (es_prueba=1) con progreso y `eventos` eventos, más una cuenta admin y una alumna con sesión.
+
+    Guarda los tokens de esas dos sesiones en rendimiento_tokens.json y los
+    devuelve. Efecto: miles de filas en la base de backend/.env (nunca producción).
+    """
     from sqlalchemy import select
     from sqlalchemy.orm import Session
 
@@ -107,6 +112,7 @@ def sembrar(alumnos: int, eventos: int) -> Dict[str, str]:
 
 
 def limpiar() -> None:
+    """Borra todas las filas creadas por sembrar (usuarios «rend-…» y todo lo que cuelga de ellos). Con commit."""
     from sqlalchemy import delete
     from sqlalchemy.orm import Session
 
@@ -143,6 +149,7 @@ def escena_de_solucion(practica: Path) -> Dict[str, Any]:
 
 
 def escenarios(tokens: Dict[str, str]) -> List[Dict[str, Any]]:
+    """Lista de escenarios a medir (nombre, método, ruta, cabeceras, cuerpo y concurrencia máxima) con los tokens sembrados."""
     admin = {"Authorization": f"Bearer {tokens['admin']}"}
     alumno = {"Authorization": f"Bearer {tokens['alumno']}"}
     escena_tren = escena_de_solucion(RAIZ / "practices/blender/principiante/m1-tren")
@@ -180,6 +187,7 @@ def escenarios(tokens: Dict[str, str]) -> List[Dict[str, Any]]:
 
 
 def percentil(valores: List[float], p: float) -> float:
+    """Percentil `p` (0-1) con interpolación lineal; 0 si no hay valores."""
     if not valores:
         return 0.0
     orden = sorted(valores)
@@ -190,6 +198,7 @@ def percentil(valores: List[float], p: float) -> float:
 
 def medir_escenario(cliente_fabrica: Callable[[], Any], esc: Dict[str, Any], concurrencia: int,
                     peticiones: int) -> Dict[str, Any]:
+    """Lanza `peticiones` peticiones del escenario con `concurrencia` hilos y resume latencias, rps, errores y tamaño."""
     tiempos: List[float] = []
     errores: Dict[str, int] = {}
     bytes_total = 0
@@ -201,6 +210,7 @@ def medir_escenario(cliente_fabrica: Callable[[], Any], esc: Dict[str, Any], con
             etag = c.request(esc["metodo"], esc["ruta"]).headers.get("etag")
 
     def una(_):
+        """Hace una petición con el cliente del hilo y anota su tiempo, tamaño y error (si hubo)."""
         nonlocal bytes_total
         if not hasattr(locales, "cliente"):
             locales.cliente = cliente_fabrica()
@@ -241,6 +251,10 @@ def medir_escenario(cliente_fabrica: Callable[[], Any], esc: Dict[str, Any], con
 
 
 def medir(url: str, concurrencias: List[int], peticiones: int, solo: Optional[str] = None) -> Dict[str, Any]:
+    """Calienta la API y mide cada escenario (o los que contengan `solo`) con cada nivel de concurrencia.
+
+    Necesita rendimiento_tokens.json de sembrar. Devuelve {url, fecha, escenarios}. Efecto: miles de peticiones a `url`.
+    """
     import httpx
 
     tokens = json.loads(TOKENS.read_text(encoding="utf-8"))
@@ -269,6 +283,7 @@ def medir(url: str, concurrencias: List[int], peticiones: int, solo: Optional[st
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """CLI: subcomandos sembrar, medir (escribe --salida JSON) y limpiar. Devuelve 0."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="orden", required=True)
     s = sub.add_parser("sembrar")

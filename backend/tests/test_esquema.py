@@ -45,14 +45,17 @@ PALABRAS_RESTRICCION = {"CONSTRAINT", "PRIMARY", "FOREIGN", "UNIQUE", "CHECK"}
 
 
 def texto(script: Path) -> str:
+    """Contenido de un script SQL."""
     return script.read_text(encoding="utf-8")
 
 
 def sin_comentarios(sql: str) -> str:
+    """El SQL sin comentarios de línea («-- ...»)."""
     return re.sub(r"--[^\n]*", "", sql)
 
 
 def script(prefijo: str) -> str:
+    """Texto del único script de sql/ cuyo nombre empieza por `prefijo` (falla si hay cero o varios)."""
     coincidencias = [s for s in SCRIPTS if s.name.startswith(prefijo)]
     assert len(coincidencias) == 1, f"Debe existir un solo script {prefijo}_*.sql"
     return texto(coincidencias[0])
@@ -89,6 +92,7 @@ def partes_nivel_superior(cuerpo: str):
 
 
 def definicion_columna(definicion: str) -> dict:
+    """Tipo, largo y NOT NULL de la definición SQL de una columna."""
     tipo = PATRON_TIPO.match(definicion)
     assert tipo, f"Tipo no reconocido: {definicion!r}"
     return {
@@ -142,11 +146,13 @@ def esquema_de_scripts():
 
 
 def columnas_de(definicion: str):
+    """Nombres de columna en mayúsculas de una lista «a, b, c» de una restricción."""
     return tuple(c.strip().upper() for c in definicion.split(","))
 
 
 def tipo_oracle(columna) -> str:
     # Los tipos propios (TextoJSON) se guardan como su tipo base.
+    """Tipo Oracle (VARCHAR2, NUMBER, TIMESTAMP, CLOB) que corresponde a la columna del modelo."""
     tipo = columna.type.impl if isinstance(columna.type, TypeDecorator) else columna.type
     # Text hereda de String: se revisa primero.
     if isinstance(tipo, Text):
@@ -168,6 +174,7 @@ COLUMNAS_SQL, RESTRICCIONES_SQL, INDICES_SQL = esquema_de_scripts()
 
 
 def test_esperado_del_diagnostico_coincide_con_los_modelos():
+    """Comprueba que ESPERADO del diagnóstico tiene las mismas tablas, columnas y tipos que modelos.py."""
     assert set(ESPERADO) == set(TABLAS)
     for nombre, tabla in TABLAS.items():
         modelo = {c.name.upper(): tipo_oracle(c) for c in tabla.columns}
@@ -175,6 +182,7 @@ def test_esperado_del_diagnostico_coincide_con_los_modelos():
 
 
 def test_longitudes_minimas_del_diagnostico_coinciden_con_los_modelos():
+    """Comprueba que las longitudes mínimas del diagnóstico coinciden con las de los modelos."""
     for (tabla, columna), minimo in LONGITUDES_MINIMAS.items():
         assert TABLAS[tabla].columns[columna.lower()].type.length == minimo, f"{tabla}.{columna}"
 
@@ -183,6 +191,7 @@ def test_longitudes_minimas_del_diagnostico_coinciden_con_los_modelos():
 
 
 def test_los_scripts_crean_todas_las_tablas_y_columnas_de_los_modelos():
+    """Comprueba que los scripts de sql/ crean todas las tablas y columnas de modelos.py."""
     assert set(COLUMNAS_SQL) == set(TABLAS)
     for nombre, tabla in TABLAS.items():
         modelo = {c.name.upper() for c in tabla.columns}
@@ -190,6 +199,7 @@ def test_los_scripts_crean_todas_las_tablas_y_columnas_de_los_modelos():
 
 
 def test_tipos_largos_y_nulos_coinciden_con_los_modelos():
+    """Comprueba que tipo, largo y NOT NULL de cada columna en sql/ coinciden con los modelos."""
     for nombre, tabla in TABLAS.items():
         for columna in tabla.columns:
             sql = COLUMNAS_SQL[nombre][columna.name.upper()]
@@ -201,6 +211,7 @@ def test_tipos_largos_y_nulos_coinciden_con_los_modelos():
 
 
 def test_llaves_primarias_y_foraneas_coinciden_con_los_modelos():
+    """Comprueba que las llaves primarias y foráneas de sql/ coinciden con las de los modelos."""
     primarias = {
         tabla: columnas_de(re.search(r"PRIMARY\s+KEY\s*\(([^)]*)\)", definicion, re.I).group(1))
         for tabla, _, definicion in RESTRICCIONES_SQL
@@ -224,10 +235,12 @@ def test_llaves_primarias_y_foraneas_coinciden_con_los_modelos():
 
 
 def test_email_unico_y_checks_con_las_constantes_de_los_modelos():
+    """Comprueba el UNIQUE de USUARIOS.EMAIL y que los CHECK usan los mismos valores que las constantes de modelos.py."""
     definiciones = {nombre: definicion for _, nombre, definicion in RESTRICCIONES_SQL if nombre}
     assert re.fullmatch(r"UNIQUE\s*\(\s*email\s*\)", definiciones["UQ_USUARIOS_EMAIL"], re.I)
 
     def valores(nombre):
+        """Valores entre comillas de la definición de un CHECK."""
         return set(re.findall(r"'+(\w+)'+", definiciones[nombre]))
 
     assert valores("CK_USUARIOS_ROL") == set(ROLES)
@@ -255,6 +268,7 @@ def test_email_unico_y_checks_con_las_constantes_de_los_modelos():
 
 
 def test_indices_de_los_modelos_existen_y_ninguno_repite_pk_o_unique():
+    """Comprueba que cada índice de los modelos existe en sql/ y que ninguno duplica una PK o UNIQUE."""
     indices = set(INDICES_SQL)
     for nombre, tabla in TABLAS.items():
         for indice in tabla.indexes:
@@ -280,6 +294,7 @@ def test_la_verificacion_del_ultimo_script_espera_el_numero_correcto_de_columnas
 def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas():
     # 003 ya se ejecutó en producción: las tablas nuevas se cuentan en la
     # verificación del script que las crea (005, 007, 010, 012, 013, 014, 015 o 016), sin editar 003.
+    """Comprueba que el mantenimiento cuenta filas de todas las tablas y que 004 da permisos sobre todas."""
     mantenimiento = sin_comentarios(script("003"))
     conteos = mantenimiento + "".join(sin_comentarios(script(n)) for n in ("005", "007", "010", "012", "013", "014", "015", "016"))
     for nombre in TABLAS:
@@ -295,6 +310,7 @@ def test_003_o_su_script_cuentan_filas_y_004_da_permisos_sobre_todas_las_tablas(
 
 @pytest.mark.parametrize("prefijo", ["002", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016"])
 def test_los_scripts_incrementales_no_borran_datos(prefijo):
+    """Comprueba que los scripts incrementales no contienen DROP, DELETE ni TRUNCATE."""
     codigo = sin_comentarios(script(prefijo))
     for patron in (r"\bDROP\s+(TABLE|COLUMN|PARTITION|INDEX|CONSTRAINT)\b", r"\bDELETE\s+FROM\b", r"\bTRUNCATE\b"):
         assert not re.search(patron, codigo, re.I), f"{prefijo} debe ser incremental: contiene {patron}"
@@ -320,6 +336,7 @@ def test_bloques_plsql_terminan_con_barra(archivo):
 
 @pytest.mark.parametrize("archivo", SCRIPTS, ids=lambda s: s.name)
 def test_comillas_y_sql_dinamico(archivo):
+    """Comprueba que cada script cierra sus comillas y no usa «&» (variables de sustitución de Database Actions)."""
     codigo = sin_comentarios(texto(archivo))
     assert codigo.count("'") % 2 == 0, f"{archivo.name}: comillas simples sin cerrar"
     assert "&" not in texto(archivo), f"{archivo.name}: '&' abre variables de sustitución en Database Actions"
@@ -335,6 +352,7 @@ def test_comillas_y_sql_dinamico(archivo):
 
 @pytest.fixture()
 def entorno_oracle(monkeypatch):
+    """Fixture: entorno sin DATABASE_URL con credenciales Oracle de prueba (sin conectarse)."""
     monkeypatch.delenv("DATABASE_URL", raising=False)
     for variable in ("DB_ESQUEMA", "DB_POOL", "DB_POOL_EXTRA"):
         monkeypatch.delenv(variable, raising=False)
@@ -346,18 +364,21 @@ def entorno_oracle(monkeypatch):
 
 @pytest.mark.parametrize("valor, esperado", [("", None), ("admin", "ADMIN"), (" ADMIN ", "ADMIN"), ("A$#_9", "A$#_9")])
 def test_db_esquema_valido(entorno_oracle, valor, esperado):
+    """Comprueba que un DB_ESQUEMA válido se normaliza a mayúsculas."""
     entorno_oracle.setenv("DB_ESQUEMA", valor)
     assert conexion.esquema_oracle() == esperado
 
 
 @pytest.mark.parametrize("valor", ["ADMIN; DROP USER X", "1ADMIN", "AD MIN", '"ADMIN"', "A" * 129, "ADMIN\nX"])
 def test_db_esquema_invalido_no_llega_a_oracle(entorno_oracle, valor):
+    """Comprueba que un DB_ESQUEMA inválido lanza RuntimeError antes de conectar."""
     entorno_oracle.setenv("DB_ESQUEMA", valor)
     with pytest.raises(RuntimeError, match="DB_ESQUEMA"):
         conexion.esquema_oracle()
 
 
 def test_pool_acotado_por_defecto_y_configurable(entorno_oracle):
+    """Comprueba que el pool es de 5+5 por defecto y que DB_POOL/DB_POOL_EXTRA lo cambian."""
     motor = conexion.crear_motor()
     assert (motor.pool.size(), motor.pool._max_overflow) == (5, 5)
     entorno_oracle.setenv("DB_POOL", "3")
@@ -368,26 +389,34 @@ def test_pool_acotado_por_defecto_y_configurable(entorno_oracle):
 
 @pytest.mark.parametrize("variable, valor", [("DB_POOL", "0"), ("DB_POOL", "muchas"), ("DB_POOL_EXTRA", "-1")])
 def test_pool_invalido(entorno_oracle, variable, valor):
+    """Comprueba que valores inválidos de DB_POOL o DB_POOL_EXTRA lanzan RuntimeError."""
     entorno_oracle.setenv(variable, valor)
     with pytest.raises(RuntimeError, match=variable):
         conexion.crear_motor()
 
 
 def test_cada_conexion_fija_el_esquema_dueno(entorno_oracle):
+    """Comprueba que cada conexión nueva ejecuta ALTER SESSION SET CURRENT_SCHEMA y cierra el cursor."""
     class Cursor:
+        """Cursor falso que anota lo que se ejecuta."""
         def __init__(self, registro):
+            """Guarda la lista donde se anotan las llamadas."""
             self.registro = registro
 
         def execute(self, sql):
+            """Anota la sentencia ejecutada."""
             self.registro.append(sql)
 
         def close(self):
+            """Anota que el cursor se cerró."""
             self.registro.append("cerrado")
 
     class ConexionFalsa:
+        """Conexión DB-API falsa que entrega cursores falsos."""
         registro = []
 
         def cursor(self):
+            """Devuelve un cursor falso que anota en el registro compartido."""
             return Cursor(self.registro)
 
     entorno_oracle.setenv("DB_ESQUEMA", "admin")

@@ -100,6 +100,7 @@ git --version
 
 # 2. Clonar en /home/opc/amatista (la ruta que usa la VM actual)
 cd /home/opc
+# [REVISION-ROTO] Ese repositorio no existe (GitHub 404, 2026-11-27). Hoy son amatista-api- y amatista-motor-.
 git clone https://github.com/Maximiliano-cabello-mata/amatista.git
 cd amatista
 git remote -v          # debe ser Maximiliano-cabello-mata/amatista (INC-010, incidencia C)

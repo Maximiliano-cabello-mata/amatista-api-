@@ -61,6 +61,8 @@ log = logging.getLogger("amatista")
 
 router = APIRouter(prefix="/api/admin", tags=["administracion"])
 
+# [REVISION-SEGURIDAD] Privacidad: con 'lectores' un PROFESOR lista y ve email y teléfono de TODAS las cuentas (ficha -> usuario_publico),
+# no solo de sus grupos. Decidir si limitar a admin o recortar campos.
 lectores = requiere_rol("profesor", "admin")
 administradores = requiere_rol("admin")
 
@@ -81,6 +83,7 @@ def zona_metricas():
 
 
 def dia_local(fecha: datetime, zona) -> date:
+    """Día calendario en la zona de las métricas para una fecha guardada en UTC sin zona."""
     return fecha.replace(tzinfo=timezone.utc).astimezone(zona).date()
 
 
@@ -94,6 +97,7 @@ def alumnos_reales():
 
 
 def suma_si(condicion, valor=1):
+    """Expresión SQL SUM(CASE WHEN condicion THEN valor ELSE 0) para contar o sumar con filtro en una sola consulta."""
     return func.sum(case((condicion, valor), else_=0))
 
 
@@ -130,6 +134,11 @@ def contar_usuarios(db: Session) -> dict:
 
 
 def por_curso(db: Session) -> List[dict]:
+    """Alumnos reales y lecciones completadas por curso, más lecciones publicadas visibles.
+
+    `lecciones_publicadas` es None mientras no se haya importado el contenido.
+    Ordena por Curso.orden (los cursos sin orden al final).
+    """
     filas = db.execute(
         select(
             ProgresoLeccion.curso_id,
@@ -177,6 +186,7 @@ _CANDADO_RESUMEN = threading.Lock()
 
 
 def segundos_cache_resumen() -> float:
+    """Vigencia de la caché del resumen (AMATISTA_CACHE_RESUMEN_S, 30 por defecto; 0 = sin caché)."""
     try:
         return max(0.0, float(os.getenv("AMATISTA_CACHE_RESUMEN_S", "30")))
     except ValueError:
@@ -189,6 +199,13 @@ def resumen(
     _: Usuario = Depends(lectores),
     db: Session = Depends(obtener_db),
 ):
+    """GET /api/admin/resumen?dias=7. Profesor o admin.
+
+    Métricas del lanzamiento de la ventana (1-90 días): usuarios, registros,
+    activaciones, activos semanales, retención de segunda semana, serie diaria
+    de 30 días, por curso y embudo. Cachea por `dias` en memoria.
+    Errores: 401/403; 422 dias fuera de rango; error de base de datos.
+    """
     vigencia = segundos_cache_resumen()
     momento = time.monotonic()
     with _CANDADO_RESUMEN:
@@ -203,6 +220,11 @@ def resumen(
 
 
 def calcular_resumen(db: Session, dias: int) -> dict:
+    """Calcula el resumen de métricas del plan (sin caché) para una ventana de `dias`.
+
+    Lee usuarios, eventos y progreso acotados por fecha y corta los días en hora
+    de Ciudad de México. Devuelve el dict que publica GET /api/admin/resumen.
+    """
     momento = ahora()
     zona = zona_metricas()
     desde = momento - timedelta(days=dias)
@@ -361,11 +383,13 @@ def ficha(usuario: Usuario, completadas: int = 0, xp: int = 0) -> dict:
 
 
 def escapar_like(texto: str) -> str:
+    """Escapa !, % y _ con «!» para usar el texto del buscador dentro de LIKE ... ESCAPE '!'."""
     return texto.replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
 
 def orden_sql(orden: str) -> list:
     # Los nulos van al final en los dos motores (Oracle y SQLite los ordenan distinto).
+    """Criterios ORDER BY para la lista de usuarios (reciente, nombre o actividad) con los nulos al final en Oracle y SQLite."""
     if orden == "nombre":
         return [case((Usuario.nombre.is_(None), 1), else_=0), func.lower(Usuario.nombre), Usuario.id]
     if orden == "actividad":
@@ -389,6 +413,13 @@ def listar_usuarios(
     _: Usuario = Depends(lectores),
     db: Session = Depends(obtener_db),
 ):
+    """GET /api/admin/usuarios. Profesor o admin.
+
+    Parámetros: buscar (nombre, correo o id), rol, pagina, por_pagina (máx. 100),
+    orden (reciente|nombre|actividad), incluir_fusionados.
+    Respuesta: {total, pagina, por_pagina, usuarios: [ficha con lecciones y xp]}.
+    Errores: 401/403; 422 orden o rol inválidos; 500 de base de datos.
+    """
     if orden not in ORDENES:
         raise HTTPException(status_code=422, detail="Orden inválido: usa reciente, nombre o actividad.")
     rol = (rol or "").strip() or None
@@ -451,6 +482,11 @@ def listar_usuarios(
 
 @router.get("/usuarios/{usuario_id}")
 def detalle_usuario(usuario_id: str, _: Usuario = Depends(lectores), db: Session = Depends(obtener_db)):
+    """GET /api/admin/usuarios/{usuario_id}. Profesor o admin.
+
+    Respuesta: {usuario (ficha), progreso, insignias, sesiones_activas,
+    eventos_recientes (20)}. Errores: 401/403; 404 usuario inexistente; 500.
+    """
     try:
         usuario = db.get(Usuario, usuario_id)
         if usuario is None:
@@ -490,6 +526,7 @@ def detalle_usuario(usuario_id: str, _: Usuario = Depends(lectores), db: Session
 
 
 class CambioUsuario(BaseModel):
+    """Cuerpo de PATCH /api/admin/usuarios/{id}: rol, marca de cuenta de prueba y correo confirmado."""
     rol: Optional[str] = None
     es_prueba: Optional[bool] = None
     correo_confirmado: Optional[bool] = None
@@ -503,6 +540,14 @@ def modificar_usuario(
     db: Session = Depends(obtener_db),
 ):
     # El rol se lee en cada petición: cambiarlo no requiere cerrar sesiones.
+    """PATCH /api/admin/usuarios/{usuario_id}. Solo admin.
+
+    Cambia rol (alumno|profesor|admin), es_prueba (también en sus eventos) y
+    correo_confirmado (borra el código de confirmación pendiente). El nuevo rol
+    vale desde la siguiente petición, sin cerrar sesiones.
+    Respuesta: usuario_publico. Errores: 401/403; 422 rol inválido; 404;
+    400 quitarse el rol a uno mismo o dar rol de equipo a una cuenta sin contraseña; 500.
+    """
     if datos.rol is not None and datos.rol not in ROLES:
         raise HTTPException(status_code=422, detail="Rol inválido: usa alumno, profesor o admin.")
     try:
@@ -545,6 +590,7 @@ def modificar_usuario(
 
 
 class SolicitudPurga(BaseModel):
+    """Cuerpo opcional de POST /mantenimiento/purgar: antigüedad en días de sesiones y eventos a borrar."""
     dias_sesiones: int = Field(default=90, ge=1, le=3650)
     dias_eventos: int = Field(default=400, ge=1, le=3650)
 
@@ -615,6 +661,7 @@ MINIMO_ATASCO = 2  # alumnos que abrieron la lección para considerarla
 
 
 def ficha_contenido(leccion: Leccion) -> dict:
+    """Resumen de una lección para las listas de la auditoría (sin publicar, cambios recientes)."""
     return {
         "curso_id": leccion.curso_id,
         "leccion_id": leccion.id,
@@ -631,6 +678,13 @@ def auditoria(
     _: Usuario = Depends(lectores),
     db: Session = Depends(obtener_db),
 ):
+    """GET /api/admin/auditoria?dias=30. Profesor o admin. Solo lectura.
+
+    Respuesta: personal con permisos y sus sesiones, cuentas bloqueadas / sin
+    confirmar / de prueba, estado del contenido (por estado, sin publicar,
+    cambios recientes) y lecciones donde los alumnos se atascan (abren y no
+    terminan, mínimo 2 alumnos). Errores: 401/403; 422; 500.
+    """
     momento = ahora()
     desde = momento - timedelta(days=dias)
     try:

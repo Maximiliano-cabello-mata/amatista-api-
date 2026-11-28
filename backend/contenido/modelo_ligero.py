@@ -41,16 +41,23 @@ TIPOS = ("MESH", "LIGHT", "CAMERA", "EMPTY", "CURVE", "OTRO")
 
 
 class ModeloInvalido(ValueError):
+    """El modelo ligero entregado no se puede usar; el mensaje se muestra tal cual al alumno (422)."""
     pass
 
 
 def _numeros(valor, cantidad: int) -> bool:
+    """True si `valor` es una lista de exactamente `cantidad` números (sin bool)."""
     return isinstance(valor, list) and len(valor) == cantidad and all(
         isinstance(x, (int, float)) and not isinstance(x, bool) for x in valor
     )
 
 
 def descomprimir(paquete: str) -> dict:
+    """Decodifica el paquete del add-on (base64 → zlib → JSON) con topes de tamaño.
+
+    Lanza ModeloInvalido si está vacío, supera MAX_BASE64, no es base64/zlib/JSON
+    o descomprimido pasa de MAX_DESCOMPRIMIDO (protege contra bombas zlib).
+    """
     if not isinstance(paquete, str) or not paquete:
         raise ModeloInvalido("El modelo llegó vacío.")
     if len(paquete) > MAX_BASE64:
@@ -129,6 +136,10 @@ def revisar(datos: dict) -> dict:
 
 
 def resumen_de(paquete: str) -> dict:
+    """Valida el paquete entregado y devuelve su resumen (objetos, vértices, triángulos, materiales, nombres).
+
+    Es lo que POST /api/evaluacion/entregas guarda en ENTREGAS.RESUMEN; lanza ModeloInvalido.
+    """
     return revisar(descomprimir(paquete))
 
 

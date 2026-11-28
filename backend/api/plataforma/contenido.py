@@ -76,15 +76,21 @@ PATRON_PREFIJO_MODULO = re.compile(r"^\s*m[oó]dulo\s+\d+\s*[:.\-–—]\s*", re
 
 
 def iso(fecha: Optional[datetime]) -> Optional[str]:
+    """Fecha en ISO 8601 o None (formato de fechas de todas las respuestas de contenido)."""
     return fecha.isoformat() if fecha else None
 
 
 def compactar(objeto: Any) -> str:
     # allow_nan=False: NaN no es JSON válido (Oracle lo rechaza con IS JSON).
+    """JSON compacto y con acentos sin escapar, tal como se guarda en LECCIONES.CONTENIDO.
+
+    Lanza ValueError ante NaN/Infinito (Oracle lo rechaza con IS JSON).
+    """
     return json.dumps(objeto, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def leer_json(texto: Optional[str]) -> Any:
+    """Decodifica el JSON guardado; None si está vacío o corrupto (nunca lanza)."""
     try:
         return json.loads(texto) if texto else None
     except ValueError:
@@ -92,6 +98,7 @@ def leer_json(texto: Optional[str]) -> Any:
 
 
 def titulo_corto(titulo: str) -> str:
+    """Quita el prefijo «Módulo N:» del título para mostrarlo en el catálogo; si queda vacío deja el original."""
     return PATRON_PREFIJO_MODULO.sub("", titulo or "").strip() or titulo
 
 
@@ -104,6 +111,12 @@ def rechazo(estado: int, mensaje: str, errores: List[str]) -> JSONResponse:
 
 
 def confirmar(db: Session, ruta: str) -> None:
+    """Hace commit de un cambio de contenido y traduce los errores para el panel.
+
+    Si la ruta es de /api/contenido invalida la caché del catálogo público.
+    Lanza 409 ante IntegrityError (id usado a la vez por otro cambio) y error_bd
+    ante otros errores de base de datos; en ambos casos hace rollback.
+    """
     try:
         db.commit()
         if ruta.startswith("/api/contenido"):
@@ -119,6 +132,7 @@ def confirmar(db: Session, ruta: str) -> None:
 
 
 def curso_admin(curso: Curso) -> dict:
+    """Serializa un curso con todos sus campos editables para el panel de administración."""
     return {
         "id": curso.id,
         "numero": curso.numero,
@@ -137,12 +151,14 @@ def curso_admin(curso: Curso) -> dict:
 
 
 def recurso_de(curso: Curso) -> Optional[dict]:
+    """Recurso externo del curso como {texto, url}, o None si no tiene URL."""
     if not curso.recurso_url:
         return None
     return {"texto": curso.recurso_texto or curso.recurso_url, "url": curso.recurso_url}
 
 
 def modulo_meta(modulo: Modulo) -> dict:
+    """Metadatos de un módulo (sin lecciones) para el panel: estado, versión y fechas."""
     return {
         "id": modulo.id,
         "curso_id": modulo.curso_id,
@@ -160,6 +176,7 @@ def modulo_meta(modulo: Modulo) -> dict:
 
 
 def nivel_meta(nivel: Nivel) -> dict:
+    """Serializa un nivel (v3) para el panel y, sin campos internos, para el catálogo."""
     return {
         "id": nivel.id,
         "curso_id": nivel.curso_id,
@@ -187,6 +204,7 @@ def nivel_del_curso(db: Session, nivel_id: str, curso_id: str) -> Nivel:
 
 
 def leccion_meta(leccion: Leccion) -> dict:
+    """Metadatos de una lección sin su JSON de contenido (lo que lista el panel)."""
     return {
         "curso_id": leccion.curso_id,
         "id": leccion.id,
@@ -205,6 +223,10 @@ def leccion_meta(leccion: Leccion) -> dict:
 
 
 def respuesta_leccion(fila: Leccion, leccion: Any, errores: List[str]) -> dict:
+    """Respuesta de crear/editar/publicar lección: metadatos + JSON + resultado de la validación.
+
+    `valida` y `errores` le dicen al editor qué falta antes de poder publicar.
+    """
     return {**leccion_meta(fila), "leccion": leccion, "valida": not errores, "errores": errores}
 
 
@@ -248,6 +270,7 @@ def problemas_para_guardar(leccion: Any) -> List[str]:
 
 
 def lecciones_del_modulo(db: Session, modulo_id: str) -> List[Leccion]:
+    """Lecciones del módulo en orden, sin cargar el JSON de contenido (defer) para no leer CLOBs."""
     consulta = (
         select(Leccion)
         .options(defer(Leccion.contenido))
@@ -258,6 +281,7 @@ def lecciones_del_modulo(db: Session, modulo_id: str) -> List[Leccion]:
 
 
 def renumerar(filas: List[Leccion], momento: datetime) -> None:
+    """Reasigna `orden` 1..n según la posición en la lista y marca actualizado_en solo en las que cambian."""
     for orden, fila in enumerate(filas, start=1):
         if fila.orden != orden:
             fila.orden = orden
@@ -265,10 +289,12 @@ def renumerar(filas: List[Leccion], momento: datetime) -> None:
 
 
 def ids_lecciones(db: Session, curso_id: str) -> List[str]:
+    """Ids de todas las lecciones del curso (para calcular la siguiente numeración libre)."""
     return list(db.scalars(select(Leccion.id).where(Leccion.curso_id == curso_id)).all())
 
 
 def nueva_leccion(curso_id: str, modulo_id: str, orden: int, leccion: dict, estado: str, momento: datetime) -> Leccion:
+    """Construye la fila LECCIONES (versión 1) a partir del JSON; publicado_en solo si nace publicada."""
     return Leccion(
         curso_id=curso_id,
         id=leccion["id"],
@@ -283,6 +309,7 @@ def nueva_leccion(curso_id: str, modulo_id: str, orden: int, leccion: dict, esta
 
 
 def obtener_curso(db: Session, curso_id: str) -> Curso:
+    """Curso por id o 404."""
     curso = db.get(Curso, curso_id)
     if curso is None:
         raise HTTPException(status_code=404, detail=f"No existe el curso «{curso_id}».")
@@ -290,6 +317,7 @@ def obtener_curso(db: Session, curso_id: str) -> Curso:
 
 
 def obtener_modulo(db: Session, modulo_id: str) -> Modulo:
+    """Módulo por id o 404."""
     modulo = db.get(Modulo, modulo_id)
     if modulo is None:
         raise HTTPException(status_code=404, detail=f"No existe el módulo «{modulo_id}».")
@@ -297,6 +325,7 @@ def obtener_modulo(db: Session, modulo_id: str) -> Modulo:
 
 
 def obtener_leccion(db: Session, curso_id: str, leccion_id: str) -> Leccion:
+    """Lección por (curso_id, leccion_id) o 404."""
     fila = db.get(Leccion, (curso_id, leccion_id))
     if fila is None:
         raise HTTPException(status_code=404, detail=f"No existe la lección «{leccion_id}» en el curso «{curso_id}».")
@@ -304,6 +333,7 @@ def obtener_leccion(db: Session, curso_id: str, leccion_id: str) -> Leccion:
 
 
 def numero_ocupado(db: Session, curso_id: str, numero: int, excepto: Optional[str] = None) -> bool:
+    """Indica si otro módulo no archivado del curso ya usa ese número (`excepto` excluye el propio)."""
     consulta = select(Modulo.id).where(
         Modulo.curso_id == curso_id, Modulo.numero == numero, Modulo.estado != "archivado"
     )
@@ -313,6 +343,7 @@ def numero_ocupado(db: Session, curso_id: str, numero: int, excepto: Optional[st
 
 
 def mismo_id(cuerpo_id: Optional[str], ruta_id: str, que: str) -> None:
+    """Lanza 400 si el cuerpo intenta cambiar el id de la ruta: los ids son inmutables porque el progreso se guarda con ellos."""
     if cuerpo_id is not None and cuerpo_id != ruta_id:
         raise HTTPException(
             status_code=400,
@@ -334,6 +365,7 @@ def _lecciones_publicadas(*columnas):
 
 
 def _modulos_visibles(*columnas):
+    """Consulta base de módulos no archivados de cursos publicados (los borradores salen como «Próximamente»)."""
     return (
         select(*columnas)
         .join(Curso, Curso.id == Modulo.curso_id)
@@ -346,6 +378,7 @@ def version_catalogo(db: Session) -> str:
     huella = hashlib.sha1(usedforsecurity=False)  # huella de caché, no de seguridad
 
     def agregar(filas) -> None:
+        """Mezcla un conjunto de filas en la huella SHA-1, con un separador por conjunto."""
         for fila in filas:
             texto = "|".join("" if v is None else (v.isoformat() if isinstance(v, datetime) else str(v)) for v in fila)
             huella.update(texto.encode("utf-8") + b"\n")
@@ -397,6 +430,11 @@ def modulo_json(modulo: Modulo, lecciones: List[dict]) -> dict:
 
 
 def cursos_catalogo(db: Session) -> List[dict]:
+    """Arma la lista de cursos publicados en el formato de frontend/src/data (cursos > niveles > módulos > lecciones).
+
+    Los módulos en borrador o sin lecciones publicadas salen con contenido None
+    («Próximamente»). Lee los JSON de las lecciones publicadas.
+    """
     cursos = db.scalars(select(Curso).where(Curso.estado == "publicado").order_by(Curso.orden, Curso.id)).all()
     if not cursos:
         return []
@@ -476,6 +514,7 @@ _CANDADO_CATALOGO = threading.Lock()
 
 
 def segundos_cache_catalogo() -> float:
+    """Segundos entre comprobaciones de la versión del catálogo (AMATISTA_CACHE_CATALOGO_S, 10 por defecto; 0 = siempre)."""
     try:
         return max(0.0, float(os.getenv("AMATISTA_CACHE_CATALOGO_S", "10")))
     except ValueError:
@@ -483,11 +522,16 @@ def segundos_cache_catalogo() -> float:
 
 
 def invalidar_catalogo() -> None:
+    """Vacía la caché en memoria del catálogo; la llama confirmar() tras cada cambio de contenido."""
     with _CANDADO_CATALOGO:
         _CATALOGO.update(version=None, revisado=0.0, cuerpo=None)
 
 
 def version_vigente(db: Session) -> str:
+    """Versión (huella) del catálogo, consultando la base como mucho cada segundos_cache_catalogo().
+
+    Si la versión cambió, descarta el cuerpo cacheado para que se regenere.
+    """
     momento = time.monotonic()
     with _CANDADO_CATALOGO:
         version = _CATALOGO["version"]
@@ -503,6 +547,13 @@ def version_vigente(db: Session) -> str:
 
 @router.get("/catalogo")
 def catalogo(request: Request, db: Session = Depends(obtener_db)):
+    """GET /api/contenido/catalogo. Público.
+
+    Respuesta: {version, generado_en, cursos: [...]} con ETag y Cache-Control: no-cache;
+    304 si If-None-Match coincide. El cuerpo se cachea en memoria por versión.
+    Con las tablas vacías devuelve cursos: [] (la PWA usa su catálogo empaquetado).
+    Errores: 503 si la base de datos falla (la PWA sigue con su copia).
+    """
     try:
         version = version_vigente(db)
         # no-cache: el navegador guarda la respuesta pero siempre pregunta (304 si no cambió).
@@ -547,6 +598,7 @@ def asegurar_cursos_base(db: Session) -> List[str]:
 
 
 def _aplicar(fila, valores: dict) -> bool:
+    """Copia en la fila los valores que difieren; devuelve True si cambió algo (para no subir la versión en vano)."""
     cambio = False
     for campo, valor in valores.items():
         if getattr(fila, campo) != valor:
@@ -739,6 +791,11 @@ def arbol(db: Session = Depends(obtener_db), _: Usuario = Depends(lector)):
 
 @router.get("/plantillas")
 def plantillas(_: Usuario = Depends(lector)):
+    """GET /api/contenido/plantillas. Profesor o admin.
+
+    Respuesta: fórmula, ritmo, ejemplos de bloques, lecciones plantilla y tipos
+    admitidos, para que el editor del panel arme lecciones válidas. Errores: 401/403.
+    """
     return {
         "formula": FORMULA,
         "ritmo": RITMO,
@@ -753,6 +810,7 @@ def plantillas(_: Usuario = Depends(lector)):
 
 
 class SolicitudValidar(BaseModel):
+    """Cuerpo de POST /api/contenido/validar: una lección o un módulo completo."""
     leccion: Optional[Any] = None
     modulo: Optional[Any] = None
 
@@ -776,6 +834,11 @@ def exportar(
     db: Session = Depends(obtener_db),
     _: Usuario = Depends(lector),
 ):
+    """GET /api/contenido/modulos/{modulo_id}/exportar?borradores=. Profesor o admin.
+
+    Respuesta: el módulo en formato de archivo ({"module": {...}}); con
+    borradores=true incluye lo no publicado. Errores: 401/403; 404 módulo inexistente.
+    """
     datos = exportar_modulo(db, modulo_id, borradores=borradores)
     if datos is None:
         raise HTTPException(status_code=404, detail=f"No existe el módulo «{modulo_id}».")
@@ -784,6 +847,10 @@ def exportar(
 
 @router.get("/lecciones/{curso_id}/{leccion_id}")
 def leer_leccion(curso_id: str, leccion_id: str, db: Session = Depends(obtener_db), _: Usuario = Depends(lector)):
+    """GET /api/contenido/lecciones/{curso_id}/{leccion_id}. Profesor o admin.
+
+    Respuesta: leccion_meta + "leccion" (JSON completo, aunque sea borrador). Errores: 401/403; 404.
+    """
     fila = obtener_leccion(db, curso_id, leccion_id)
     return {**leccion_meta(fila), "leccion": leer_json(fila.contenido)}
 
@@ -792,11 +859,13 @@ def leer_leccion(curso_id: str, leccion_id: str, db: Session = Depends(obtener_d
 
 
 class Recurso(BaseModel):
+    """Enlace externo de un curso (texto y URL) que el catálogo muestra como material de apoyo."""
     texto: str = Field(min_length=1, max_length=100)
     url: str = Field(min_length=1, max_length=300)
 
 
 class CursoNuevo(BaseModel):
+    """Cuerpo de POST /api/contenido/cursos. El curso nace en borrador salvo que se indique otro estado."""
     id: str = Field(min_length=1, max_length=MAX_ID, pattern=PATRON_ID_TEXTO)
     titulo: str = Field(min_length=1, max_length=100)
     numero: Optional[str] = Field(default=None, max_length=5)
@@ -811,6 +880,7 @@ class CursoNuevo(BaseModel):
 
 
 class CambiosCurso(BaseModel):
+    """Cuerpo de PUT /api/contenido/cursos/{id}: solo se aplican los campos enviados; el id no cambia."""
     id: Optional[str] = None
     titulo: Optional[str] = Field(default=None, min_length=1, max_length=100)
     numero: Optional[str] = Field(default=None, max_length=5)
@@ -824,6 +894,7 @@ class CambiosCurso(BaseModel):
 
 
 def _aplicar_curso(curso: Curso, cambios: dict) -> None:
+    """Aplica los cambios al curso: ignora id y los null de titulo/estado/orden; `recurso` llena dos columnas."""
     for campo, valor in cambios.items():
         if campo == "id" or (campo in ("titulo", "estado", "orden") and valor is None):
             continue
@@ -836,6 +907,11 @@ def _aplicar_curso(curso: Curso, cambios: dict) -> None:
 
 @router.post("/cursos", status_code=201)
 def crear_curso(cuerpo: CursoNuevo, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/cursos. Solo admin. Responde 201.
+
+    Cuerpo: CursoNuevo; si falta `orden` va al final. Respuesta: curso_admin.
+    Errores: 401/403; 409 id repetido; 422 validación.
+    """
     if db.get(Curso, cuerpo.id) is not None:
         raise HTTPException(status_code=409, detail=f"Ya existe el curso «{cuerpo.id}».")
     orden = cuerpo.orden
@@ -850,6 +926,10 @@ def crear_curso(cuerpo: CursoNuevo, db: Session = Depends(obtener_db), _: Usuari
 
 @router.put("/cursos/{curso_id}")
 def editar_curso(curso_id: str, cuerpo: CambiosCurso, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """PUT /api/contenido/cursos/{curso_id}. Solo admin.
+
+    Cuerpo: CambiosCurso. Respuesta: curso_admin. Errores: 401/403; 404; 400 si intenta cambiar el id.
+    """
     curso = obtener_curso(db, curso_id)
     mismo_id(cuerpo.id, curso_id, "un curso")
     _aplicar_curso(curso, cuerpo.model_dump(exclude_unset=True))
@@ -862,6 +942,7 @@ def editar_curso(curso_id: str, cuerpo: CambiosCurso, db: Session = Depends(obte
 
 
 class ModuloNuevo(BaseModel):
+    """Cuerpo de POST /api/contenido/modulos. Sin id se genera mod_<curso>_<NNN>; generar_esqueleto crea lecciones plantilla."""
     curso_id: str = Field(min_length=1, max_length=MAX_ID)
     titulo: str = Field(min_length=1, max_length=200)
     descripcion: Optional[str] = Field(default=None, max_length=1000)
@@ -874,6 +955,7 @@ class ModuloNuevo(BaseModel):
 
 
 class CambiosModulo(BaseModel):
+    """Cuerpo de PUT /api/contenido/modulos/{id}: campos opcionales; nivel_id null quita el nivel."""
     id: Optional[str] = None
     titulo: Optional[str] = Field(default=None, min_length=1, max_length=200)
     descripcion: Optional[str] = Field(default=None, max_length=1000)
@@ -884,11 +966,19 @@ class CambiosModulo(BaseModel):
 
 
 def modulo_con_lecciones(db: Session, modulo: Modulo) -> dict:
+    """Metadatos del módulo con la lista de metadatos de sus lecciones (respuesta habitual del panel)."""
     return {**modulo_meta(modulo), "lecciones": [leccion_meta(f) for f in lecciones_del_modulo(db, modulo.id)]}
 
 
 @router.post("/modulos", status_code=201)
 def crear_modulo(cuerpo: ModuloNuevo, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/modulos. Solo admin. Responde 201.
+
+    Crea el módulo en borrador (número siguiente si no se indica) y, con
+    generar_esqueleto, sus lecciones plantilla en borrador.
+    Respuesta: modulo_con_lecciones. Errores: 401/403; 404 curso o nivel
+    inexistente; 409 número ocupado, id repetido o nivel de otro curso; 422 id generado demasiado largo.
+    """
     curso = obtener_curso(db, cuerpo.curso_id)
     if cuerpo.nivel_id:
         nivel_del_curso(db, cuerpo.nivel_id, curso.id)
@@ -939,6 +1029,11 @@ def crear_modulo(cuerpo: ModuloNuevo, db: Session = Depends(obtener_db), _: Usua
 def editar_modulo(
     modulo_id: str, cuerpo: CambiosModulo, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)
 ):
+    """PUT /api/contenido/modulos/{modulo_id}. Solo admin.
+
+    Cuerpo: CambiosModulo; sube la versión del módulo. Respuesta: modulo_con_lecciones.
+    Errores: 401/403; 404; 400 cambio de id; 409 número ocupado o nivel de otro curso.
+    """
     modulo = obtener_modulo(db, modulo_id)
     mismo_id(cuerpo.id, modulo_id, "un módulo")
     cambios = cuerpo.model_dump(exclude_unset=True, exclude={"id"})
@@ -1015,6 +1110,7 @@ def archivar_modulo(modulo_id: str, db: Session = Depends(obtener_db), _: Usuari
 
 
 class LeccionNueva(BaseModel):
+    """Cuerpo de POST /api/contenido/lecciones: curso, módulo, JSON de la lección y posición (1 = primera)."""
     curso_id: str = Field(min_length=1, max_length=MAX_ID)
     modulo_id: str = Field(min_length=1, max_length=MAX_ID)
     leccion: Dict[str, Any]
@@ -1022,15 +1118,25 @@ class LeccionNueva(BaseModel):
 
 
 class CambiosLeccion(BaseModel):
+    """Cuerpo de PUT /api/contenido/lecciones/{curso}/{leccion}: el JSON completo de la lección."""
     leccion: Dict[str, Any]
 
 
 class Mover(BaseModel):
+    """Cuerpo de POST .../mover: nueva posición de la lección dentro de su módulo."""
     orden: int = Field(ge=1, le=9999)  # nueva posición dentro del módulo (1 = primera)
 
 
 @router.post("/lecciones", status_code=201)
 def crear_leccion(cuerpo: LeccionNueva, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/lecciones. Solo admin. Responde 201.
+
+    Guarda la lección en borrador en la posición pedida (renumera el módulo);
+    sin id se asigna el siguiente libre del curso. Se guarda aunque no valide
+    del todo: `errores` dice qué falta para publicar.
+    Respuesta: respuesta_leccion. Errores: 401/403; 404 módulo; 422 módulo de
+    otro curso o falta id/título/tipo (con lista `errores`); 409 id repetido.
+    """
     modulo = obtener_modulo(db, cuerpo.modulo_id)
     if modulo.curso_id != cuerpo.curso_id:
         raise HTTPException(status_code=422, detail=f"El módulo «{modulo.id}» es del curso «{modulo.curso_id}».")
@@ -1067,6 +1173,12 @@ def editar_leccion(
     db: Session = Depends(obtener_db),
     _: Usuario = Depends(editor),
 ):
+    """PUT /api/contenido/lecciones/{curso_id}/{leccion_id}. Solo admin.
+
+    Reemplaza el JSON y sube la versión. Si la lección está publicada el cambio
+    debe validar por completo (la ven los alumnos).
+    Respuesta: respuesta_leccion. Errores: 401/403; 404; 400 cambio de id; 422 con lista `errores`.
+    """
     fila = obtener_leccion(db, curso_id, leccion_id)
     leccion = dict(cuerpo.leccion)
     if leccion.get("id"):
@@ -1089,6 +1201,11 @@ def editar_leccion(
 
 @router.post("/lecciones/{curso_id}/{leccion_id}/publicar")
 def publicar_leccion(curso_id: str, leccion_id: str, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)):
+    """POST /api/contenido/lecciones/{curso_id}/{leccion_id}/publicar. Solo admin.
+
+    Publica la lección si valida (idempotente). Respuesta: respuesta_leccion.
+    Errores: 401/403; 404; 422 con la lista de errores de validación.
+    """
     fila = obtener_leccion(db, curso_id, leccion_id)
     leccion = leer_json(fila.contenido)
     errores = validar_leccion(leccion) if leccion is not None else ["el contenido guardado no es JSON válido"]
@@ -1118,6 +1235,11 @@ def archivar_leccion(curso_id: str, leccion_id: str, db: Session = Depends(obten
 def mover_leccion(
     curso_id: str, leccion_id: str, cuerpo: Mover, db: Session = Depends(obtener_db), _: Usuario = Depends(editor)
 ):
+    """POST /api/contenido/lecciones/{curso_id}/{leccion_id}/mover. Solo admin.
+
+    Cuerpo: Mover. Cambia la posición dentro del módulo y renumera el resto.
+    Respuesta: {modulo_id, lecciones: [...]}. Errores: 401/403; 404; 422.
+    """
     fila = obtener_leccion(db, curso_id, leccion_id)
     filas = [f for f in lecciones_del_modulo(db, fila.modulo_id) if f is not fila]
     filas.insert(min(cuerpo.orden, len(filas) + 1) - 1, fila)

@@ -54,10 +54,12 @@ def con_modulos(catalogo: dict) -> list:
 
 
 def leer(ruta: Path) -> dict:
+    """Lee un archivo JSON de módulo."""
     return json.loads(ruta.read_text(encoding="utf-8"))
 
 
 def leccion_con(*bloques, **cambios) -> dict:
+    """Lección mínima válida con el bloque indicado y campos extra."""
     leccion = {
         "id": "les_prueba",
         "title": "Prueba",
@@ -70,6 +72,7 @@ def leccion_con(*bloques, **cambios) -> dict:
 
 
 def importar_reales() -> None:
+    """Importa a la base los módulos reales de Blender y A-Frame con la CLI de contenido."""
     assert cli.main(["importar", str(BLENDER), str(AFRAME)]) == 0
 
 
@@ -78,16 +81,19 @@ def importar_reales() -> None:
 
 @pytest.mark.parametrize("ruta", sorted(MODULOS.glob("*.json")), ids=lambda r: r.name)
 def test_json_del_frontend_validan(ruta):
+    """Comprueba que cada módulo del frontend valida sin errores."""
     assert validar_modulo(leer(ruta)) == []
 
 
 def test_campos_nuevos_de_los_modulos_reales():
+    """Comprueba curso, insignia y estado de los módulos reales de Blender y A-Frame."""
     blender, aframe = leer(BLENDER)["module"], leer(AFRAME)["module"]
     assert (blender["curso"], blender["insignia"], blender["estado"]) == ("blender", "Explorador 3D", "publicado")
     assert (aframe["curso"], aframe["insignia"], aframe["estado"]) == ("aframe", "Arquitecto WebXR", "publicado")
 
 
 def test_errores_dicen_donde_esta_el_problema():
+    """Comprueba que los errores de validación indican la ruta exacta del problema."""
     modulo = modulo_esqueleto("aframe", 2, "Prueba")
     lecciones = modulo["module"]["lessons"]
     ordenar = next(b for b in lecciones[2]["contentBlocks"] if b["type"] == "ordering")
@@ -185,18 +191,21 @@ def test_errores_dicen_donde_esta_el_problema():
     ],
 )
 def test_errores_de_bloques(bloque, esperado):
+    """Comprueba el mensaje de error esperado para cada bloque mal formado."""
     errores = validar_leccion(leccion_con(bloque))
     assert any(esperado in error for error in errores), errores
     assert all(error.startswith("contentBlocks[0]") for error in errores), errores
 
 
 def test_herramientas_nuevas_validan():
+    """Comprueba que los ejemplos de step_by_step, shortcuts, compare, mesh_viewer y node_graph validan."""
     for tipo in ("step_by_step", "shortcuts", "compare", "mesh_viewer", "node_graph"):
         assert tipo in TIPOS_BLOQUE and tipo not in BLOQUES_INTERACTIVOS
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
 
 
 def test_recursos_graficos_y_motor_web_validan():
+    """Comprueba que los ejemplos de viewport_sim, image_choice, keyframe_sim y motor_scene validan."""
     for tipo in ("viewport_sim", "image_choice", "keyframe_sim", "motor_scene"):
         assert tipo in BLOQUES_INTERACTIVOS
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
@@ -228,11 +237,13 @@ def test_recursos_graficos_y_motor_web_validan():
     ],
 )
 def test_errores_de_recursos_v42(bloque, esperado):
+    """Comprueba el mensaje de error esperado en los recursos gráficos v4.2 mal formados."""
     errores = validar_leccion(leccion_con(bloque))
     assert any(esperado in error for error in errores), errores
 
 
 def test_dinamicas_v43_validan():
+    """Comprueba que los ejemplos de shortcut_drill, transform_challenge y spot_error validan."""
     for tipo in ("shortcut_drill", "transform_challenge", "spot_error"):
         assert tipo in BLOQUES_INTERACTIVOS
         assert validar_leccion(leccion_con(EJEMPLOS_BLOQUES[tipo])) == [], tipo
@@ -254,11 +265,13 @@ def test_dinamicas_v43_validan():
     ],
 )
 def test_errores_de_dinamicas_v43(bloque, esperado):
+    """Comprueba el mensaje de error esperado en las dinámicas v4.3 mal formadas."""
     errores = validar_leccion(leccion_con(bloque))
     assert any(esperado in error for error in errores), errores
 
 
 def test_teoria_y_blender_se_intercalan():
+    """Comprueba que en el módulo 1 de Blender principiante la teoría y las prácticas se intercalan."""
     modulo = leer(MODULOS / "blender_principiante-modulo-1.json")
     assert validar_modulo(modulo) == []
     lecciones = modulo["module"]["lessons"]
@@ -275,6 +288,7 @@ def test_teoria_y_blender_se_intercalan():
 
 
 def test_tolerante_con_campos_extra_y_estricto_con_obligatorios():
+    """Comprueba que se aceptan campos extra y se exigen los obligatorios."""
     bloque = {**EJEMPLOS_BLOQUES["ordering"], "pista": "campo de una versión futura"}
     assert validar_leccion(leccion_con(bloque, autor={"nombre": "Ana"})) == []
     errores = validar_leccion({"id": "les 1", "type": "lectura"})
@@ -289,6 +303,7 @@ def test_tolerante_con_campos_extra_y_estricto_con_obligatorios():
 
 
 def test_un_ejemplo_valido_por_tipo_de_bloque():
+    """Comprueba que hay un ejemplo válido por cada tipo de bloque."""
     assert set(EJEMPLOS_BLOQUES) == set(TIPOS_BLOQUE)
     for tipo, bloque in EJEMPLOS_BLOQUES.items():
         assert bloque["type"] == tipo
@@ -296,6 +311,7 @@ def test_un_ejemplo_valido_por_tipo_de_bloque():
 
 
 def test_una_leccion_plantilla_por_paso():
+    """Comprueba que hay una lección plantilla válida por cada paso de la fórmula."""
     assert [paso["paso"] for paso in FORMULA] == list(PASOS_FORMULA)
     assert all(paso["nombre"] and paso["descripcion"] and paso["duracion"] for paso in FORMULA)
     for paso in PASOS_FORMULA:
@@ -311,6 +327,7 @@ def test_una_leccion_plantilla_por_paso():
 
 @pytest.mark.parametrize("curso", ["blender", "aframe", "otro"])
 def test_generar_esqueleto(curso):
+    """Comprueba que generar_esqueleto crea las lecciones de la fórmula con ids correlativos."""
     lecciones = generar_esqueleto(curso, f"mod_{curso}_002", "les_", 5)
     assert [x["id"] for x in lecciones] == ["les_005", "les_006", "les_007", "les_008", "les_009"]
     assert [x["formula"] for x in lecciones] == list(PASOS_FORMULA)
@@ -325,6 +342,7 @@ def test_generar_esqueleto(curso):
 @pytest.mark.parametrize("curso", ["blender_principiante", "blender_principiante_intermedio", "blender_intermedio", "blender"])
 def test_plantillas_de_blender_para_los_cursos_vigentes(curso):
     # Los cursos v3 (blender_*) usan la práctica y el reto de Blender, no los retos de código de A-Frame.
+    """Comprueba que los cursos de Blender vigentes usan las plantillas de Blender en cada paso."""
     assert es_curso_blender(curso)
     tipos = {
         x["formula"]: (x["type"], [b["type"] for b in x.get("contentBlocks", [])])
@@ -339,6 +357,7 @@ def test_plantillas_de_blender_para_los_cursos_vigentes(curso):
 
 
 def test_siguiente_numeracion_respeta_prefijos():
+    """Comprueba que siguiente_numeracion continúa el prefijo y ancho de los ids de cada curso."""
     blender = [x["id"] for x in leer(BLENDER)["module"]["lessons"]]
     aframe = [x["id"] for x in leer(AFRAME)["module"]["lessons"]]
     assert siguiente_numeracion(blender, "blender") == ("les_", 5, 3)
@@ -350,6 +369,7 @@ def test_siguiente_numeracion_respeta_prefijos():
 
 
 def test_catalogo_vacio(cliente):
+    """Comprueba que con las tablas vacías el catálogo responde cursos: []."""
     respuesta = cliente.get(CATALOGO)
     assert respuesta.status_code == 200
     datos = respuesta.json()
@@ -359,6 +379,7 @@ def test_catalogo_vacio(cliente):
 
 
 def test_importar_json_reales_y_catalogo_con_el_mismo_formato(cliente, capsys):
+    """Comprueba que tras importar los módulos el catálogo los devuelve en el formato del frontend."""
     importar_reales()
     datos = cliente.get(CATALOGO).json()
     assert [c["id"] for c in con_modulos(datos)] == ["blender", "aframe"]
@@ -384,6 +405,7 @@ def test_importar_json_reales_y_catalogo_con_el_mismo_formato(cliente, capsys):
 
 
 def test_catalogo_etag_y_304(cliente, crear_cuenta):
+    """Comprueba el ETag del catálogo, el 304 con If-None-Match y que cambia al editar contenido."""
     importar_reales()
     primera = cliente.get(CATALOGO)
     version = primera.json()["version"]
@@ -408,6 +430,7 @@ def test_catalogo_etag_y_304(cliente, crear_cuenta):
 
 
 def test_flujo_completo_de_un_modulo(cliente, crear_cuenta):
+    """Comprueba crear curso, módulo y lecciones, editarlas, publicarlas, moverlas y archivarlas desde la API."""
     _, admin = crear_cuenta(rol="admin")
     api = "/api/contenido"
     curso = {"id": "blender", "titulo": "Blender", "numero": "01", "estado": "publicado"}
@@ -534,6 +557,7 @@ def test_flujo_completo_de_un_modulo(cliente, crear_cuenta):
 
 
 def test_publicar_modulo_sin_lecciones_validas(cliente, crear_cuenta):
+    """Comprueba que publicar un módulo sin lecciones válidas responde 422 con la lista de errores."""
     _, admin = crear_cuenta(rol="admin")
     api = "/api/contenido"
     cliente.post(f"{api}/cursos", json={"id": "aframe", "titulo": "A-Frame", "estado": "publicado"}, headers=admin)
@@ -545,6 +569,7 @@ def test_publicar_modulo_sin_lecciones_validas(cliente, crear_cuenta):
 
 
 def test_permisos(cliente, crear_cuenta):
+    """Comprueba que alumnos no editan contenido, profesores solo leen y validan, y admins editan."""
     api = "/api/contenido"
     _, alumno = crear_cuenta(rol="alumno")
     _, profesor = crear_cuenta(rol="profesor")
@@ -585,11 +610,13 @@ def test_permisos(cliente, crear_cuenta):
 
 
 def test_cli_validar_json_reales(capsys):
+    """Comprueba que `contenido.py validar` pasa con los módulos reales."""
     assert cli.main(["validar"]) == 0
     assert " 0 con errores." in capsys.readouterr().out
 
 
 def test_cli_validar_json_roto(tmp_path, capsys):
+    """Comprueba que `contenido.py validar` sale con 1 ante un JSON mal formado."""
     mal_formado = tmp_path / "blender-modulo-3.json"
     mal_formado.write_text('{"module": {', encoding="utf-8")
     assert cli.main(["validar", str(mal_formado)]) == 1
@@ -612,6 +639,7 @@ def test_cli_validar_json_roto(tmp_path, capsys):
 
 
 def test_cli_validar_como_script():
+    """Comprueba que `python herramientas/contenido.py validar` funciona como script."""
     resultado = subprocess.run(
         [sys.executable, "herramientas/contenido.py", "validar"], cwd=BACKEND, capture_output=True, text=True
     )
@@ -619,6 +647,7 @@ def test_cli_validar_como_script():
 
 
 def test_cli_nuevo_modulo(tmp_path, capsys):
+    """Comprueba que `contenido.py nuevo-modulo` crea un módulo válido que continúa la numeración."""
     shutil.copy(BLENDER, tmp_path / BLENDER.name)
     argumentos = ["nuevo-modulo", "blender", "2", "Interfaz y navegación", "--insignia", "Navegante",
                   "--destino", str(tmp_path)]
@@ -638,6 +667,7 @@ def test_cli_nuevo_modulo(tmp_path, capsys):
 
 
 def test_cli_exportar(cliente, tmp_path):
+    """Comprueba que `contenido.py exportar` escribe el módulo de la base en formato de archivo."""
     importar_reales()
     salida = tmp_path / "exportado.json"
     assert cli.main(["exportar", "mod_teoria_001", str(salida)]) == 0
@@ -649,6 +679,7 @@ def test_cli_exportar(cliente, tmp_path):
 
 
 def test_cli_importar_rechaza_archivos_con_errores(cliente, tmp_path):
+    """Comprueba que `contenido.py importar` no importa nada si un archivo tiene errores."""
     roto = tmp_path / "aframe-modulo-1.json"
     datos = leer(AFRAME)
     datos["module"]["lessons"][0]["contentBlocks"] = []
@@ -659,6 +690,7 @@ def test_cli_importar_rechaza_archivos_con_errores(cliente, tmp_path):
 
 def test_texto_json_lee_igual_el_dict_de_oracle_y_el_texto_de_sqlite():
     # python-oracledb entrega como dict las columnas con CHECK (... IS JSON).
+    """Comprueba que TextoJSON devuelve el mismo texto compacto con dict (Oracle) o texto (SQLite)."""
     from database.modelos import TextoJSON
 
     tipo = TextoJSON()
@@ -669,6 +701,7 @@ def test_texto_json_lee_igual_el_dict_de_oracle_y_el_texto_de_sqlite():
 
 
 def test_arbol_marca_la_practica_en_blender(cliente, crear_cuenta):
+    """Comprueba que el árbol de contenido del panel marca las lecciones que son práctica en Blender."""
     _, admin = crear_cuenta(rol="admin")
     assert cli.main(["importar", str(BLENDER), str(MODULOS / "archivo" / "blender-modulo-2.json")]) == 0
     arbol = cliente.get("/api/contenido/admin/arbol", headers=admin).json()

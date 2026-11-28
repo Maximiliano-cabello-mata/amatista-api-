@@ -37,6 +37,7 @@ import math
 import time
 import uuid
 from dataclasses import dataclass, field
+# [REVISION-MUERTO] timedelta y Tuple (línea siguiente) se importan y no se usan.
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
@@ -124,10 +125,12 @@ def sin_esquema(error: SQLAlchemyError) -> bool:
 
 
 def _compactar(datos: Any) -> str:
+    """JSON compacto (acentos sin escapar) para la isla y los datos de eventos; ValueError ante NaN."""
     return json.dumps(datos, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def _leer_json(texto: Any) -> Any:
+    """Lee una columna JSON (dict/list ya decodificado o texto); None si está vacía o es inválida."""
     if isinstance(texto, (dict, list)):
         return texto
     try:
@@ -137,6 +140,7 @@ def _leer_json(texto: Any) -> Any:
 
 
 def _fecha(epoch: float) -> datetime:
+    """Convierte un epoch (segundos, reloj del add-on) en datetime UTC sin zona, como se guarda en Oracle."""
     return datetime.fromtimestamp(epoch, timezone.utc).replace(tzinfo=None)
 
 
@@ -146,6 +150,7 @@ def estado_legado(d: Dominio) -> str:
 
 
 def _dominio_de_fila(fila: HabilidadAlumno) -> Dict[str, Any]:
+    """Pasa una fila de HABILIDADES_ALUMNO (columnas de sql/012) al dict que entiende el modelo del motor."""
     return {
         "p": fila.dominio,
         "intentos": int(fila.intentos or 0),
@@ -161,6 +166,7 @@ def _dominio_de_fila(fila: HabilidadAlumno) -> Dict[str, Any]:
 
 
 def _volcar(fila: HabilidadAlumno, d: Dominio) -> None:
+    """Escribe un Dominio del motor en la fila, acotando cada número al tamaño de su columna, y rellena ESTADO legado."""
     fila.dominio = round(min(1.0, max(0.0, float(d.p))), 8)
     for campo, tope in TOPES.items():
         setattr(fila, campo, max(0, min(int(getattr(d, campo)), tope)))
@@ -172,6 +178,7 @@ def _volcar(fila: HabilidadAlumno, d: Dominio) -> None:
 
 
 def _parametros(cat: Optional[Catalogo]):
+    """Parámetros BKT de cada habilidad del catálogo ({id: bkt}); vacío si no hay catálogo."""
     return {hid: h.bkt for hid, h in cat.habilidades.items()} if cat else {}
 
 
@@ -193,6 +200,7 @@ def estado_de_filas(filas: Dict[str, HabilidadAlumno], cat: Optional[Catalogo]) 
 
 
 def filas_talleres(db: Session, usuario_id: str) -> Dict[str, TallerAlumno]:
+    """Filas de TALLERES_ALUMNO del alumno por taller_id (reto hecho e isla)."""
     return {f.taller_id: f for f in db.scalars(select(TallerAlumno).where(TallerAlumno.usuario_id == usuario_id))}
 
 
@@ -211,11 +219,16 @@ def proyectos_hechos(db: Session, usuario_id: str, cat: Optional[Catalogo]) -> L
 
 
 def completadas_de(proyectos: Iterable[str], talleres: Dict[str, TallerAlumno]) -> List[str]:
+    """Lo terminado que entiende el planificador: proyectos completados más «reto:<taller>» de cada reto hecho."""
     return list(proyectos) + [f"reto:{tid}" for tid, fila in sorted(talleres.items()) if fila.reto_hecho]
 
 
 @dataclass
 class Lectura:
+    """Todo lo que el servidor sabe del alumno en el taller, leído de Oracle.
+
+    `guardado` es False cuando falta sql/012 y el estado se devuelve vacío.
+    """
     estado: Dict[str, Dominio] = field(default_factory=dict)
     habilidades: Dict[str, HabilidadAlumno] = field(default_factory=dict)
     talleres: Dict[str, TallerAlumno] = field(default_factory=dict)
@@ -224,9 +237,11 @@ class Lectura:
 
     @property
     def completadas(self) -> List[str]:
+        """Proyectos y retos terminados (ver completadas_de)."""
         return completadas_de(self.proyectos, self.talleres)
 
     def isla(self, taller_id: str) -> Dict[str, Any]:
+        """Lo que el alumno eligió para su pieza de la isla en ese taller ({} si nada)."""
         fila = self.talleres.get(taller_id)
         valor = _leer_json(fila.isla) if fila is not None else None
         return valor if isinstance(valor, dict) else {}
@@ -261,6 +276,7 @@ def leer(db: Session, usuario_id: str, cat: Optional[Catalogo], ruta: str) -> Le
 
 
 def respuesta_estado(lectura: Lectura, momento: float) -> Dict[str, Any]:
+    """Respuesta común de GET /habilidades y POST /habilidades/intentos: estado, completadas, hora del servidor y guardado."""
     return {
         "estado": estado_a_dict(lectura.estado),
         "completadas": lectura.completadas,
@@ -383,6 +399,7 @@ class IntentoTaller(BaseModel):
 
 
 class IntentosTaller(BaseModel):
+    """Cuerpo de POST /habilidades/intentos: hasta 50 intentos y la versión del add-on."""
     intentos: List[IntentoTaller] = Field(default_factory=list, max_length=MAX_INTENTOS)
     version_addon: Optional[str] = Field(default=None, max_length=20)
 
@@ -400,6 +417,7 @@ class Proceso:
     rechazados: List[Dict[str, Any]] = field(default_factory=list)
 
     def rechazar(self, indice: int, intento: IntentoTaller, motivo: str) -> None:
+        """Anota un intento rechazado con su índice en el envío y el motivo (el add-on lo descarta de su cola)."""
         self.rechazados.append({"indice": indice, "actividad": intento.actividad, "motivo": motivo})
 
 
@@ -414,8 +432,14 @@ def _definicion_proyecto(db: Session, practica_id: str, usuario: Usuario) -> Opt
         practica = db.get(Practica, practica_id)
         if visible(practica, usuario):
             return definicion_de(db, practica, version_para(practica, usuario))
-    except (SQLAlchemyError, HTTPException):
-        pass
+    except SQLAlchemyError as error:
+        # Si la consulta falla, la sesión queda «pendiente de rollback» y las siguientes consultas de la
+        # misma petición (escribir el progreso) fallarían con PendingRollbackError: se deshace y se sigue
+        # con la práctica del repositorio.
+        db.rollback()
+        log.warning("No se pudo leer la práctica %s de la base; se usa la del repositorio: %s", practica_id, error)
+    except HTTPException:
+        pass  # la versión de la práctica no le corresponde al alumno: se usa la del repositorio
     carpeta = str(motor.CARPETA_PRACTICAS)
     if carpeta not in _REPOSITORIO:
         _REPOSITORIO[carpeta] = {d.get("id"): d for _, d in motor.practicas_del_repositorio()}
@@ -423,11 +447,13 @@ def _definicion_proyecto(db: Session, practica_id: str, usuario: Usuario) -> Opt
 
 
 def _ultimo(d: Optional[Dominio]) -> float:
+    """Epoch del último intento de la habilidad (0 si no hay): sirve para detectar reenvíos."""
     return float(d.ultimo) if d is not None and d.ultimo else 0.0
 
 
 def _evento(usuario: Usuario, taller, actividad, correcto: bool, ayuda: int, molde: bool, segundos: float,
             en: float, revisado: bool, verificada: bool, version_addon: Optional[str], momento: datetime):
+    """Construye el EventoAprendizaje activity_submitted de un intento del taller (datos abreviados ≤ 250 caracteres)."""
     datos = _compactar({"t": taller.id[:40], "a": actividad.id[:80], "k": actividad.tipo, "c": int(correcto),
                         "y": ayuda, "m": int(molde), "s": round(segundos, 1), "r": int(revisado),
                         "ok": int(verificada)})
@@ -452,6 +478,7 @@ def procesar(db: Session, usuario: Usuario, cat: Catalogo, estado: Dict[str, Dom
     fecha = ahora()
 
     def cuando(par):
+        """Clave de orden de los intentos: su fecha «en» (o `momento` si no es válida) y luego su posición."""
         en = par[1].en
         return (en if isinstance(en, (int, float)) and math.isfinite(en) else momento, par[0])
 
@@ -637,6 +664,7 @@ def registrar_intentos(cuerpo: IntentosTaller, request: Request, db: Session = D
 
 
 def _resumen(plan, isla: Dict[str, Any]) -> Dict[str, Any]:
+    """Resumen de un taller para GET /talleres: los campos de RESUMEN, la lección y la isla del alumno."""
     datos = plan.a_dict()
     salida = {clave: datos[clave] for clave in RESUMEN}
     salida["leccion"] = plan.taller.leccion

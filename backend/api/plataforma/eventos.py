@@ -35,6 +35,11 @@ MAX_DATOS = 250
 
 
 class EventoEntrada(BaseModel):
+    """Un evento de aprendizaje enviado por la PWA (lección abierta, completada, etc.).
+
+    `id` lo genera el dispositivo y hace idempotente el reenvío; `datos` es un
+    JSON pequeño opcional que se descarta si no cabe en 250 caracteres.
+    """
     id: str = Field(min_length=1, max_length=36)
     tipo: str
     curso_id: Optional[str] = Field(default=None, max_length=50)
@@ -48,12 +53,14 @@ class EventoEntrada(BaseModel):
     @field_validator("tipo")
     @classmethod
     def tipo_conocido(cls, valor: str) -> str:
+        """Valida que `tipo` sea uno de TIPOS_EVENTO (422 si no)."""
         if valor not in TIPOS_EVENTO:
             raise ValueError(f"Tipo de evento desconocido. Usa uno de: {', '.join(TIPOS_EVENTO)}.")
         return valor
 
 
 class SolicitudEventos(BaseModel):
+    """Cuerpo de POST /api/eventos: usuario_id (solo sin sesión) y de 1 a 200 eventos."""
     usuario_id: Optional[str] = Field(default=None, max_length=100)
     eventos: List[EventoEntrada] = Field(min_length=1, max_length=200)
 
@@ -75,6 +82,7 @@ def serializar_datos(valor: Any) -> Optional[str]:
 
 
 def fecha_evento(fecha: Optional[datetime], momento: datetime) -> datetime:
+    """Fecha que se guarda para el evento: la del dispositivo en UTC, o `momento` si falta o viene adelantada más de 5 min."""
     fecha = a_utc(fecha) or momento
     return momento if fecha > momento + TOLERANCIA_FUTURO else fecha
 
@@ -128,6 +136,13 @@ def guardar_eventos(
     actual: Optional[Usuario] = Depends(usuario_opcional),
     db: Session = Depends(obtener_db),
 ):
+    """POST /api/eventos. Alumno con sesión o anónimo; 300 peticiones/min por cuenta o IP.
+
+    Cuerpo: SolicitudEventos. Inserta solo los eventos cuyo id no existía
+    (reenvíos sin duplicar). Respuesta: {recibidos, nuevos}.
+    Errores: 422 cuerpo inválido o sin usuario_id; 401 id de cuenta registrada sin
+    sesión; 500 de base de datos. Reintenta una vez ante IntegrityError.
+    """
     unicos = sin_repetir(datos.eventos)
     momento = ahora()
     nuevos = 0

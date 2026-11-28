@@ -90,6 +90,8 @@ api.amatista-3dt.tech {
 	import api_amatista
 }
 
+# [REVISION-ROTO] api.amatista-3d.tech ya no resuelve DNS (curl 000, 2026-11-27): este bloque y origen.pem/key sobran. Decidir si se retira.
+# (api.amatista-3dt.tech responde 200 en /api/salud y 404 en /docs y /openapi.json, como se espera.)
 api.amatista-3d.tech {
 	tls /etc/caddy/certs/origen.pem /etc/caddy/certs/origen.key
 	import api_amatista

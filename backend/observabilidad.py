@@ -40,6 +40,7 @@ def _miga(miga, _pista=None):
 
 
 def _proporcion(nombre: str) -> float:
+    """Lee una proporción 0-1 de la variable de entorno (p. ej. SENTRY_TRAZAS), acotada; 0 si falta o no es número."""
     try:
         return min(max(float(os.getenv(nombre, "0") or 0), 0.0), 1.0)
     except ValueError:

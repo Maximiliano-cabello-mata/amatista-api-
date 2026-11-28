@@ -44,6 +44,11 @@ Insignia = Annotated[str, Field(min_length=1, max_length=100)]
 
 
 class EventoProgreso(BaseModel):
+    """Avance de un alumno en una lección tal como lo manda la PWA.
+
+    Puntaje 0-100 e intentos acumulados; `datos_ligeros` admite un objeto JSON
+    pequeño (lo que no cabe se ignora sin 422 para no atascar la cola offline).
+    """
     curso_id: str = Field(min_length=1, max_length=50)
     leccion_id: str = Field(min_length=1, max_length=50)
     completada: bool = False
@@ -59,12 +64,14 @@ class EventoProgreso(BaseModel):
 
 
 class SolicitudProgreso(BaseModel):
+    """Cuerpo de POST /api/progreso: usuario_id (solo sin sesión), hasta 500 eventos y 100 insignias."""
     usuario_id: Optional[str] = Field(default=None, max_length=100)
     eventos: List[EventoProgreso] = Field(default_factory=list, max_length=500)
     insignias: Optional[List[Insignia]] = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
     def con_algo_que_guardar(self):
+        """Rechaza la solicitud sin eventos ni insignias (422)."""
         if not self.eventos and not self.insignias:
             raise ValueError("Envía al menos un evento de progreso o una insignia.")
         return self
@@ -82,6 +89,10 @@ def a_utc(fecha: Optional[datetime]) -> Optional[datetime]:
 
 def compactar(objeto: dict) -> str:
     # allow_nan=False: NaN no es JSON válido (Oracle lo rechazaría con IS JSON).
+    """Serializa un dict a JSON compacto, sin espacios, para medir y guardar datos_ligeros.
+
+    Lanza ValueError si hay NaN/Infinito (Oracle lo rechazaría con IS JSON).
+    """
     return json.dumps(objeto, separators=(",", ":"), allow_nan=False)
 
 
@@ -117,11 +128,13 @@ def unir_datos(guardado: Optional[dict], nuevo: Optional[dict]) -> Optional[dict
 
 
 def minimo_no_nulo(a: Optional[datetime], b: Optional[datetime]) -> Optional[datetime]:
+    """La fecha más antigua de las dos ignorando None; conserva el primer día en que se completó la lección."""
     fechas = [f for f in (a, b) if f is not None]
     return min(fechas) if fechas else None
 
 
 def iso(fecha: Optional[datetime]) -> Optional[str]:
+    """Fecha en formato ISO 8601, o None si no hay fecha."""
     return fecha.isoformat() if fecha else None
 
 
@@ -135,6 +148,7 @@ def registrar_acceso(usuario: Optional[Usuario], momento: datetime) -> None:
 
 
 def fila_publica(fila: ProgresoLeccion) -> dict:
+    """Serializa una fila de PROGRESO_LECCIONES al formato que la PWA combina con su progreso local."""
     return {
         "curso_id": fila.curso_id,
         "leccion_id": fila.leccion_id,
@@ -331,6 +345,12 @@ def leer_progreso(
     actual: Optional[Usuario] = Depends(usuario_opcional),
     db: Session = Depends(obtener_db),
 ):
+    """GET /api/progreso/{usuario_id}. Propio alumno, profesor o admin; anónimos sin sesión por su id.
+
+    Respuesta: progreso_de (lecciones e insignias). Errores: 401 si es una cuenta
+    registrada y no hay sesión; 403 si la sesión no es del alumno ni de un
+    profesor/admin; 500 de base de datos.
+    """
     try:
         if not puede_ver_alumno(db, actual, usuario_id):
             if actual is None:

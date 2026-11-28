@@ -1,3 +1,4 @@
+"""Pruebas de diagnostico_oracle.py sin Oracle real (cabecera añadida en la revisión 2026-11-27)."""
 import diagnostico_oracle
 from diagnostico_oracle import (
     ESPERADO,
@@ -11,6 +12,7 @@ from diagnostico_oracle import (
 
 
 def esquema_correcto():
+    """Esquema real simulado idéntico al ESPERADO."""
     return {tabla: dict(columnas) for tabla, columnas in ESPERADO.items()}
 
 
@@ -38,12 +40,14 @@ def esquema_001():
 
 
 def test_esquema_correcto_no_tiene_problemas():
+    """Comprueba que un esquema correcto (con TIMESTAMP(6)) no reporta problemas."""
     real = esquema_correcto()
     real["USUARIOS"]["CREADO_EN"] = "TIMESTAMP(6)"
     assert comparar(real) == []
 
 
 def test_esperado_incluye_las_tablas_completas():
+    """Comprueba que ESPERADO incluye todas las tablas de sql/001 a 016."""
     assert set(ESPERADO) == {
         "USUARIOS",
         "SESIONES",
@@ -112,6 +116,7 @@ def test_base_con_005_pide_solo_007():
 
 
 def sin_columnas_008(real):
+    """Quita del esquema simulado las columnas de sql/008."""
     for tabla, columna in diagnostico_oracle.COLUMNAS_008:
         real[tabla].pop(columna, None)
     return real
@@ -129,6 +134,7 @@ def test_produccion_actual_pide_007_y_008():
 
 
 def test_base_con_007_pide_solo_008():
+    """Comprueba que a una base con 007 se le recomienda solo 008."""
     real = sin_columnas_008({tabla: dict(columnas) for tabla, columnas in ESPERADO.items()})
     assert any("RUTA" in problema for problema in comparar(real))
     recomendacion = " ".join(solucion(real))
@@ -148,6 +154,7 @@ def test_base_con_009_pide_solo_010():
 
 
 def test_base_sin_005_pide_005_006_y_007():
+    """Comprueba que a una base sin 005 se le recomiendan 005, 006 y 007 en orden."""
     real = {
         tabla: dict(columnas)
         for tabla, columnas in ESPERADO.items()
@@ -159,6 +166,7 @@ def test_base_sin_005_pide_005_006_y_007():
 
 
 def test_detecta_tabla_faltante_y_tipo_numerico():
+    """Comprueba que se detecta una tabla faltante y un id NUMBER donde se espera texto."""
     real = esquema_correcto()
     del real["PROGRESO_LECCIONES"]
     real["SESIONES"]["USUARIO_ID"] = "NUMBER"
@@ -168,6 +176,7 @@ def test_detecta_tabla_faltante_y_tipo_numerico():
 
 
 def test_base_de_001_pide_columnas_y_tablas_de_002():
+    """Comprueba que una base de 001 reporta las columnas y tablas de 002 que faltan."""
     problemas = comparar(esquema_001())
     assert "Falta la columna USUARIOS.EMAIL." in problemas
     assert "Falta la columna SESIONES.EXPIRA_EN." in problemas
@@ -178,18 +187,21 @@ def test_base_de_001_pide_columnas_y_tablas_de_002():
 
 
 def test_base_vacia_recomienda_001_y_luego_002():
+    """Comprueba que a una base vacía se le recomiendan 001 y luego 002."""
     recomendacion = " ".join(solucion({"DBTOOLS$EXECUTION_HISTORY": {"ID": "NUMBER"}}))
     assert "001_esquema_amatista.sql" in recomendacion
     assert "002_autenticacion_contenido_eventos.sql" in recomendacion
 
 
 def test_tablas_en_otro_esquema_piden_db_esquema_y_no_001():
+    """Comprueba que si las tablas están en otro esquema se recomienda DB_ESQUEMA y no ejecutar 001."""
     recomendacion = " ".join(solucion({}, otros_esquemas=("ADMIN",)))
     assert "DB_ESQUEMA=ADMIN" in recomendacion
     assert "NO ejecutes 001" in recomendacion
 
 
 def test_ids_numericos_del_diseno_anterior():
+    """Comprueba que los ids NUMBER del diseño anterior aparecen en la recomendación."""
     real = esquema_001()
     real["USUARIOS"]["ID"] = "NUMBER"
     recomendacion = " ".join(solucion(real))
@@ -198,6 +210,7 @@ def test_ids_numericos_del_diseno_anterior():
 
 
 def test_sesiones_id_de_36_no_alcanza_para_el_hash():
+    """Comprueba que SESIONES.ID de 36 caracteres se reporta (el hash necesita 64)."""
     problemas = revisar_longitudes({("SESIONES", "ID"): 36, ("USUARIOS", "ID"): 100})
     assert len(problemas) == 1
     assert "SESIONES.ID admite 36" in problemas[0] and "64" in problemas[0]
@@ -207,6 +220,7 @@ def test_sesiones_id_de_36_no_alcanza_para_el_hash():
 
 
 def test_falta_unique_de_email():
+    """Comprueba que se reporta la falta de UNIQUE en USUARIOS.EMAIL."""
     real = esquema_correcto()
     assert revisar_email_unico(real, email_unico=True) == []
     problemas = revisar_email_unico(real, email_unico=False)
@@ -216,6 +230,7 @@ def test_falta_unique_de_email():
 
 
 def test_resumen_de_espacio_contra_20_gb():
+    """Comprueba el resumen de espacio usado contra el límite de 20 GB del Free Tier."""
     mb = 1048576
     espacio = resumir_espacio(
         [("USUARIOS", 2 * mb), ("EVENTOS_APRENDIZAJE", 1024 * mb), ("EVENTOS_APRENDIZAJE", 1024 * mb), ("X", None)]
@@ -226,18 +241,21 @@ def test_resumen_de_espacio_contra_20_gb():
 
 
 def test_senala_tablas_obsoletas():
+    """Comprueba que se señalan las tablas de versiones anteriores."""
     real = esquema_correcto()
     real["SESIONES_WEB"] = {"ID": "VARCHAR2"}
     assert obsoletas(real) == ["SESIONES_WEB"]
 
 
 def test_con_sqlite_avisa_que_es_para_oracle(tmp_path, monkeypatch, capsys):
+    """Comprueba que con SQLite el diagnóstico avisa que es para Oracle y sale con 1."""
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'diagnostico.db'}")
     assert diagnostico_oracle.main() == 1
     assert "es para Oracle" in capsys.readouterr().out
 
 
 def test_base_con_010_pide_011_sin_recrear_tablas():
+    """Comprueba que sin ADDON_ENLACES.DETALLE se recomienda 011 sin recrear tablas."""
     real = esquema_correcto()
     del real['ADDON_ENLACES']['DETALLE']
     assert 'Falta la columna ADDON_ENLACES.DETALLE.' in comparar(real)
@@ -254,6 +272,7 @@ def test_base_con_013_pide_solo_014():
 
 
 def test_base_sin_013_ni_014_pide_los_dos_en_orden():
+    """Comprueba que sin 013 ni 014 se recomiendan los dos en ese orden."""
     real = {tabla: dict(columnas) for tabla, columnas in ESPERADO.items()
             if tabla not in diagnostico_oracle.TABLAS_013 + diagnostico_oracle.TABLAS_014}
     recomendacion = " ".join(solucion(real))

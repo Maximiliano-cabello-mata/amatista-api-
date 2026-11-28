@@ -39,6 +39,7 @@ SIN_013 = "El buzón todavía no está listo en el servidor (falta sql/013_avata
 
 
 def _texto(valor: str) -> str:
+    """Limpia espacios del mensaje y exige al menos 3 caracteres (ValueError → 422)."""
     valor = valor.strip()
     if len(valor) < 3:
         raise ValueError("Escribe al menos unas palabras.")
@@ -46,6 +47,7 @@ def _texto(valor: str) -> str:
 
 
 class SolicitudSugerencia(BaseModel):
+    """Cuerpo de POST /api/buzon: categoría (CATEGORIAS_SUGERENCIA), texto de hasta 2000 caracteres y página opcional."""
     categoria: str
     texto: str = Field(max_length=2000)
     pagina: Optional[str] = Field(default=None, max_length=200)
@@ -53,6 +55,7 @@ class SolicitudSugerencia(BaseModel):
     @field_validator("categoria")
     @classmethod
     def _categoria(cls, valor: str) -> str:
+        """Valida que la categoría sea error, idea, contenido u otra."""
         if valor not in CATEGORIAS_SUGERENCIA:
             raise ValueError("Elige de qué trata: error, idea, contenido u otra.")
         return valor
@@ -60,30 +63,36 @@ class SolicitudSugerencia(BaseModel):
     @field_validator("texto")
     @classmethod
     def _limpio(cls, valor: str) -> str:
+        """Aplica _texto al primer mensaje de la conversación."""
         return _texto(valor)
 
 
 class SolicitudMensaje(BaseModel):
+    """Cuerpo de los mensajes siguientes (alumno o creador): texto de 3 a 2000 caracteres."""
     texto: str = Field(max_length=2000)
 
     @field_validator("texto")
     @classmethod
     def _limpio(cls, valor: str) -> str:
+        """Aplica _texto al mensaje."""
         return _texto(valor)
 
 
 class SolicitudEstado(BaseModel):
+    """Cuerpo de POST /api/buzon/bandeja/{id}/estado: abierta, respondida o resuelta."""
     estado: str
 
     @field_validator("estado")
     @classmethod
     def _estado(cls, valor: str) -> str:
+        """Valida que el estado sea uno de ESTADOS_SUGERENCIA."""
         if valor not in ESTADOS_SUGERENCIA:
             raise ValueError("Estado no válido.")
         return valor
 
 
 def _fallo(db: Session, error: SQLAlchemyError, ruta: str) -> HTTPException:
+    """Deshace la transacción y traduce el error de BD: 503 si falta sql/013, si no el error_bd normal."""
     db.rollback()
     if sin_esquema(error):
         return HTTPException(status_code=503, detail=SIN_013)
@@ -91,6 +100,7 @@ def _fallo(db: Session, error: SQLAlchemyError, ruta: str) -> HTTPException:
 
 
 def _mensajes(db: Session, ids: List[str]) -> dict:
+    """Mensajes de varias conversaciones en una sola consulta, agrupados por id y en orden cronológico."""
     por_conversacion = {i: [] for i in ids}
     if not ids:
         return por_conversacion
@@ -105,6 +115,7 @@ def _mensajes(db: Session, ids: List[str]) -> dict:
 
 
 def _conversacion(s: Sugerencia, mensajes: list, extra: Optional[dict] = None) -> dict:
+    """Serializa una conversación con sus mensajes; `extra` añade datos (p. ej. el alumno en la bandeja)."""
     datos = {
         "id": s.id,
         "categoria": s.categoria,
@@ -122,12 +133,14 @@ def _conversacion(s: Sugerencia, mensajes: list, extra: Optional[dict] = None) -
 
 
 def _cuenta_con_correo(usuario: Usuario = Depends(usuario_requerido)) -> Usuario:
+    """Dependencia: exige sesión de una cuenta registrada (401 si no), para que el alumno pueda recibir la respuesta."""
     if not es_cuenta_registrada(usuario):
         raise HTTPException(status_code=401, detail="Entra con tu cuenta para escribirle al creador y recibir su respuesta.")
     return usuario
 
 
 def _propia(db: Session, sugerencia_id: str, usuario: Usuario) -> Sugerencia:
+    """Conversación del propio alumno; 404 si no existe o es de otro (no revela que exista)."""
     s = db.get(Sugerencia, sugerencia_id)
     if s is None or s.usuario_id != usuario.id:
         raise HTTPException(status_code=404, detail="No encontramos esa conversación.")
@@ -135,6 +148,12 @@ def _propia(db: Session, sugerencia_id: str, usuario: Usuario) -> Sugerencia:
 
 
 def _agregar(db: Session, s: Sugerencia, autor: Usuario, texto: str, de_creador: bool) -> None:
+    """Añade un mensaje a la conversación y actualiza estado y marcas de no leído (sin commit).
+
+    Si escribe el creador, marca no leído para el alumno y pasa "abierta" a
+    "respondida"; si escribe el alumno, la reabre y avisa al creador.
+    Lanza 409 al llegar a MAX_MENSAJES (40) mensajes.
+    """
     total = db.scalar(select(func.count()).select_from(MensajeSugerencia).where(MensajeSugerencia.sugerencia_id == s.id))
     if total >= MAX_MENSAJES:
         raise HTTPException(status_code=409, detail="Esta conversación ya es muy larga: abre una nueva.")
@@ -158,6 +177,11 @@ def _agregar(db: Session, s: Sugerencia, autor: Usuario, texto: str, de_creador:
 
 @router.get("")
 def mis_conversaciones(usuario: Usuario = Depends(_cuenta_con_correo), db: Session = Depends(obtener_db)):
+    """GET /api/buzon. Cuenta registrada con sesión.
+
+    Respuesta: {conversaciones: [...]} (las 30 más recientes, con mensajes y sin_leer).
+    Errores: 401 sin cuenta; 503 sin sql/013; 500 de base de datos.
+    """
     try:
         lista = list(db.scalars(
             select(Sugerencia).where(Sugerencia.usuario_id == usuario.id).order_by(Sugerencia.actualizada_en.desc()).limit(30)
@@ -170,6 +194,12 @@ def mis_conversaciones(usuario: Usuario = Depends(_cuenta_con_correo), db: Sessi
 
 @router.post("", status_code=201, dependencies=[Depends(LIMITE_MENSAJES)])
 def abrir(datos: SolicitudSugerencia, usuario: Usuario = Depends(_cuenta_con_correo), db: Session = Depends(obtener_db)):
+    """POST /api/buzon. Cuenta registrada; 10 mensajes/hora por cuenta. Responde 201.
+
+    Cuerpo: SolicitudSugerencia. Crea la conversación (SUGERENCIAS) y su primer
+    mensaje. Respuesta: la conversación. Errores: 401; 422 categoría/texto
+    inválidos; 429 límite; 503 sin sql/013; 500 de base de datos.
+    """
     momento = ahora()
     s = Sugerencia(id=uuid.uuid4().hex, usuario_id=usuario.id, categoria=datos.categoria, pagina=datos.pagina,
                    estado="abierta", sin_leer_alumno=0, sin_leer_creador=1, creada_en=momento, actualizada_en=momento)
@@ -187,6 +217,11 @@ def abrir(datos: SolicitudSugerencia, usuario: Usuario = Depends(_cuenta_con_cor
 @router.post("/{sugerencia_id}/mensajes", status_code=201, dependencies=[Depends(LIMITE_MENSAJES)])
 def escribir(sugerencia_id: str, datos: SolicitudMensaje, usuario: Usuario = Depends(_cuenta_con_correo),
              db: Session = Depends(obtener_db)):
+    """POST /api/buzon/{sugerencia_id}/mensajes. Dueño de la conversación; 10/hora por cuenta. Responde 201.
+
+    Cuerpo: SolicitudMensaje. Respuesta: la conversación actualizada.
+    Errores: 401; 404 no es suya o no existe; 409 conversación llena (40); 422; 429; 503.
+    """
     try:
         s = _propia(db, sugerencia_id, usuario)
         _agregar(db, s, usuario, datos.texto, de_creador=False)
@@ -199,6 +234,10 @@ def escribir(sugerencia_id: str, datos: SolicitudMensaje, usuario: Usuario = Dep
 
 @router.post("/{sugerencia_id}/leida")
 def marcar_leida(sugerencia_id: str, usuario: Usuario = Depends(_cuenta_con_correo), db: Session = Depends(obtener_db)):
+    """POST /api/buzon/{sugerencia_id}/leida. Dueño de la conversación.
+
+    Apaga la marca de respuesta sin leer. Respuesta: {ok: true}. Errores: 401; 404; 503.
+    """
     try:
         s = _propia(db, sugerencia_id, usuario)
         s.sin_leer_alumno = 0
@@ -215,6 +254,11 @@ solo_admin = requiere_rol("admin")
 
 @router.get("/bandeja")
 def bandeja(estado: Optional[str] = None, usuario: Usuario = Depends(solo_admin), db: Session = Depends(obtener_db)):
+    """GET /api/buzon/bandeja?estado=. Solo admin (el creador y el equipo).
+
+    Respuesta: {sin_leer, es_creador, conversaciones: [... con alumno {nombre, email, avatar}]},
+    hasta 100, primero las no leídas. Errores: 401/403; 422 estado inválido; 503.
+    """
     if estado is not None and estado not in ESTADOS_SUGERENCIA:
         raise HTTPException(status_code=422, detail="Estado no válido.")
     try:
@@ -241,6 +285,11 @@ def bandeja(estado: Optional[str] = None, usuario: Usuario = Depends(solo_admin)
 @router.post("/bandeja/{sugerencia_id}/responder", status_code=201)
 def responder(sugerencia_id: str, datos: SolicitudMensaje, usuario: Usuario = Depends(solo_admin),
               db: Session = Depends(obtener_db)):
+    """POST /api/buzon/bandeja/{sugerencia_id}/responder. Solo admin. Responde 201.
+
+    Cuerpo: SolicitudMensaje; el mensaje queda como del creador (DE_CREADOR=1).
+    Respuesta: la conversación. Errores: 401/403; 404; 409 conversación llena; 503.
+    """
     try:
         s = db.get(Sugerencia, sugerencia_id)
         if s is None:
@@ -256,6 +305,11 @@ def responder(sugerencia_id: str, datos: SolicitudMensaje, usuario: Usuario = De
 @router.post("/bandeja/{sugerencia_id}/estado")
 def cambiar_estado(sugerencia_id: str, datos: SolicitudEstado, usuario: Usuario = Depends(solo_admin),
                    db: Session = Depends(obtener_db)):
+    """POST /api/buzon/bandeja/{sugerencia_id}/estado. Solo admin.
+
+    Cuerpo: SolicitudEstado. Cambia el estado y la marca como leída por el creador.
+    Respuesta: {id, estado}. Errores: 401/403; 404; 422; 503.
+    """
     try:
         s = db.get(Sugerencia, sugerencia_id)
         if s is None:

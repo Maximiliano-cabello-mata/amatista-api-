@@ -18,6 +18,7 @@ CARPETA = motor.construir.CARPETA_PAQUETE
 
 
 def extension_de(paquete: bytes) -> zipfile.ZipFile:
+    """Abre la extensión .zip guardada sin comprimir dentro del paquete con instalador."""
     exterior = zipfile.ZipFile(io.BytesIO(paquete))
     interior = exterior.getinfo(f"{CARPETA}/amatista-{motor.VERSION_ADDON}.zip")
     # La extensión va guardada tal cual (ya viene comprimida).
@@ -26,6 +27,7 @@ def extension_de(paquete: bytes) -> zipfile.ZipFile:
 
 
 def test_el_paquete_trae_la_integridad_de_cada_archivo():
+    """Comprueba que integridad.json lista la huella de cada archivo fijo de la extensión."""
     extension = zipfile.ZipFile(io.BytesIO(motor.construir.construir_extension()))
     integridad = json.loads(extension.read("integridad.json"))
     variables = {"config.json", "integridad.json", "licencia.json"}
@@ -44,6 +46,7 @@ def test_el_mismo_codigo_da_el_mismo_paquete():
 
 
 def test_descarga_con_cuenta_trae_marca_de_agua_firmada(cliente, crear_cuenta, monkeypatch, tmp_path, capsys):
+    """Comprueba que la descarga con sesión trae licencia.json firmada para esa cuenta y que no se puede cambiar de dueño."""
     monkeypatch.setenv("AMATISTA_SECRETO_FIRMA", "secreto-de-prueba")
     alumno_id, alumno = crear_cuenta()
     personal = cliente.get(f"{API}/descargas/windows", headers=alumno)
@@ -67,6 +70,7 @@ def test_descarga_con_cuenta_trae_marca_de_agua_firmada(cliente, crear_cuenta, m
 
 
 def test_intento_de_copia_no_verificada(cliente, crear_cuenta, monkeypatch):
+    """Comprueba que una copia no oficial se acepta y marca por defecto y se rechaza (403) a alumnos con la política «exigir»."""
     from database import conexion
     from database.modelos import EventoAprendizaje
     from sqlalchemy import select

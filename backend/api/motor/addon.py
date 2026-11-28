@@ -115,14 +115,17 @@ LIMITE_DESCARGAS = limitar(60)  # un aula baja el instalador al mismo tiempo
 
 
 def es_equipo(usuario: Optional[Usuario]) -> bool:
+    """Indica si el usuario es del equipo (profesor o admin): ve borradores y estadísticas de prácticas."""
     return usuario is not None and usuario.rol in ("profesor", "admin")
 
 
 def compactar(objeto: Any) -> str:
+    """JSON compacto (sin escapar acentos) para guardar objetivos y datos de eventos; ValueError ante NaN."""
     return json.dumps(objeto, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def leer(texto: Optional[str]) -> Any:
+    """Decodifica un JSON guardado (definición, objetivos); None si está vacío o corrupto."""
     try:
         return json.loads(texto) if texto else None
     except ValueError:
@@ -138,6 +141,7 @@ def secreto_firma() -> bytes:
 
 
 def firmar(datos: Dict[str, Any]) -> Optional[str]:
+    """Firma HMAC-SHA256 del dict canónico con AMATISTA_SECRETO_FIRMA; None si el secreto no está configurado."""
     secreto = secreto_firma()
     if not secreto:
         return None
@@ -158,6 +162,10 @@ def licencia_para(usuario: Optional[Usuario]) -> Dict[str, Any]:
 
 
 def licencia_valida(licencia: Dict[str, Any]) -> bool:
+    """Comprueba que la marca de agua de una descarga no se modificó (firma HMAC en tiempo constante).
+
+    La usan herramientas/verificar_licencia.py y las pruebas; sin secreto configurado siempre es False.
+    """
     datos = {k: v for k, v in licencia.items() if k != "firma"}
     firma = firmar(datos)
     return bool(firma and licencia.get("firma") and hmac.compare_digest(firma, str(licencia["firma"])))
@@ -183,10 +191,14 @@ def politica_copias() -> str:
 
 def url_api(request: Request) -> str:
     """Dirección pública de esta API (AMATISTA_URL_API detrás de Caddy)."""
+    # [REVISION-SEGURIDAD] Sin AMATISTA_URL_API se usa el Host de la petición: un Host falso genera un .zip PÚBLICO (Cache-Control public,
+    # max-age=300) con otro servidor incrustado; si una caché intermedia lo guarda por URL, otros alumnos bajan un add-on que
+    # envía su sesión a ese servidor. Hacer obligatoria AMATISTA_URL_API en producción.
     return (os.getenv("AMATISTA_URL_API") or str(request.base_url)).rstrip("/")
 
 
 def origen_permitido(origen: str) -> bool:
+    """Indica si un Origin es localhost o está en CORS_ORIGINS (para confiar en él como URL de la PWA)."""
     if re.fullmatch(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", origen):
         return True
     return origen in [o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
@@ -202,11 +214,13 @@ def url_pwa(request: Request) -> str:
 
 
 def nuevo_codigo() -> str:
+    """Código de vínculo legible «ABCD-EFGH» sin caracteres confundibles (I, L, O, 0, 1)."""
     letras = "".join(secrets.choice(ALFABETO) for _ in range(8))
     return f"{letras[:4]}-{letras[4:]}"
 
 
 def normalizar_codigo(codigo: str) -> Optional[str]:
+    """Normaliza lo que escribe el alumno (sin espacios/guiones, en mayúsculas) a «XXXX-XXXX»; None si no tiene forma de código."""
     limpio = re.sub(r"[\s-]", "", codigo or "").upper()
     if not PATRON_CODIGO.match(limpio):
         return None
@@ -242,6 +256,7 @@ def crear_vinculo(db: Session, dispositivo: str, momento: datetime, duracion: ti
 
 
 def dispositivo_addon(texto: Optional[str]) -> str:
+    """Descripción del dispositivo con el prefijo «blender-addon»: así dependencias.py restringe esa sesión a las rutas del add-on."""
     texto = " ".join((texto or "").split())[:180]
     if not texto.startswith(PREFIJO_DISPOSITIVO):
         texto = f"{PREFIJO_DISPOSITIVO} {texto}".strip()
@@ -249,6 +264,7 @@ def dispositivo_addon(texto: Optional[str]) -> str:
 
 
 def visible(practica: Optional[Practica], usuario: Optional[Usuario]) -> bool:
+    """Indica si el usuario puede ver la práctica: el equipo siempre; los alumnos solo si tiene versión publicada."""
     if practica is None:
         return False
     if es_equipo(usuario):
@@ -257,6 +273,7 @@ def visible(practica: Optional[Practica], usuario: Optional[Usuario]) -> bool:
 
 
 def obtener_practica(db: Session, practica_id: str, usuario: Optional[Usuario]) -> Practica:
+    """Práctica visible para el usuario o 404 (no distingue entre inexistente y sin publicar)."""
     practica = db.get(Practica, practica_id)
     if not visible(practica, usuario):
         raise HTTPException(status_code=404, detail="No existe esa práctica o todavía no está publicada.")
@@ -271,6 +288,7 @@ def version_para(practica: Practica, usuario: Optional[Usuario]) -> int:
 
 
 def definicion_de(db: Session, practica: Practica, version: int) -> Dict[str, Any]:
+    """JSON de la definición de la práctica en esa versión (la vigente o la del historial); 404 si no existe."""
     if version == practica.version:
         return leer(practica.definicion)
     fila = db.get(PracticaVersion, (practica.id, version))
@@ -280,6 +298,7 @@ def definicion_de(db: Session, practica: Practica, version: int) -> Dict[str, An
 
 
 def progreso_meta(fila: Optional[ProgresoPractica]) -> Optional[dict]:
+    """Serializa el avance del alumno en una práctica (PROGRESO_PRACTICAS), o None si nunca la abrió."""
     if fila is None:
         return None
     return {
@@ -353,6 +372,10 @@ def pasos_de(definicion: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def practica_meta(practica: Practica, definicion: Dict[str, Any], version: int,
                   progreso: Optional[ProgresoPractica] = None, equipo: bool = False) -> dict:
+    """Resumen de una práctica para la lista del add-on y la PWA (título, pasos y mi_progreso).
+
+    Con `equipo` añade estado, versiones, origen y fechas de publicación.
+    """
     meta = {
         "id": practica.id,
         "titulo": definicion.get("title") or practica.titulo,
@@ -378,6 +401,7 @@ def practica_meta(practica: Practica, definicion: Dict[str, Any], version: int,
 
 
 def cerrar(db: Session, ruta: str) -> None:
+    """Commit de las rutas del add-on; ante error de base de datos hace rollback y responde 503 (error_bd)."""
     try:
         db.commit()
     except SQLAlchemyError as error:
@@ -389,10 +413,12 @@ def cerrar(db: Session, ruta: str) -> None:
 
 
 def carpeta_instaladores() -> Path:
+    """Carpeta con los instaladores .exe/.deb: AMATISTA_INSTALADORES o backend/instaladores por defecto."""
     return Path(os.getenv("AMATISTA_INSTALADORES") or Path(__file__).resolve().parents[1] / "instaladores")
 
 
 def _orden_version(ruta: Path) -> Tuple[int, ...]:
+    """Clave de orden numérica a partir de los números del nombre del archivo (para elegir el instalador más nuevo)."""
     numeros = re.findall(r"\d+", ruta.name)
     return tuple(int(n) for n in numeros)
 
@@ -427,11 +453,18 @@ def estado(request: Request):
 
 
 class VinculoNuevo(BaseModel):
+    """Cuerpo de POST /vinculos: descripción opcional del Blender que pide el código."""
     dispositivo: Optional[str] = Field(default=None, max_length=200)
 
 
 @router.post("/vinculos", status_code=201, dependencies=[Depends(LIMITE_VINCULOS)])
 def pedir_vinculo(cuerpo: VinculoNuevo, request: Request, db: Session = Depends(obtener_db)):
+    """POST /api/addon/v1/vinculos. Público (lo llama el add-on); 20 peticiones/min por IP. Responde 201.
+
+    Crea un vínculo pendiente de 10 minutos. Respuesta: {vinculo_id, codigo,
+    secreto, expira_en_segundos, url_vincular}; el secreto en claro solo viaja
+    aquí (se guarda su hash). Errores: 429; 503 de base de datos.
+    """
     momento = ahora()
     fila, secreto = crear_vinculo(db, dispositivo_addon(cuerpo.dispositivo), momento, DURACION_VINCULO)
     cerrar(db, "/api/addon/v1/vinculos")
@@ -446,12 +479,19 @@ def pedir_vinculo(cuerpo: VinculoNuevo, request: Request, db: Session = Depends(
 
 
 class Confirmacion(BaseModel):
+    """Cuerpo de POST /vinculos/confirmar: el código que el alumno copia de Blender."""
     codigo: str = Field(min_length=8, max_length=12)
 
 
 @router.post("/vinculos/confirmar", dependencies=[Depends(LIMITE_CONFIRMAR)])
 def confirmar_vinculo(cuerpo: Confirmacion, db: Session = Depends(obtener_db),
                       usuario: Usuario = Depends(usuario_requerido)):
+    """POST /api/addon/v1/vinculos/confirmar. Requiere sesión de la PWA; 10 peticiones/min por IP.
+
+    Asocia el código a la cuenta y lo deja «listo» para que el add-on lo canjee.
+    Respuesta: {estado: "listo", dispositivo}. Errores: 401; 404 código
+    inexistente, vencido o canjeado; 409 ya lo confirmó otra cuenta; 429.
+    """
     codigo = normalizar_codigo(cuerpo.codigo)
     fila = db.scalar(select(AddonVinculo).where(AddonVinculo.codigo == codigo)) if codigo else None
     if fila is None or fila.expira_en <= ahora() or fila.estado == "canjeado":
@@ -465,12 +505,20 @@ def confirmar_vinculo(cuerpo: Confirmacion, db: Session = Depends(obtener_db),
 
 
 class ConsultaVinculo(BaseModel):
+    """Cuerpo de POST /vinculos/{id}/estado: el secreto que recibió el add-on y su descripción."""
     secreto: str = Field(min_length=10, max_length=100)
     dispositivo: Optional[str] = Field(default=None, max_length=200)
 
 
 @router.post("/vinculos/{vinculo_id}/estado", dependencies=[Depends(LIMITE_CONSULTAS)])
 def estado_vinculo(vinculo_id: str, cuerpo: ConsultaVinculo, request: Request, db: Session = Depends(obtener_db)):
+    """POST /api/addon/v1/vinculos/{vinculo_id}/estado. Público con el secreto del vínculo; 60/min por IP.
+
+    El add-on pregunta periódicamente. Respuesta: {estado: pendiente|vencido|canjeado}
+    o, la primera vez que está listo, {estado: "listo", token, cuenta} con una
+    sesión nueva del add-on (el vínculo pasa a «canjeado»: un solo uso).
+    Errores: 404 vínculo inexistente o secreto incorrecto; 429; 503 de base de datos.
+    """
     fila = db.get(AddonVinculo, vinculo_id[:36])
     if fila is None or not hmac.compare_digest(fila.secreto_hash, hash_token(cuerpo.secreto)):
         raise HTTPException(status_code=404, detail="Este vínculo no existe. Pide un código nuevo.")
@@ -494,6 +542,10 @@ def estado_vinculo(vinculo_id: str, cuerpo: ConsultaVinculo, request: Request, d
 
 @router.get("/yo")
 def yo(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
+    """GET /api/addon/v1/yo. Requiere sesión (del add-on o de la PWA).
+
+    Respuesta: usuario_publico + practicas {iniciadas, completadas}. Error: 401.
+    """
     filas = db.scalars(select(ProgresoPractica).where(ProgresoPractica.usuario_id == usuario.id)).all()
     return {
         **usuario_publico(usuario),
@@ -503,6 +555,10 @@ def yo(db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_req
 
 @router.post("/salir")
 def salir(request: Request, db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
+    """POST /api/addon/v1/salir. Requiere sesión.
+
+    Desactiva la sesión que hace la petición (desconecta este Blender). Respuesta: {ok: true}.
+    """
     sesion = db.get(Sesion, getattr(request.state, "sesion_id", ""))
     if sesion is not None and sesion.usuario_id == usuario.id:
         sesion.activa = 0
@@ -535,6 +591,12 @@ def dispositivos(db: Session = Depends(obtener_db), usuario: Usuario = Depends(u
 
 @router.delete("/dispositivos/{dispositivo_id}")
 def desconectar(dispositivo_id: str, db: Session = Depends(obtener_db), usuario: Usuario = Depends(usuario_requerido)):
+    """DELETE /api/addon/v1/dispositivos/{dispositivo_id}. Requiere sesión.
+
+    `dispositivo_id` son los 16 primeros caracteres hex del hash de la sesión
+    (los que devuelve GET /dispositivos). Desactiva esa sesión de Blender.
+    Respuesta: {ok: true}. Errores: 401; 404 id mal formado o que no es de la cuenta.
+    """
     if not re.fullmatch(r"[0-9a-f]{16}", dispositivo_id):
         raise HTTPException(status_code=404, detail="No existe ese dispositivo.")
     filas = db.scalars(
@@ -559,6 +621,12 @@ def desconectar(dispositivo_id: str, db: Session = Depends(obtener_db), usuario:
 @router.get("/practicas")
 def listar_practicas(curso_id: Optional[str] = None, db: Session = Depends(obtener_db),
                      usuario: Optional[Usuario] = Depends(usuario_opcional)):
+    """GET /api/addon/v1/practicas?curso_id=. Público; con sesión añade mi_progreso.
+
+    Alumnos y anónimos ven solo las prácticas publicadas (en su versión
+    publicada); el equipo ve todas, la última versión y estadísticas
+    (alumnos, completadas). Respuesta: {practicas: [...]}.
+    """
     equipo = es_equipo(usuario)
     # La definición (CLOB) solo se lee si su resumen no está en caché.
     consulta = select(Practica).options(defer(Practica.definicion)).order_by(Practica.nivel, Practica.id)
@@ -599,6 +667,11 @@ def listar_practicas(curso_id: Optional[str] = None, db: Session = Depends(obten
 @router.get("/practicas/{practica_id}")
 def leer_practica(practica_id: str, version: Optional[int] = None, db: Session = Depends(obtener_db),
                   usuario: Optional[Usuario] = Depends(usuario_opcional)):
+    """GET /api/addon/v1/practicas/{practica_id}?version=. Público según visibilidad.
+
+    Devuelve practica_meta + "ejemplo" (lo que espera cada paso) + "definicion"
+    completa. Solo el equipo puede pedir otra `version`. Errores: 404.
+    """
     practica = obtener_practica(db, practica_id, usuario)
     elegida = version if (version and es_equipo(usuario)) else version_para(practica, usuario)
     definicion = definicion_de(db, practica, elegida)
@@ -611,6 +684,7 @@ def leer_practica(practica_id: str, version: Optional[int] = None, db: Session =
 
 
 class PracticaSubida(BaseModel):
+    """Cuerpo de POST /practicas: la practice.json, su lección opcional y datos de la versión."""
     definicion: Dict[str, Any]
     curso_id: Optional[str] = Field(default=None, max_length=50)
     leccion_id: Optional[str] = Field(default=None, max_length=50)
@@ -689,6 +763,13 @@ def registrar_version(db: Session, cuerpo: PracticaSubida, autor: Optional[Usuar
 
 @router.post("/practicas", status_code=201)
 def subir_practica(cuerpo: PracticaSubida, db: Session = Depends(obtener_db), usuario: Usuario = Depends(desarrollador)):
+    """POST /api/addon/v1/practicas. Profesor o admin (desde Amatista Author). Responde 201.
+
+    Compila la definición con el motor y registra una versión nueva en borrador
+    (nunca publica); si la huella no cambió responde sin_cambios=true.
+    Respuesta: {id, version, estado, version_publicada, sin_cambios, avisos}.
+    Errores: 401/403; 422 no compila (con lista `errores`), no es JSON, supera 200 KB o curso inexistente.
+    """
     try:
         respuesta = registrar_version(db, cuerpo, usuario, "addon", ahora())
     except HTTPException as error:
@@ -701,12 +782,18 @@ def subir_practica(cuerpo: PracticaSubida, db: Session = Depends(obtener_db), us
 
 
 class Publicacion(BaseModel):
+    """Cuerpo opcional de POST /practicas/{id}/publicar: la versión a publicar (por defecto la última)."""
     version: Optional[int] = Field(default=None, ge=1)
 
 
 @router.post("/practicas/{practica_id}/publicar")
 def publicar_practica(practica_id: str, cuerpo: Optional[Publicacion] = None, db: Session = Depends(obtener_db),
                       usuario: Usuario = Depends(editor)):
+    """POST /api/addon/v1/practicas/{practica_id}/publicar. Solo admin.
+
+    Marca como publicada la versión indicada (o la última): es la que verán los
+    alumnos. Respuesta: {id, estado, version_publicada}. Errores: 401/403; 404 práctica o versión inexistente.
+    """
     practica = obtener_practica(db, practica_id, usuario)
     version = (cuerpo.version if cuerpo else None) or practica.version
     if version > practica.version or db.get(PracticaVersion, (practica.id, version)) is None:
@@ -722,6 +809,11 @@ def publicar_practica(practica_id: str, cuerpo: Optional[Publicacion] = None, db
 
 @router.post("/practicas/{practica_id}/archivar")
 def archivar_practica(practica_id: str, db: Session = Depends(obtener_db), usuario: Usuario = Depends(editor)):
+    """POST /api/addon/v1/practicas/{practica_id}/archivar. Solo admin.
+
+    Oculta la práctica a los alumnos sin borrar historial ni progreso.
+    Respuesta: {id, estado: "archivado"}. Errores: 401/403; 404.
+    """
     practica = obtener_practica(db, practica_id, usuario)
     practica.estado = "archivado"
     practica.actualizado_en = ahora()
@@ -732,6 +824,11 @@ def archivar_practica(practica_id: str, db: Session = Depends(obtener_db), usuar
 @router.get("/practicas/{practica_id}/versiones")
 def versiones_practica(practica_id: str, db: Session = Depends(obtener_db),
                        usuario: Usuario = Depends(desarrollador)):
+    """GET /api/addon/v1/practicas/{practica_id}/versiones. Profesor o admin.
+
+    Historial de versiones (nota, autor, versiones de add-on/Blender, fecha y
+    cuál está publicada), de la más nueva a la más vieja. Errores: 401/403; 404.
+    """
     practica = obtener_practica(db, practica_id, usuario)
     filas = db.scalars(
         select(PracticaVersion).where(PracticaVersion.practica_id == practica.id).order_by(PracticaVersion.version.desc())
@@ -879,6 +976,7 @@ def sincronizar_repositorio(publicar: bool = False, db: Session = Depends(obtene
 
 
 class Apertura(BaseModel):
+    """Cuerpo opcional de POST /practicas/{id}/abrir: quién la abre (la plataforma ordena abrirla en Blender; Blender no)."""
     origen: Literal["plataforma", "blender"] = "plataforma"
 
 
@@ -928,6 +1026,7 @@ def practica_actual(db: Session = Depends(obtener_db), usuario: Usuario = Depend
 
 
 class Intento(BaseModel):
+    """Foto de la escena que manda el add-on para evaluar una práctica, con pistas usadas y correcciones."""
     practica_id: str = Field(min_length=1, max_length=80)
     version: Optional[int] = Field(default=None, ge=1)
     escena: Dict[str, Any]
@@ -976,6 +1075,17 @@ def subir_habilidades(db: Session, usuario: Usuario, habilidades, autonomia: str
 @router.post("/intentos", dependencies=[Depends(LIMITE_INTENTOS)])
 def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(obtener_db),
                       usuario: Usuario = Depends(usuario_requerido)):
+    """POST /api/addon/v1/intentos. Requiere sesión; 60 peticiones/min por cuenta.
+
+    El servidor evalúa la escena con el mismo motor (la calificación nunca la
+    decide el cliente) y guarda el mejor progreso. Al completarla por primera vez
+    marca la lección en PROGRESO_LECCIONES, sube habilidades (tope «con_pistas»)
+    y anota un evento activity_submitted. Un admin se evalúa sin guardar nada.
+    Cuerpo: Intento. Respuesta: {practica_id, version, progreso, mejor_progreso,
+    completada, nueva_completa, paso_actual, autonomia, habilidades, pasos, copia_verificada}.
+    Errores: 401; 403 copia no oficial con AMATISTA_ADDON_VERIFICADO=exigir (solo alumnos);
+    404 práctica no visible; 422 escena o práctica inválida; 429; error de base de datos.
+    """
     verificada = copia_verificada(request)
     if not verificada and politica_copias() == "exigir" and not es_equipo(usuario):
         raise HTTPException(
@@ -1086,6 +1196,11 @@ def registrar_intento(cuerpo: Intento, request: Request, db: Session = Depends(o
 @router.get("/mi-progreso")
 def mi_progreso(practica_id: Optional[str] = None, db: Session = Depends(obtener_db),
                 usuario: Usuario = Depends(usuario_requerido)):
+    """GET /api/addon/v1/mi-progreso?practica_id=. Requiere sesión.
+
+    Respuesta: {practicas: [progreso_meta...]} del más reciente al más viejo;
+    vacío con sin_progreso=true para un admin. Error: 401.
+    """
     if sin_progreso(usuario):
         return {"practicas": [], "sin_progreso": True}  # motor 7: el administrador entra siempre de cero
     consulta = select(ProgresoPractica).where(ProgresoPractica.usuario_id == usuario.id)
@@ -1100,12 +1215,14 @@ def mi_progreso(practica_id: Optional[str] = None, db: Session = Depends(obtener
 
 @lru_cache(maxsize=16)
 def _paquete_publico(sistema: str, servidor: str, plataforma: str) -> bytes:
+    """Construye (y cachea en memoria, 16 entradas) el .zip público sin vínculo ni licencia para ese servidor y PWA."""
     if sistema == "extension":
         return motor.construir.construir_extension(servidor=servidor, plataforma=plataforma)
     return motor.construir.construir_paquete(sistema, servidor=servidor, plataforma=plataforma)
 
 
 def _zip(contenido: bytes, nombre: str, privado: bool) -> Response:
+    """Respuesta de descarga .zip: privada y sin caché si lleva vínculo/licencia, pública 5 minutos si no."""
     return Response(
         content=contenido,
         media_type="application/zip",
@@ -1148,12 +1265,18 @@ def descargar_instalador(sistema: str):
 
 @router.get("/extension.zip")
 def extension(request: Request):
+    """GET /api/addon/v1/extension.zip. Público. La extensión de Blender para el repositorio remoto (sin vínculo)."""
     return _zip(_paquete_publico("extension", url_api(request), url_pwa(request)),
                 motor.construir.nombre_extension(), privado=False)
 
 
 @router.get("/extensiones/index.json")
 def indice_extensiones(request: Request):
+    """GET /api/addon/v1/extensiones/index.json. Público.
+
+    Índice del repositorio remoto de extensiones de Blender (versión, tamaño y
+    hash de extension.zip) para que Blender avise de actualizaciones.
+    """
     servidor = url_api(request)
     datos = _paquete_publico("extension", servidor, url_pwa(request))
     return motor.construir.indice_repositorio(datos, f"{servidor}/api/addon/v1/extension.zip")

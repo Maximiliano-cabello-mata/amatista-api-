@@ -34,6 +34,11 @@ async def ciclo_de_vida(app: FastAPI):
     # Con SQLite las tablas se crean solas. En Oracle se crean con los
     # scripts numerados de backend/sql/ (001 y luego 002, 003...): así no se
     # repiten los problemas de tablas viejas que create_all no corrige.
+    """Arranque de la API: crea las tablas en SQLite y registra prácticas y habilidades del repositorio.
+
+    En Oracle las tablas las crean los scripts de backend/sql/. Los registros al
+    arrancar solo avisan en el log si fallan: la API arranca igual.
+    """
     if motor().dialect.name == "sqlite":
         Base.metadata.create_all(motor())
     registrar_practicas_del_repositorio()
@@ -86,7 +91,9 @@ def registrar_habilidades_del_taller():
                   len(resumen["nuevas"]), len(resumen["actualizadas"]), len(resumen["sin_curso"]))
 
 
+# [REVISION] Nombre confuso: devuelve True cuando la variable está ACTIVADA (1/si/true), no 'apagada'.
 def apagado(nombre: str) -> bool:
+    """Indica si la variable de entorno `nombre` está activada (1, si, sí, true)."""
     return os.getenv(nombre, "").strip().lower() in ("1", "si", "sí", "true")
 
 
@@ -111,6 +118,7 @@ app = FastAPI(
 MAX_CUERPO = int(os.getenv("AMATISTA_MAX_CUERPO", 2 * 1024 * 1024))
 
 # Cabeceras de seguridad (las mismas que pone Caddy): si la API queda expuesta
+# [REVISION] Comentario desactualizado: despliegue/amatista-api.service escucha solo en 127.0.0.1:8000 detrás de Caddy.
 # sin proxy, como hoy en el puerto 8000 de la VM, siguen llegando al navegador.
 CABECERAS_SEGURAS = {
     "X-Content-Type-Options": "nosniff",
@@ -126,6 +134,7 @@ RUTAS_PRIVADAS = ("/api/auth/", "/api/progreso", "/api/admin/", "/api/addon/v1/y
 
 @app.middleware("http")
 async def proteger(request: Request, siguiente):
+    """Middleware: añade las cabeceras de seguridad y Cache-Control: no-store en las rutas con datos de una cuenta."""
     respuesta = await siguiente(request)
     for nombre, valor in CABECERAS_SEGURAS.items():
         respuesta.headers.setdefault(nombre, valor)
@@ -143,9 +152,11 @@ class LimitarCuerpo:
     """
 
     def __init__(self, app):
+        """Envuelve la aplicación ASGI interior."""
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        """Middleware ASGI: deja pasar el cuerpo si cabe en MAX_CUERPO y responde 413 si no."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -171,6 +182,7 @@ class LimitarCuerpo:
         entregado = False
 
         async def recibir():
+            """Entrega a la aplicación el cuerpo ya leído en un solo mensaje y después lo que siga llegando."""
             nonlocal entregado
             if not entregado:
                 entregado = True
@@ -181,6 +193,7 @@ class LimitarCuerpo:
 
     @staticmethod
     async def _demasiado(scope, receive, send):
+        """Responde 413 «La petición es demasiado grande.»."""
         await JSONResponse({"detail": "La petición es demasiado grande."}, status_code=413)(scope, receive, send)
 
 
@@ -194,9 +207,15 @@ class DescomprimirCuerpo:
     """
 
     def __init__(self, app):
+        """Envuelve la aplicación ASGI interior."""
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        """Middleware ASGI: descomprime cuerpos gzip con tope MAX_CUERPO y reescribe las cabeceras.
+
+        Responde 415 si la codificación no es gzip, 400 si el gzip está corrupto y
+        413 si lo descomprimido supera el límite.
+        """
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -230,6 +249,7 @@ class DescomprimirCuerpo:
         entregado = False
 
         async def recibir():
+            """Entrega a la aplicación el cuerpo ya descomprimido en un solo mensaje."""
             nonlocal entregado
             if not entregado:
                 entregado = True
@@ -253,6 +273,7 @@ class ComprimirJSON(GZipMiddleware):
     """
 
     async def __call__(self, scope, receive, send):
+        """Comprime con gzip salvo las descargas .zip (ya comprimidas)."""
         ruta = scope.get("path", "")
         if ruta.endswith(".zip") or "/descargas/" in ruta:
             await self.app(scope, receive, send)
@@ -267,6 +288,8 @@ app.add_middleware(
     # Orígenes extra (por ejemplo el dominio de Cloudflare Pages) separados por comas.
     allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()],
     # Cualquier puerto de localhost: Vite usa 5173, 5174, 5176...
+    # [REVISION-SEGURIDAD] BAJA: también en producción se aceptan orígenes localhost de cualquier puerto. Sin allow_credentials y con
+    # token Bearer el riesgo es bajo, pero cualquier programa local puede usar la API con CORS. Limitar a desarrollo.
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Content-Encoding", "Authorization", "X-Sesion-Id", "If-None-Match"],
@@ -280,6 +303,7 @@ errores.instalar(app)
 
 @app.get("/")
 def inicio():
+    """GET /. Público. Respuesta: {estado: "Backend activo"} (comprobación mínima de que el proceso vive)."""
     return {"estado": "Backend activo"}
 
 

@@ -60,6 +60,11 @@ def esquema_oracle() -> Optional[str]:
 
 
 def entero_env(nombre: str, defecto: int, minimo: int) -> int:
+    """Lee una variable de entorno entera (DB_POOL, DB_POOL_EXTRA) con valor por defecto y mínimo.
+
+    Lanza RuntimeError con un mensaje claro si no es un entero o es menor que `minimo`,
+    para que el servidor no arranque con un pool mal configurado.
+    """
     valor = os.getenv(nombre, "").strip()
     if not valor:
         return defecto
@@ -80,6 +85,7 @@ def fijar_esquema(motor: Engine, esquema: str) -> None:
     """
 
     def al_conectar(conexion_dbapi, _registro):
+        """Ejecuta ALTER SESSION SET CURRENT_SCHEMA en cada conexión nueva del pool (esquema ya validado)."""
         cursor = conexion_dbapi.cursor()
         try:
             cursor.execute(f"ALTER SESSION SET CURRENT_SCHEMA = {esquema}")
@@ -90,6 +96,12 @@ def fijar_esquema(motor: Engine, esquema: str) -> None:
 
 
 def crear_motor() -> Engine:
+    """Crea el Engine de SQLAlchemy: SQLite/otra URL si hay DATABASE_URL, si no Oracle Autonomous.
+
+    Para Oracle exige DB_USER y DB_PASSWORD (RuntimeError si faltan), usa un pool
+    acotado con pre-ping y reciclado cada 30 min, y fija DB_ESQUEMA si se definió.
+    No abre conexiones todavía.
+    """
     url = os.getenv("DATABASE_URL")
     if url:
         argumentos = {"check_same_thread": False} if url.startswith("sqlite") else {}
@@ -118,6 +130,7 @@ def crear_motor() -> Engine:
 
 @lru_cache(maxsize=1)
 def motor() -> Engine:
+    """Engine único del proceso (se crea la primera vez que se pide y se reutiliza)."""
     return crear_motor()
 
 
